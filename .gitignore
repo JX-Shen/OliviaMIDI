@@ -1,0 +1,13 @@
+# Rust
+/target
+**/*.rs.bk
+
+# Pointer to the real music project (machine-local, never tracked)
+.asset
+
+# macOS
+.DS_Store
+
+# Python experiments
+experiments/.venv/
+__pycache__/
