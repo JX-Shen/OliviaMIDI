@@ -43,6 +43,13 @@ this soundfont are bad (Rig). A tool that blurs these lets a human and an agent
 degrade a well-written line in order to compensate for a poor sample — and the
 result will genuinely sound better, which is why the mistake is invisible.
 
+Because orchestration is in the file, editing it is legitimate scope for this
+tool. A program change is an ordinary mechanical Edit, and reading, changing and
+diffing orchestration belongs on the Piece side. It is deliberately absent from
+V0.1 and is the natural first step after it. Do not re-file it under the Rig:
+what a program change *sounds like* is the Rig's business, but *which program is
+selected* is the Piece's.
+
 Consequences, held as hard rules:
 
 - A diff never reports Rig differences, even when two Takes were heard through
