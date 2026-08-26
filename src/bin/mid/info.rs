@@ -2,9 +2,10 @@ use std::path::PathBuf;
 
 /// Report what a Take is: format, tracks, PPQ, tempo, metre and length.
 ///
-/// Length is in Ticks, and so is everything else. Bars are not reported yet, so
-/// work them out from the PPQ and the time signature: in 3/4 at 480 PPQ a Bar is
-/// 1440 Ticks.
+/// Length is in Ticks, and so is everything else; the Bar count beside it is the
+/// derived view. Bars need one time signature governing the whole Take, so a Take
+/// that states none — or states one only part way in, or changes it — is reported
+/// without a Bar count. `mid inspect --bars` says which of those it is.
 #[derive(clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
@@ -38,6 +39,12 @@ pub fn run(args: Args) -> battuta::Result<()> {
         Some(ts) => println!("time signature  {}/{}", ts.numerator, ts.denominator),
         None => println!("time signature  unstated"),
     }
-    println!("length          {} ticks", info.length_ticks);
+    match info.length_bars {
+        Some(bars) => println!("length          {} ticks ({bars} bars)", info.length_ticks),
+        None => println!(
+            "length          {} ticks (bars need one stated time signature)",
+            info.length_ticks
+        ),
+    }
     Ok(())
 }

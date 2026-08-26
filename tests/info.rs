@@ -137,3 +137,59 @@ fn refuses_an_unreadable_denominator_stated_after_a_readable_one() {
         .failure()
         .stderr(predicates::str::contains("time signature"));
 }
+
+/// How long the Take is in the unit a musician talks in. `length_ticks` stays
+/// the truth; this is the derived view of it, and it agrees with what
+/// `inspect --bars` will select: eight Bars, the last one partial.
+#[test]
+fn reports_how_long_the_take_is_in_bars() {
+    let output = mid()
+        .args(["info", FIXTURE, "--json"])
+        .output()
+        .expect("mid runs");
+    let info: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("info --json is JSON");
+    assert_eq!(info["length_bars"], 8);
+
+    mid()
+        .args(["info", FIXTURE])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("11516 ticks (8 bars)"));
+}
+
+/// `info` answers on every readable Take, including one whose Bars cannot be
+/// derived — it is the command for finding out what you are holding, so it must
+/// not refuse the Takes you most need to ask about. The count is absent rather
+/// than guessed, and both outputs say so the same way: `info` reports the fact,
+/// and `inspect --bars` is where the reason and its remedy live.
+#[test]
+fn reports_no_bar_count_when_the_bars_cannot_be_derived() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("no-time-signature.mid"),
+        480,
+        &[],
+        &[(0, 240, 60)],
+    );
+
+    let output = mid()
+        .args(["info", "--json"])
+        .arg(&take)
+        .output()
+        .expect("mid runs");
+    assert!(output.status.success(), "info refused a readable Take");
+    let info: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("info --json is JSON");
+    assert!(info["length_bars"].is_null());
+    assert!(info["length_ticks"].as_u64().expect("a length") > 0);
+
+    mid()
+        .arg("info")
+        .arg(&take)
+        .assert()
+        .success()
+        .stdout(predicates::str::contains(
+            "(bars need one stated time signature)",
+        ));
+}

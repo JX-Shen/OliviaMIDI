@@ -31,6 +31,10 @@ pub struct Info {
     pub time_signature: Option<TimeSignature>,
     /// The largest tick any track reaches, end-of-track included.
     pub length_ticks: u32,
+    /// The same length in Bars, when the Take states one time signature
+    /// governing the whole of it. Absent rather than guessed when it does not —
+    /// `mid inspect --bars` is where the reason and its remedy are.
+    pub length_bars: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -138,6 +142,14 @@ impl Take {
             }),
             time_signature: self.time_signatures()?.first().map(|&(_, ts)| ts),
             length_ticks,
+            // Every reason a Bar length cannot be derived means the same thing
+            // here — no Bar count — so they collapse to `None`. `info` describes
+            // a Take rather than diagnosing it, and refusing to describe the
+            // Takes a human most needs to look at would be the wrong trade.
+            length_bars: self
+                .bar_ticks(ppq)
+                .ok()
+                .map(|bar_ticks| crate::bars::bar_count(length_ticks, bar_ticks)),
         })
     }
 

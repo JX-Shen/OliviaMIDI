@@ -109,21 +109,28 @@ unrepresentable denominator fatal wherever it appears, where before it was
 ignored if a readable time signature had been stated earlier. That earlier
 leniency was a latent wrong answer — `info` described a file as 3/4 while saying
 nothing about the part of it that could not be read — and it is now specified and
-tested rather than incidental. Nothing else about `info` changed: it still reports
-the earliest stated time signature, and still reports nothing about Bars.
+tested rather than incidental. `Info.time_signature` itself is unchanged: it still
+reports the earliest one the Take states, which is a true statement about the file
+and a separate question from which one *governs* it.
 
 A Take stating 0 Ticks per quarter note is refused by `info` itself, because every
-derived view divides by it. That refusal is what lets `bar_ticks` promise never to
-return zero.
+derived view divides by it — and `bar_ticks` refuses it again on its own account,
+so its promise never to return zero holds without depending on which caller got
+there first.
 
 A Take of zero length has zero Bars, so every `--bars` on it fails. Stated rather
 than special-cased into one empty Bar: the formula has no exceptions in it.
 
-**How long a Take is in Bars is deliberately not reported yet.** The count exists
-and is what the refusals are measured against, but it stays internal: rendering it
-belongs to the human-readable-output ticket, and putting it in `info` now would
-mean deciding what `info` says about a Take whose Bars cannot be derived — a
-command that currently succeeds on every readable file.
+`mid info` reports the Bar count beside the Tick count, and reports it as absent
+when it cannot be derived. `info` describes a Take rather than diagnosing it, so
+all four refusals collapse to one absence there: refusing to describe the Takes a
+human most needs to look at would be the wrong trade, and so would printing four
+different diagnoses in a payload. The reason and its remedy stay in exactly one
+place — the refusal you get from `inspect --bars` when you actually ask for Bars —
+which is the same arrangement ADR-0003 uses, where the failure message carries the
+weight a `doctor` subcommand otherwise would. Both `--json` and the human line say
+the same thing, so an agent reading the payload is not the one left without the
+answer.
 
 The fixture cannot exercise most of this. Not one of its 36 notes crosses a Bar
 line, so it says nothing about a note belonging to the Bar it *starts* in, and it

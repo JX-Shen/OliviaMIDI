@@ -49,6 +49,17 @@ impl FromStr for BarRange {
     }
 }
 
+/// How many Bars a Take of this length is.
+///
+/// The Take occupies `[0, length_ticks)`, so this is how many Bars it takes to
+/// cover every Tick it reaches: a partial final Bar is a Bar. The fixture's
+/// 11516 Ticks are eight Bars of 1440, the last of which the Take stops four
+/// Ticks inside. One home for the rule, because `info` reports it and
+/// `tick_span` measures a range against it.
+pub(crate) fn bar_count(length_ticks: u32, bar_ticks: u32) -> u32 {
+    length_ticks.div_ceil(bar_ticks)
+}
+
 impl Take {
     /// The notes of the Take, restricted to a Bar range when one is given.
     ///
@@ -72,8 +83,9 @@ impl Take {
     /// The one shared capability behind every `--bars`: `inspect` filters notes
     /// by this span, and playing a passage is built from it.
     pub fn tick_span(&self, bars: BarRange) -> Result<TickSpan> {
-        let bar_ticks = self.bar_ticks()?;
-        let bar_count = self.bar_count(bar_ticks)?;
+        let info = self.info()?;
+        let bar_ticks = self.bar_ticks(info.ppq)?;
+        let bar_count = bar_count(info.length_ticks, bar_ticks);
         if bars.last > bar_count {
             return Err(Error::BarRangeBeyondTake {
                 path: self.described_path(),
@@ -89,23 +101,17 @@ impl Take {
         })
     }
 
-    /// How many Bars the Take is long.
+    /// The length of one Bar, in Ticks. Never zero.
     ///
-    /// The Take occupies `[0, length_ticks)`, so this is how many Bars it takes
-    /// to cover every Tick it reaches: a partial final Bar is a Bar. The
-    /// fixture's 11516 Ticks are eight Bars of 1440, the last of which the Take
-    /// stops four Ticks inside.
-    fn bar_count(&self, bar_ticks: u32) -> Result<u32> {
-        Ok(self.info()?.length_ticks.div_ceil(bar_ticks))
-    }
-
-    /// The length of one Bar, in Ticks.
-    ///
-    /// Never zero, which is what keeps `bar_count` from dividing by it: `info`
-    /// refuses a Take stating 0 Ticks per quarter, and a Bar that would not come
-    /// out as a whole number of Ticks is refused below rather than rounded.
-    fn bar_ticks(&self) -> Result<u32> {
-        let info = self.info()?;
+    /// Takes the PPQ rather than reading it, because `info` is one of its
+    /// callers: `Info` carries the Bar count, so a `bar_ticks` that asked `info`
+    /// for the PPQ would ask itself.
+    pub(crate) fn bar_ticks(&self, ppq: u16) -> Result<u32> {
+        if ppq == 0 {
+            return Err(Error::ZeroPpq {
+                path: self.described_path(),
+            });
+        }
         let stated = self.stated_time_signature()?;
         // PPQ is Ticks per quarter note, so a Bar is `numerator` notes of value
         // `denominator`: 3/4 at 480 PPQ is 1440 Ticks, and so is 6/8.
@@ -115,14 +121,14 @@ impl Take {
                 denominator: stated.denominator,
             });
         }
-        let quarters_worth = u32::from(stated.numerator) * u32::from(info.ppq) * 4;
+        let quarters_worth = u32::from(stated.numerator) * u32::from(ppq) * 4;
         let denominator = u32::from(stated.denominator);
         if quarters_worth % denominator != 0 {
             return Err(Error::BarNotWholeTicks {
                 path: self.described_path(),
                 numerator: stated.numerator,
                 denominator: stated.denominator,
-                ppq: info.ppq,
+                ppq,
             });
         }
         Ok(quarters_worth / denominator)
