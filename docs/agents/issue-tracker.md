@@ -2,37 +2,29 @@
 
 Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all operations.
 
-## Account binding — check this before any `gh` write
+## Account binding — check before any `gh` write
 
-This repo belongs to the **`JX-Shen`** personal account. This machine is also
-authenticated to a second account, and `gh` binds its active account **globally
-per host** — there is no per-repository binding. The wrong account is therefore
-one `gh auth switch` away at all times, and nothing in `gh` will warn about it.
+This repo belongs to the **`JX-Shen`** personal account. The machine it was
+created on also holds a second account, and the two are kept apart by
+`GH_CONFIG_DIR`: `direnv` points the company directory tree at a separate gh
+config, and everything outside it — this repo included — uses the default
+config, where `JX-Shen` is active. So the right account is normally selected
+without anyone thinking about it.
 
-Before creating, editing, commenting on, or closing anything:
+Check it anyway, before creating, editing, commenting on, or closing anything:
 
 ```bash
 gh auth status --active
 ```
 
 If the active account is not `JX-Shen`, **stop and tell the human.** Do not
-switch the account yourself — it is global state, and changing it silently
-alters how `gh` behaves in every other repository on that machine.
+switch it — account selection here is automatic by design, so a wrong answer
+means an assumption has broken, not that a switch was forgotten.
 
-Expect this check to fail on a machine whose primary use is company work: there,
-`gh` is deliberately left bound to the other account, and OliviaMIDI's `gh`
-operations are meant to happen elsewhere. A failed check is the system working,
-not a problem to route around.
-
-Why this is worth a check rather than a habit: while this repo is private, a
-wrong-account `gh` command fails loudly, because the other account cannot see
-the repo. If this repo is ever made public, the same command **succeeds** — and
-posts under the wrong identity. The failure mode gets quieter exactly when it
-starts to matter.
-
-The git remote is pinned to the `github-personal` ssh alias rather than a bare
-`github.com` host, so pushes cannot drift to the other identity even if
-`~/.ssh/config` changes.
+The check is cheap and it is not vacuous: `direnv` hooks into interactive
+shells, so an agent's non-interactive shell does not inherit the per-directory
+selection. It lands on the default config, which is correct for this repo and
+wrong inside the company tree. The habit is what makes that difference visible.
 
 ## Conventions
 

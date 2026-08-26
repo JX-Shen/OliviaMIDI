@@ -81,10 +81,10 @@ in `CHARTER.md`, because agents are the ones most likely to break them.
 
 ### Issue tracker
 
-Issues live as GitHub issues in this repo, driven via the `gh` CLI. This repo is
-bound to the `JX-Shen` personal account, and `gh` binds accounts globally per
-host — verify `gh auth status --active` before any `gh` write, and stop if it is
-not `JX-Shen`. See `docs/agents/issue-tracker.md`.
+Issues live as GitHub issues in this repo, driven via the `gh` CLI, under the
+`JX-Shen` personal account. Account selection is automatic via `GH_CONFIG_DIR`,
+but agent shells do not inherit it — verify `gh auth status --active` before any
+`gh` write, and stop if it is not `JX-Shen`. See `docs/agents/issue-tracker.md`.
 
 ### Plugin
 
