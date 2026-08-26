@@ -81,3 +81,59 @@ fn refuses_a_time_signature_it_cannot_represent() {
         .failure()
         .stderr(predicates::str::contains("time signature"));
 }
+
+/// A Take stating 0 Ticks per quarter note places nothing in time: every
+/// duration, every Bar line and every tempo reading derived from it would be a
+/// division by zero. Refused where the division is read, not where it bites.
+#[test]
+fn refuses_a_take_with_no_ticks_per_quarter() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("no-ppq.mid"),
+        0,
+        &[(0, 3, 4)],
+        &[(0, 1, 60)],
+    );
+
+    mid()
+        .arg("info")
+        .arg(&take)
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("ticks per quarter"));
+}
+
+/// An unrepresentable denominator is refused wherever it appears, including
+/// after a time signature that *could* be read. Before Bar semantics existed,
+/// `info` reported the readable one and said nothing about the other; a Take
+/// that states something this tool cannot read is not a Take it should describe
+/// as if it had.
+///
+/// Built by hand rather than with `build_take`, which only speaks real note
+/// values — 2^8 is not one, which is the whole point of the test.
+#[test]
+fn refuses_an_unreadable_denominator_stated_after_a_readable_one() {
+    use midly::{Format, Header, MetaMessage, Smf, Timing, TrackEvent, TrackEventKind};
+
+    let meta = |delta: u32, message: MetaMessage<'static>| TrackEvent {
+        delta: delta.into(),
+        kind: TrackEventKind::Meta(message),
+    };
+    let mut smf = Smf::new(Header::new(Format::Parallel, Timing::Metrical(480.into())));
+    smf.tracks.push(vec![
+        meta(0, MetaMessage::TimeSignature(3, 2, 24, 8)),
+        meta(1440, MetaMessage::TimeSignature(4, 8, 24, 8)),
+        meta(0, MetaMessage::EndOfTrack),
+    ]);
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("readable-then-not.mid");
+    smf.save(&path).expect("scratch Take is writable");
+
+    mid()
+        .arg("info")
+        .arg(&path)
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("time signature"));
+}

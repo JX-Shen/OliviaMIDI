@@ -45,6 +45,12 @@ pub struct TimeSignature {
     pub denominator: u8,
 }
 
+impl std::fmt::Display for TimeSignature {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.numerator, self.denominator)
+    }
+}
+
 impl Take {
     pub fn read(path: &Path) -> Result<Take> {
         let bytes = std::fs::read(path).map_err(|source| Error::Read {
@@ -79,7 +85,7 @@ impl Take {
         })
     }
 
-    fn described_path(&self) -> PathBuf {
+    pub(crate) fn described_path(&self) -> PathBuf {
         self.path.clone().unwrap_or_else(|| PathBuf::from("<take>"))
     }
 
@@ -93,56 +99,29 @@ impl Take {
                 })
             }
         };
+        if ppq == 0 {
+            return Err(Error::ZeroPpq {
+                path: self.described_path(),
+            });
+        }
 
         let mut tempo: Option<(u32, u32)> = None; // (tick, micros per quarter)
-        let mut time_signature: Option<(u32, TimeSignature)> = None;
-        let mut unreadable_denominator: Option<u8> = None;
         let mut length_ticks = 0u32;
 
         for track in &smf.tracks {
             let mut tick = 0u32;
             for event in track {
                 tick += event.delta.as_int();
-                // Tempo and metre are read wherever they are, not where the notes
-                // are: an ordinary export puts them on a conductor track of their
-                // own. Earliest tick wins, ties broken by track order.
-                match event.kind {
-                    TrackEventKind::Meta(MetaMessage::Tempo(micros))
-                        if tempo.is_none_or(|(at, _)| tick < at) =>
-                    {
+                // Tempo is read wherever it is, not where the notes are: an
+                // ordinary export puts it on a conductor track of its own.
+                // Earliest tick wins, ties broken by track order.
+                if let TrackEventKind::Meta(MetaMessage::Tempo(micros)) = event.kind {
+                    if tempo.is_none_or(|(at, _)| tick < at) {
                         tempo = Some((tick, micros.as_int()));
                     }
-                    TrackEventKind::Meta(MetaMessage::TimeSignature(num, denom_pow2, _, _))
-                        if time_signature.is_none_or(|(at, _)| tick < at) =>
-                    {
-                        // The metre is stored as a power of two. A power this
-                        // model cannot represent is reported as such: a
-                        // denominator of 0 would be a wrong answer, and a wrong
-                        // answer about the metre is worse than no answer.
-                        match 1u8.checked_shl(denom_pow2 as u32) {
-                            Some(denominator) => {
-                                time_signature = Some((
-                                    tick,
-                                    TimeSignature {
-                                        numerator: num,
-                                        denominator,
-                                    },
-                                ));
-                            }
-                            None => unreadable_denominator = Some(denom_pow2),
-                        }
-                    }
-                    _ => {}
                 }
             }
             length_ticks = length_ticks.max(tick);
-        }
-
-        if let Some(power) = unreadable_denominator {
-            return Err(Error::UnreadableTimeSignature {
-                path: self.described_path(),
-                power,
-            });
         }
 
         Ok(Info {
@@ -157,9 +136,86 @@ impl Take {
                 micros_per_quarter: micros,
                 bpm: 60_000_000.0 / micros as f64,
             }),
-            time_signature: time_signature.map(|(_, ts)| ts),
+            time_signature: self.time_signatures()?.first().map(|&(_, ts)| ts),
             length_ticks,
         })
+    }
+
+    /// Every metre the Take states, in the order they take effect.
+    ///
+    /// Read from wherever they are rather than from the notes' track: an
+    /// ordinary export carries the metre on a conductor track of its own.
+    fn time_signatures(&self) -> Result<Vec<(u32, TimeSignature)>> {
+        let smf = self.smf()?;
+        let mut stated = Vec::new();
+
+        for track in &smf.tracks {
+            let mut tick = 0u32;
+            for event in track {
+                tick += event.delta.as_int();
+                let TrackEventKind::Meta(MetaMessage::TimeSignature(num, power, _, _)) = event.kind
+                else {
+                    continue;
+                };
+                // The metre is stored as a power of two. A power this model
+                // cannot represent is reported as such: a denominator of 0 would
+                // be a wrong answer, and a wrong answer about the metre is worse
+                // than no answer.
+                let Some(denominator) = 1u8.checked_shl(power as u32) else {
+                    return Err(Error::UnreadableTimeSignature {
+                        path: self.described_path(),
+                        power,
+                    });
+                };
+                stated.push((
+                    tick,
+                    TimeSignature {
+                        numerator: num,
+                        denominator,
+                    },
+                ));
+            }
+        }
+
+        // Earliest tick first, ties broken by track order.
+        stated.sort_by_key(|&(tick, _)| tick);
+        Ok(stated)
+    }
+
+    /// The one time signature that governs this whole Take.
+    ///
+    /// Three refusals rather than an answer, because they are three different
+    /// things to go and look at: a Take that says nothing, a Take that does not
+    /// say until part way in, and a Take that says two different things. See
+    /// ADR-0006 for why none of them is answered with 4/4.
+    pub(crate) fn stated_time_signature(&self) -> Result<TimeSignature> {
+        let stated = self.time_signatures()?;
+        let Some(&(at_tick, first)) = stated.first() else {
+            return Err(Error::NoTimeSignature {
+                path: self.described_path(),
+            });
+        };
+        // A time signature stated at Tick 500 says nothing about Ticks 0-499.
+        // Gridding those Bars from it would be applying a metre backwards to
+        // before the Take stated it.
+        if at_tick != 0 {
+            return Err(Error::TimeSignatureStartsLate {
+                path: self.described_path(),
+                at_tick,
+            });
+        }
+        // Restating the same time signature is what some exports do at every
+        // Bar; it changes nothing. Stating a different one moves every later Bar
+        // line, which is what this cannot answer for.
+        if let Some(&(at_tick, changed)) = stated.iter().find(|(_, stated)| *stated != first) {
+            return Err(Error::TimeSignatureChanges {
+                path: self.described_path(),
+                at_tick,
+                from: first,
+                to: changed,
+            });
+        }
+        Ok(first)
     }
 
     /// Every note in the Take, in track order and then in note-on event order.

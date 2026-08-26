@@ -56,3 +56,21 @@ fn every_command_needs_a_take() {
         mid().arg(command).assert().failure();
     }
 }
+
+#[test]
+fn inspect_help_states_the_bar_semantics() {
+    mid()
+        .args(["inspect", "--help"])
+        .assert()
+        .success()
+        // 1-indexed, both ends included.
+        .stdout(predicates::str::contains("1-indexed"))
+        .stdout(predicates::str::contains("both ends"))
+        // Which Bar a note sustaining across a Bar line belongs to.
+        .stdout(predicates::str::contains("starts"))
+        // What happens when the metre is missing or not the same throughout.
+        .stdout(predicates::str::contains("4/4"))
+        .stdout(predicates::str::contains("changes time signature"))
+        // That a partial final Bar is a Bar.
+        .stdout(predicates::str::contains("final Bar"));
+}

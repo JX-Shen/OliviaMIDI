@@ -50,6 +50,12 @@ and so belongs on this side, never to an Edit Set.
 **Bar**:
 A measure of the Piece. Bars are 1-indexed, and ranges include both ends:
 `--bars 5:8` is bars five through eight, four bars in total.
+
+Bars are counted from Tick 0 of the Take, and the last one counts even when the
+Take stops part way inside it — `fixtures/olivia.mid` is eight bars of 3/4, not
+seven and a bit. A note belongs to the bar it *starts* in, even when it sustains
+across the bar line. Which time signature the bar lines come from, and what
+happens when the Take states none or states two, is ADR-0006.
 _中文_: 小节
 _Avoid_: measure, battuta (taken as the crate name); 拍、节
 

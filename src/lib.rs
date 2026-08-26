@@ -8,6 +8,7 @@
 //!
 //! The `mid` binary is one consumer of this library, not the program itself.
 
+pub mod bars;
 pub mod diff;
 pub mod edit;
 mod error;
@@ -15,6 +16,7 @@ pub mod note;
 pub mod rig;
 pub mod take;
 
+pub use bars::{BarRange, TickSpan};
 pub use diff::{Diff, VelocityChange};
 pub use edit::{apply, Edit, EditSet};
 pub use error::{Error, Result};

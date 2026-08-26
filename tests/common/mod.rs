@@ -131,3 +131,94 @@ pub fn empty_edit_set(dir: &Path) -> PathBuf {
     write(&path, r#"{ "edits": [] }"#);
     path
 }
+
+/// A metre a built Take states: (tick, numerator, denominator).
+pub type Metre = (u32, u8, u8);
+
+/// A note a built Take contains: (start, duration, pitch).
+pub type NoteSpec = (u32, u32, u8);
+
+/// Write a small purpose-built Take, shaped like an ordinary export: a
+/// conductor track carrying the metre and a second track carrying the notes.
+///
+/// The fixture cannot exercise everything Bar semantics has to answer for — it
+/// states one metre, and not one of its notes crosses a Bar line. Rather than
+/// commit a second opaque `.mid`, a test that needs such a Take states it here
+/// in readable terms and builds it.
+pub fn build_take(path: &Path, ppq: u16, metres: &[Metre], notes: &[NoteSpec]) -> PathBuf {
+    use midly::num::{u15, u24, u28, u4, u7};
+    use midly::{
+        Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind,
+    };
+
+    /// Absolute ticks in, delta times out.
+    fn deltas(mut events: Vec<(u32, TrackEventKind<'static>)>) -> Vec<TrackEvent<'static>> {
+        events.sort_by_key(|(tick, _)| *tick);
+        let mut previous = 0u32;
+        events
+            .into_iter()
+            .map(|(tick, kind)| {
+                let event = TrackEvent {
+                    delta: u28::new(tick - previous),
+                    kind,
+                };
+                previous = tick;
+                event
+            })
+            .collect()
+    }
+
+    let mut conductor: Vec<(u32, TrackEventKind<'static>)> = metres
+        .iter()
+        .map(|&(tick, numerator, denominator)| {
+            let power = u8::try_from(denominator.trailing_zeros()).expect("a note value");
+            (
+                tick,
+                TrackEventKind::Meta(MetaMessage::TimeSignature(numerator, power, 24, 8)),
+            )
+        })
+        .collect();
+    conductor.push((
+        0,
+        TrackEventKind::Meta(MetaMessage::Tempo(u24::new(500_000))),
+    ));
+    let conductor_end = metres.iter().map(|&(tick, ..)| tick).max().unwrap_or(0);
+    conductor.push((conductor_end, TrackEventKind::Meta(MetaMessage::EndOfTrack)));
+
+    let mut voice: Vec<(u32, TrackEventKind<'static>)> = Vec::new();
+    for &(start, duration, pitch) in notes {
+        voice.push((
+            start,
+            TrackEventKind::Midi {
+                channel: u4::new(0),
+                message: MidiMessage::NoteOn {
+                    key: u7::new(pitch),
+                    vel: u7::new(64),
+                },
+            },
+        ));
+        voice.push((
+            start + duration,
+            TrackEventKind::Midi {
+                channel: u4::new(0),
+                message: MidiMessage::NoteOff {
+                    key: u7::new(pitch),
+                    vel: u7::new(0),
+                },
+            },
+        ));
+    }
+    let voice_end = notes
+        .iter()
+        .map(|&(start, duration, _)| start + duration)
+        .max()
+        .unwrap_or(0);
+    voice.push((voice_end, TrackEventKind::Meta(MetaMessage::EndOfTrack)));
+
+    let smf = Smf {
+        header: Header::new(Format::Parallel, Timing::Metrical(u15::new(ppq))),
+        tracks: vec![deltas(conductor), deltas(voice)],
+    };
+    smf.save(path).expect("built Take is writable");
+    path.to_path_buf()
+}
