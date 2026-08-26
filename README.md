@@ -182,9 +182,63 @@ cargo test                     # the suite runs mid as a process
 mid help                       # the command reference is the binary
 ```
 
-Playback needs FluidSynth (`brew install fluid-synth`) and a Rig you chose:
-`--rig <soundfont.sf2>`, or `BATTUTA_SOUNDFONT`. There is no fallback, and the
-first `mid play` on a new machine failing is the intended shape of that trade.
+## Setting up a Rig
+
+Playback needs two separate things. They fail with two separate messages because
+they have two separate remedies.
+
+**FluidSynth**, which `mid` shells out to rather than linking:
+
+```
+brew install fluid-synth
+```
+
+**A Rig** — a soundfont — which `mid` will never choose for you:
+
+```
+export BATTUTA_SOUNDFONT="$HOME/SoundFonts/GeneralUser-GS.sf2"
+```
+
+`--rig <path>` overrides it for a single run. There is no third step: no fallback
+to a system soundfont, to FluidSynth's compiled-in default, or to the demo bank
+Homebrew installs beside it. The first `mid play` on a new machine failing is the
+intended shape of that trade rather than a rough edge — see
+[ADR-0003](./docs/adr/0003-no-implicit-rig-fallback.md).
+
+**Do not use the soundfont Homebrew ships with `fluid-synth`.** It is a
+vintage-synth demo bank — 136 presets, not one piano among them, and bank 0
+program 0, where General MIDI puts Acoustic Grand Piano, is `FM Bells 1`. Since
+`fixtures/olivia.mid` states no program change at all and relies on that default,
+it renders as bells in both hands. It makes sound, so it looks like it worked.
+That is precisely the substitution ADR-0003 exists to prevent.
+
+### Across machines
+
+The path above is machine-local and deliberately not in this repository. `mid` is
+a global binary run from inside music project directories; if it read a Rig out of
+the repo, the same command would sound different depending on where it was typed.
+`.asset` is repo-scoped and for humans; the Rig is machine-scoped and for the
+tool.
+
+So what travels between machines is not the path but the *recipe*, which is why
+this section names one specific bank rather than "a soundfont":
+
+| | |
+| --- | --- |
+| Bank | GeneralUser GS 2.0.3 |
+| Author | S. Christian Collins |
+| Why this one | all 128 GM melodic presets, program 0 is a real grand piano, no ROM samples |
+
+Bring a second machine to the same Rig by installing that bank and pointing
+`BATTUTA_SOUNDFONT` at wherever it landed there.
+
+What keeps an old comparison readable, though, is not configuration at all. Every
+`mid play` states the Rig it used — on stderr, and in the payload under `--json`.
+The attribution travels with the record of the audition, not with the setup, which
+is what lets a judgement made on one machine survive being reread on another.
+
+Making one Rig referable *by name* across machines — `--rig concert-grand` — is
+V1's named Rigs, and a stated non-goal for V0.
 
 ## Reading order
 
