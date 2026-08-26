@@ -7,13 +7,13 @@ use std::path::PathBuf;
 /// fails the whole run — no partial Take is written.
 ///
 /// Every identity in the Edit Set is resolved against the input Take before the
-/// first operation is applied, so operations cannot renumber each other's
-/// targets. One consequence: an operation cannot name a note added by an earlier
-/// operation in the same Edit Set.
+/// first Edit is applied, so Edits cannot renumber each other's targets. One
+/// consequence: an Edit cannot name a note added by an earlier Edit in the same
+/// Edit Set.
 ///
-/// The Edit Set is JSON, and one operation exists so far:
+/// The Edit Set is JSON, and one kind of Edit exists so far:
 ///
-///     { "edits": [ { "op": "set_velocity", "id": "t1:c0:p69:s0:n0", "velocity": 40 } ] }
+///     { "edits": [ { "kind": "set_velocity", "id": "t1:c0:p69:s0:n0", "velocity": 40 } ] }
 ///
 /// Identities come from `mid inspect`.
 #[derive(clap::Args)]

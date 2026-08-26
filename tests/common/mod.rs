@@ -119,7 +119,7 @@ pub fn set_velocity_edit_set(dir: &Path, id: &str, velocity: &str) -> PathBuf {
     write(
         &path,
         &format!(
-            r#"{{ "edits": [ {{ "op": "set_velocity", "id": "{id}", "velocity": {velocity} }} ] }}"#
+            r#"{{ "edits": [ {{ "kind": "set_velocity", "id": "{id}", "velocity": {velocity} }} ] }}"#
         ),
     );
     path

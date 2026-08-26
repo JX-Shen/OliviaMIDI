@@ -62,7 +62,7 @@ in `CHARTER.md`, because agents are the ones most likely to break them.
   over parsing human output.
 - Edits are mechanical only — add, delete, move, resize a note, change a
   velocity, change a CC. Musical intent is the agent's job to hold and the
-  core's job to never encode. Do not add an operation like `make_sadder`.
+  core's job to never encode. Do not add an Edit like `make_sadder`.
 - `mid apply` never writes in place. Always produce a new Take.
 - `mid play` states which Rig it used, on stderr and in `--json`. If a Rig is
   not configured it fails rather than guessing; do not work around this by

@@ -105,13 +105,13 @@ fn an_unknown_identity_fails_and_writes_nothing() {
 }
 
 #[test]
-fn an_unsupported_operation_fails_rather_than_being_skipped() {
+fn an_unsupported_edit_fails_rather_than_being_skipped() {
     let dir = tempfile::tempdir().expect("temp dir");
     let out = dir.path().join("take-02.mid");
     let edits = dir.path().join("edits.json");
     write(
         &edits,
-        r#"{ "edits": [ { "op": "make_sadder", "id": "t1:c0:p69:s0:n0" } ] }"#,
+        r#"{ "edits": [ { "kind": "make_sadder", "id": "t1:c0:p69:s0:n0" } ] }"#,
     );
 
     mid()
@@ -184,4 +184,28 @@ fn the_fixture_is_never_written_to() {
         .assert()
         .success();
     assert_eq!(before, fixture_bytes());
+}
+
+/// The wire format used to spell this key `op`. An Edit Set still written that
+/// way must fail rather than parse into something empty — a stale Edit Set that
+/// silently does nothing is the failure mode this whole format is shaped to
+/// avoid.
+#[test]
+fn the_superseded_op_key_is_rejected() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let out = dir.path().join("take-02.mid");
+    let edits = dir.path().join("edits.json");
+    write(
+        &edits,
+        r#"{ "edits": [ { "op": "set_velocity", "id": "t1:c0:p69:s0:n0", "velocity": 40 } ] }"#,
+    );
+
+    mid()
+        .args(["apply", FIXTURE])
+        .arg(&edits)
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .failure();
+    assert!(!out.exists());
 }

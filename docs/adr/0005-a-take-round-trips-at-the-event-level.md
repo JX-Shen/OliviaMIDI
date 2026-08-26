@@ -45,7 +45,7 @@ without anything the project cares about having broken.
 
 `apply` reaches the event it names and leaves the rest of the parsed Take
 untouched, which is what makes the guarantee cheap: a `set_velocity` rewrites one
-velocity byte's worth of model and nothing else. Any future operation must keep
+velocity byte's worth of model and nothing else. Any future Edit must keep
 that shape. An implementation that rebuilt a Take from its notes would satisfy
 the round-trip test on this fixture and quietly drop every event the note model
 does not carry.

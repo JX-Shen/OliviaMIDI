@@ -150,7 +150,7 @@ can be yes — and then, because she is teaching me, so that I can change one
 thing, hear it again, and ask her what I did.
 
 Nothing in the tool knows about her, and nothing should. `CHARTER.md` names
-`olivia_style` as an example of an operation that must never exist, which is
+`olivia_style` as an example of an Edit that must never exist, which is
 exactly the right relationship: a tribute, not a theme.
 
 `battuta` — Italian for *bar* — is the core crate; `mid` is what you type.
@@ -171,10 +171,11 @@ The first milestone is a single sentence, and it was meant to be uncomfortable:
 > `mid play` → the human hears the result.
 
 That loop now closes. All five commands exist and are deliberately thin: `apply`
-understands one operation, `set_velocity`; `diff` matches notes exactly and
-reports only Added, Removed and VelocityChanged; `--bars` does not exist yet, and
-the output without `--json` is plain rather than musical. None of it is good yet,
-and that is the right order — nothing gets to be elegant before the loop closes.
+understands a single kind of Edit, `set_velocity`; `diff` matches notes exactly
+and reports only Added, Removed and VelocityChanged; `--bars` does not exist yet,
+and the output without `--json` is plain rather than musical. None of it is good
+yet, and that is the right order — nothing gets to be elegant before the loop
+closes.
 
 ```
 cargo build --release          # target/release/mid

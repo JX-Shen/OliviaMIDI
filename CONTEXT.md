@@ -28,6 +28,12 @@ An **Edit Set** is a batch of them, applied together (`edits.json`).
 _中文_: 改动
 _Avoid_: patch, mutation, operation; 补丁
 
+`operation` is avoided for register, not for collision. The music-wins rule does
+not reach it — its musical sense belongs to transformational theory, not to
+notation — but an operation sounds large enough to carry intent, and an Edit is
+deliberately flatter than that. So the discriminator key in `edits.json` is
+`kind`, never `op`.
+
 ## Hearing it
 
 **Rig**:

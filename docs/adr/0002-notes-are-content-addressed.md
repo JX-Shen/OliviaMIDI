@@ -3,7 +3,7 @@
 A note's identity is derived from its content — track, channel, pitch and start
 tick — with an occurrence index disambiguating notes that collide on all four.
 Edit Sets and diffs refer to notes by that identity, and every identity in an
-Edit Set is resolved against the input Take before any operation is applied.
+Edit Set is resolved against the input Take before any Edit in it is applied.
 
 ## Considered Options
 
@@ -16,10 +16,10 @@ would silently address the wrong notes.
 — reads well to a human but has the same failure with worse ergonomics: once a
 note has moved, its coordinates no longer find it.
 
-**Resolving each identity at the moment its operation runs** is the shorter
-implementation, and it is the natural reading of "operations apply in the order
+**Resolving each identity at the moment its Edit runs** is the shorter
+implementation, and it is the natural reading of "Edits apply in the order
 given". It is wrong wherever a collision exists. Deleting the first of two
-colliding notes renumbers the second, so a later operation in the same Edit Set
+colliding notes renumbers the second, so a later Edit in the same Edit Set
 either fails or — worse — lands silently on a different note. Collisions are
 rare enough that this would survive ordinary use and any fixture without one.
 
@@ -35,7 +35,7 @@ encourages exploration* in `CHARTER.md`.
 Resolving identities up front makes an Edit Set atomic with respect to identity.
 "Operations apply in the order given" therefore means their *effects* are
 ordered, while their *targets* were all fixed before the first one ran. The cost
-is that an operation cannot refer to a note created by an earlier `add_note` in
+is that an Edit cannot refer to a note created by an earlier `add_note` in
 the same Edit Set.
 
 The remaining cost is the disambiguation rule. Two notes genuinely identical in

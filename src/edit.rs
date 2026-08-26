@@ -18,8 +18,12 @@ pub struct EditSet {
 /// Mechanical is the whole point: an Edit says which note and what number, never
 /// what the change is *for*. Musical intent belongs to the agent holding it, and
 /// this enum is where it would leak in if it ever did.
+///
+/// The discriminator is `kind`, not `op`: an Edit Set contains Edits, and a key
+/// that called them operations would seed the word into every sentence written
+/// about them. See `CONTEXT.md` under **Edit**.
 #[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Edit {
     SetVelocity {
         id: NoteId,
@@ -53,10 +57,10 @@ impl EditSet {
 /// Apply an Edit Set to a Take, producing a new one. The input is never touched.
 ///
 /// Every identity is resolved against the input Take *before* the first effect
-/// lands (ADR-0002). Operations apply in the order given, so their effects are
-/// ordered while their targets were all fixed in advance. With one operation and
-/// no collisions the two readings are indistinguishable, which is exactly why
-/// the structure has to be right now rather than when it starts to matter.
+/// lands (ADR-0002). Edits apply in the order given, so their effects are
+/// ordered while their targets were all fixed in advance. With one Edit and no
+/// collisions the two readings are indistinguishable, which is exactly why the
+/// structure has to be right now rather than when it starts to matter.
 pub fn apply(take: &Take, edit_set: &EditSet) -> Result<Take> {
     let notes = take.notes()?;
 
