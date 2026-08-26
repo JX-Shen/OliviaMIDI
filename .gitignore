@@ -5,6 +5,9 @@
 # Pointer to the real music project (machine-local, never tracked)
 .asset
 
+# Working state for a session: handoffs, notes. Never project record.
+.scratch/
+
 # macOS
 .DS_Store
 
