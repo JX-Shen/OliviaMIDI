@@ -145,11 +145,12 @@ fn a_take_that_ends_on_a_bar_line_gains_no_empty_bar() {
     assert!(!inspect_bars(&take, "3:3").status.success());
 }
 
-/// Bar lines follow the metre the Take states. 6/8 is what makes this bite: a
+/// Bar lines follow the time signature the Take states. 6/8 is what makes this
+/// bite: a
 /// Bar length computed as numerator × PPQ, ignoring the denominator, is right
 /// for both 3/4 and 4/4 and wrong here.
 #[test]
-fn bar_lines_follow_the_stated_metre() {
+fn bar_lines_follow_the_stated_time_signature() {
     let dir = tempfile::tempdir().expect("temp dir");
 
     // 4/4 at 480 PPQ: a Bar is 1920 Ticks, so Bar 2 is 1920–3839.
@@ -219,13 +220,14 @@ fn a_bar_range_that_cannot_be_honoured_is_refused() {
 
 /// A Take that states no time signature has no Bars. The MIDI spec says to
 /// assume 4/4; battuta refuses instead, because a Bar number derived from a
-/// metre the Take never stated is a wrong answer with nothing to reveal it.
+/// time signature the Take never stated is a wrong answer with nothing to
+/// reveal it.
 /// See ADR-0006.
 #[test]
 fn a_take_that_states_no_time_signature_refuses_to_talk_about_bars() {
     let dir = tempfile::tempdir().expect("temp dir");
     let take = common::build_take(
-        &dir.path().join("no-metre.mid"),
+        &dir.path().join("no-time-signature.mid"),
         480,
         &[],
         &[(0, 240, 60), (1440, 240, 62)],
@@ -249,7 +251,7 @@ fn a_take_that_states_no_time_signature_refuses_to_talk_about_bars() {
 fn a_take_that_changes_time_signature_refuses_to_talk_about_bars() {
     let dir = tempfile::tempdir().expect("temp dir");
     let take = common::build_take(
-        &dir.path().join("changes-metre.mid"),
+        &dir.path().join("changes-time-signature.mid"),
         480,
         &[(0, 3, 4), (2880, 4, 4)],
         &[(0, 240, 60), (2880, 240, 62)],
@@ -272,7 +274,7 @@ fn a_take_that_changes_time_signature_refuses_to_talk_about_bars() {
 fn a_restated_time_signature_is_not_a_change() {
     let dir = tempfile::tempdir().expect("temp dir");
     let take = common::build_take(
-        &dir.path().join("restated-metre.mid"),
+        &dir.path().join("restated-time-signature.mid"),
         480,
         &[(0, 3, 4), (1440, 3, 4), (2880, 3, 4)],
         &[(0, 240, 60), (1440, 240, 62), (2880, 240, 64)],
@@ -282,7 +284,8 @@ fn a_restated_time_signature_is_not_a_change() {
 }
 
 /// A time signature stated at Tick 5000 says nothing about Ticks 0–4999. Using
-/// it for those Bars would apply a metre backwards to before the Take stated it
+/// it for those Bars would apply a time signature backwards to before the Take
+/// stated it
 /// — the same wrong answer as assuming 4/4, one step over — so it is refused.
 #[test]
 fn a_time_signature_that_starts_late_governs_nothing_before_it() {

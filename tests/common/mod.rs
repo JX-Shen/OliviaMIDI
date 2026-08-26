@@ -132,20 +132,26 @@ pub fn empty_edit_set(dir: &Path) -> PathBuf {
     path
 }
 
-/// A metre a built Take states: (tick, numerator, denominator).
-pub type Metre = (u32, u8, u8);
+/// A time signature a built Take states: (tick, numerator, denominator).
+pub type StatedTimeSignature = (u32, u8, u8);
 
 /// A note a built Take contains: (start, duration, pitch).
 pub type NoteSpec = (u32, u32, u8);
 
-/// Write a small purpose-built Take, shaped like an ordinary export: a
-/// conductor track carrying the metre and a second track carrying the notes.
+/// Write a small purpose-built Take, shaped like an ordinary export: a conductor
+/// track carrying the time signature and a second track carrying the notes.
 ///
 /// The fixture cannot exercise everything Bar semantics has to answer for — it
-/// states one metre, and not one of its notes crosses a Bar line. Rather than
+/// states one time signature at Tick 0, and not one of its notes crosses a Bar
+/// line. Rather than
 /// commit a second opaque `.mid`, a test that needs such a Take states it here
 /// in readable terms and builds it.
-pub fn build_take(path: &Path, ppq: u16, metres: &[Metre], notes: &[NoteSpec]) -> PathBuf {
+pub fn build_take(
+    path: &Path,
+    ppq: u16,
+    stated: &[StatedTimeSignature],
+    notes: &[NoteSpec],
+) -> PathBuf {
     use midly::num::{u15, u24, u28, u4, u7};
     use midly::{
         Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind,
@@ -168,7 +174,7 @@ pub fn build_take(path: &Path, ppq: u16, metres: &[Metre], notes: &[NoteSpec]) -
             .collect()
     }
 
-    let mut conductor: Vec<(u32, TrackEventKind<'static>)> = metres
+    let mut conductor: Vec<(u32, TrackEventKind<'static>)> = stated
         .iter()
         .map(|&(tick, numerator, denominator)| {
             let power = u8::try_from(denominator.trailing_zeros()).expect("a note value");
@@ -182,7 +188,7 @@ pub fn build_take(path: &Path, ppq: u16, metres: &[Metre], notes: &[NoteSpec]) -
         0,
         TrackEventKind::Meta(MetaMessage::Tempo(u24::new(500_000))),
     ));
-    let conductor_end = metres.iter().map(|&(tick, ..)| tick).max().unwrap_or(0);
+    let conductor_end = stated.iter().map(|&(tick, ..)| tick).max().unwrap_or(0);
     conductor.push((conductor_end, TrackEventKind::Meta(MetaMessage::EndOfTrack)));
 
     let mut voice: Vec<(u32, TrackEventKind<'static>)> = Vec::new();

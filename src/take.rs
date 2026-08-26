@@ -141,10 +141,10 @@ impl Take {
         })
     }
 
-    /// Every metre the Take states, in the order they take effect.
+    /// Every time signature the Take states, in the order they take effect.
     ///
     /// Read from wherever they are rather than from the notes' track: an
-    /// ordinary export carries the metre on a conductor track of its own.
+    /// ordinary export carries them on a conductor track of its own.
     fn time_signatures(&self) -> Result<Vec<(u32, TimeSignature)>> {
         let smf = self.smf()?;
         let mut stated = Vec::new();
@@ -157,10 +157,10 @@ impl Take {
                 else {
                     continue;
                 };
-                // The metre is stored as a power of two. A power this model
-                // cannot represent is reported as such: a denominator of 0 would
-                // be a wrong answer, and a wrong answer about the metre is worse
-                // than no answer.
+                // The denominator is stored as a power of two. A power this
+                // model cannot represent is reported as such: a denominator of 0
+                // would be a wrong answer, and a wrong answer about the time
+                // signature is worse than no answer.
                 let Some(denominator) = 1u8.checked_shl(power as u32) else {
                     return Err(Error::UnreadableTimeSignature {
                         path: self.described_path(),
@@ -196,8 +196,8 @@ impl Take {
             });
         };
         // A time signature stated at Tick 500 says nothing about Ticks 0-499.
-        // Gridding those Bars from it would be applying a metre backwards to
-        // before the Take stated it.
+        // Gridding those Bars from it would be applying a time signature
+        // backwards to before the Take stated it.
         if at_tick != 0 {
             return Err(Error::TimeSignatureStartsLate {
                 path: self.described_path(),

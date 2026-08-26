@@ -68,7 +68,7 @@ fn inspect_help_states_the_bar_semantics() {
         .stdout(predicates::str::contains("both ends"))
         // Which Bar a note sustaining across a Bar line belongs to.
         .stdout(predicates::str::contains("starts"))
-        // What happens when the metre is missing or not the same throughout.
+        // What happens when the time signature is missing or not one throughout.
         .stdout(predicates::str::contains("4/4"))
         .stdout(predicates::str::contains("changes time signature"))
         // That a partial final Bar is a Bar.

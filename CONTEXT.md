@@ -59,11 +59,43 @@ happens when the Take states none or states two, is ADR-0006.
 _中文_: 小节
 _Avoid_: measure, battuta (taken as the crate name); 拍、节
 
+**Time signature**:
+How many notes of what value make one bar, as carried by the MIDI time signature
+meta event. Part of the Piece, not of the Rig. Every bar line is derived from it
+and from nothing else; what happens when a Take states none, or none that governs
+the whole of it, is ADR-0006.
+_中文_: 拍号
+_Avoid_: metre, meter, time sig; 节拍、拍子
+
+Not `metre`, although it is the more musical-sounding of the two. In theory the
+metre is how beats are organised and the time signature is the sign that states
+it, and the sign is what a file can carry and this tool can read. A Take with no
+time signature event does not lack a metre — the music has one, it simply is not
+written down — so `metre` would make every refusal in ADR-0006 a false statement
+about the music, where each is a true one about what the file *says*. Only a sign
+can be the object of saying. `time` on its own is genuinely musical — *in 3/4
+time* — but is already avoided for Tick.
+
+The Chinese is 拍号 rather than 节拍 because 号 is a mark: it names the thing
+written in the file, which is exactly what a meta event is. 节拍 drags speed along
+with it — 节拍器 is a metronome — and would leave the time signature sharing a
+root with the tempo. 拍子 names the feel rather than the mark, and goes vague on
+the one question this project needs answered: 3/4 and 6/8 have the same bar
+length and different time signatures.
+
 **Tick**:
 The unit of musical time inside a MIDI file, relative to the file's PPQ. Ticks
 are the truth; bars, beats and seconds are all derived views of them.
 _中文_: 刻度
 _Avoid_: time, position, offset
+
+**Tempo**:
+How fast a Take's ticks pass, as carried by the MIDI tempo meta event:
+microseconds per quarter note, which `mid info` also reports as beats per minute.
+Part of the Piece, not of the Rig. Italian wins here by the rule in `CHARTER.md`,
+which names tempo as a case where it genuinely does.
+_中文_: 速度
+_Avoid_: speed, rhythm; 节奏、节拍
 
 **Velocity**:
 How hard a note is struck, as carried by the MIDI note event. Part of the Piece,
