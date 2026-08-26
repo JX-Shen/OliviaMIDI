@@ -1,0 +1,87 @@
+use std::path::PathBuf;
+
+/// Everything `battuta` can fail at. One variant per condition a caller could
+/// reasonably want to tell apart — the messages are the product surface, so
+/// they say what to do next rather than only what went wrong.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("cannot read {path}: {source}")]
+    Read {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("cannot write {path}: {source}")]
+    Write {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("{path} is not a MIDI file this tool can read: {source}")]
+    Malformed {
+        path: PathBuf,
+        #[source]
+        source: midly::Error,
+    },
+
+    #[error(
+        "{path} uses SMPTE timecode division; battuta reads metrical (ticks-per-quarter) files only"
+    )]
+    NotMetrical { path: PathBuf },
+
+    #[error(
+        "{path} states a time signature whose denominator is 2^{power}, which is not a note value"
+    )]
+    UnreadableTimeSignature { path: PathBuf, power: u8 },
+
+    #[error(
+        "track {track} has a note on channel {channel}, pitch {pitch}, that is never released"
+    )]
+    UnterminatedNote {
+        track: usize,
+        channel: u8,
+        pitch: u8,
+    },
+
+    #[error("cannot read the Edit Set {path}: {source}")]
+    EditSetUnreadable {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+
+    #[error("no note in the input Take has the identity {0}")]
+    UnknownNote(String),
+
+    #[error("the edited Take could not be encoded as MIDI: {0}")]
+    Encode(String),
+
+    #[error("velocity {0} is out of range; a note velocity is 1-127")]
+    VelocityOutOfRange(i64),
+
+    #[error("apply never writes in place: -o {0} is the input Take")]
+    WriteInPlace(PathBuf),
+
+    #[error(
+        "no Rig configured. Pass --rig <soundfont.sf2>, or set BATTUTA_SOUNDFONT to a soundfont path.\n\
+         battuta never picks a soundfont for you: an audition heard through a Rig you did not choose \
+         is a judgement you cannot trust."
+    )]
+    NoRig,
+
+    #[error("the Rig's soundfont {0} does not exist")]
+    RigMissing(PathBuf),
+
+    #[error("fluidsynth is not on PATH. Install it — on macOS, `brew install fluid-synth`.")]
+    NoFluidsynth,
+
+    #[error("fluidsynth is on PATH but could not be started: {0}")]
+    FluidsynthUnusable(#[source] std::io::Error),
+
+    #[error("fluidsynth failed: {0}")]
+    FluidsynthFailed(std::process::ExitStatus),
+}
+
+pub type Result<T> = std::result::Result<T, Error>;

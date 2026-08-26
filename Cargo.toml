@@ -1,0 +1,29 @@
+[package]
+name = "battuta"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "The core of OliviaMIDI: read, change, compare and audition a Take."
+license = "MIT"
+
+[lib]
+name = "battuta"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mid"
+path = "src/bin/mid/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+midly = "0.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+assert_cmd = "2"
+midly = "0.5"
+serde_json = "1"
+predicates = "3"
+tempfile = "3"

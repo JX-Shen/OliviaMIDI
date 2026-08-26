@@ -157,22 +157,34 @@ exactly the right relationship: a tribute, not a theme.
 
 ## Status
 
-No code yet, and that is deliberate. The charter, the glossary and the decision
-records came first, because vocabulary is expensive to change once it is in use
-and a wrong word quietly bends every later decision around it. Several already
-had to be corrected before a line was written: an edit set is not a `patch` (a
-patch is a sound preset), and a `.mid` file is not a `score` (a score implies
-notation MIDI does not carry).
+The vocabulary came first, on purpose: the charter, the glossary and the
+decision records were written before any code, because a wrong word is expensive
+to change once it is in use and quietly bends every later decision around it.
+Several had to be corrected before a line was written — an edit set is not a
+`patch` (a patch is a sound preset), and a `.mid` file is not a `score` (a score
+implies notation MIDI does not carry).
 
-The first milestone is a single sentence, and it is meant to be uncomfortable:
+The first milestone is a single sentence, and it was meant to be uncomfortable:
 
 > Before the end of the first weekend: the human says one sentence in natural
 > language → the agent inspects the MIDI → a few notes change → `mid diff` →
 > `mid play` → the human hears the result.
 
-Nothing gets to be elegant before that loop closes. The failure mode to fear is
-learning Rust beautifully, writing an immaculate MIDI parser, and never having
-changed sixteen bars of music with an agent.
+That loop now closes. All five commands exist and are deliberately thin: `apply`
+understands one operation, `set_velocity`; `diff` matches notes exactly and
+reports only Added, Removed and VelocityChanged; `--bars` does not exist yet, and
+the output without `--json` is plain rather than musical. None of it is good yet,
+and that is the right order — nothing gets to be elegant before the loop closes.
+
+```
+cargo build --release          # target/release/mid
+cargo test                     # the suite runs mid as a process
+mid help                       # the command reference is the binary
+```
+
+Playback needs FluidSynth (`brew install fluid-synth`) and a Rig you chose:
+`--rig <soundfont.sf2>`, or `BATTUTA_SOUNDFONT`. There is no fallback, and the
+first `mid play` on a new machine failing is the intended shape of that trade.
 
 ## Reading order
 
