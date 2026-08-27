@@ -187,6 +187,15 @@ pub fn set_velocity_edit_set(dir: &Path, id: &str, velocity: &str) -> PathBuf {
     path
 }
 
+/// An Edit Set holding whatever Edits a test spells out, written to `dir` under
+/// `name`. The kinds are written at the call site rather than assembled by a
+/// helper per kind, so a test reads like the `edits.json` an agent would write.
+pub fn edit_set(dir: &Path, name: &str, edits: &str) -> PathBuf {
+    let path = dir.join(format!("{name}.json"));
+    write(&path, &format!(r#"{{ "edits": [ {edits} ] }}"#));
+    path
+}
+
 /// An Edit Set that asks for nothing.
 pub fn empty_edit_set(dir: &Path) -> PathBuf {
     let path = dir.join("empty.json");

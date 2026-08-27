@@ -126,6 +126,89 @@ pub enum Error {
     #[error("velocity {0} is out of range; a note velocity is 1-127")]
     VelocityOutOfRange(i64),
 
+    #[error(
+        "transposing {id} by {semitones} semitones lands on {landed}, which is not a MIDI pitch; \
+         pitches are 0-127"
+    )]
+    TransposeOutOfRange {
+        id: String,
+        semitones: i64,
+        landed: i64,
+    },
+
+    #[error(
+        "on track {track}, channel {channel}, pitch {pitch}, the note starting at tick {first} \
+         would finish after the note starting at tick {second} — one note ending inside another, \
+         on the same channel and pitch. A note-off names a channel and a pitch, never the note it \
+         ends, so re-reading this Take would give each of the two the other's length. Put one on \
+         another channel, or make sure neither finishes inside the other."
+    )]
+    NotesIndistinguishable {
+        track: usize,
+        channel: u8,
+        pitch: u8,
+        first: u32,
+        second: u32,
+    },
+
+    #[error(
+        "no note can be added to track {track}; the Take has {tracks} tracks, numbered from 0"
+    )]
+    NoSuchTrack { track: i64, tracks: usize },
+
+    #[error("channel {0} is out of range; a MIDI channel is 0-15")]
+    ChannelOutOfRange(i64),
+
+    #[error("pitch {0} is out of range; a MIDI pitch is 0-127")]
+    PitchOutOfRange(i64),
+
+    #[error("a note cannot start at tick {0}; the first Tick of a Take is 0")]
+    StartOutOfRange(i64),
+
+    #[error(
+        "a note cannot last {0} ticks; a note lasts at least 1 tick, and has to end at a Tick the \
+         Take can hold"
+    )]
+    DurationOutOfRange(i64),
+
+    #[error(
+        "an earlier Edit in this Edit Set deleted {0}, so this one has nothing to change. Every \
+         identity is resolved against the input Take, so a deleted note still answers to its name."
+    )]
+    NoteAlreadyDeleted(String),
+
+    #[error(
+        "moving {id} by {delta_ticks} ticks lands it at {landed}, which is not a Tick; the first \
+         Tick of a Take is 0"
+    )]
+    MoveOutOfRange {
+        id: String,
+        delta_ticks: i64,
+        landed: i64,
+    },
+
+    #[error(
+        "resizing {id} by {delta_ticks} ticks leaves it {duration} ticks long; a note lasts at \
+         least 1 tick"
+    )]
+    ResizeOutOfRange {
+        id: String,
+        delta_ticks: i64,
+        duration: i64,
+    },
+
+    #[error(
+        "an Edit left {0} ticks between two events, and a MIDI delta time cannot reach that far — \
+         268435455 ticks is as far as one goes. Move the note a shorter distance."
+    )]
+    GapUnwritable(u32),
+
+    #[error(
+        "the events {0} was found at no longer carry a note. That is a fault in battuta rather \
+         than in your Take or your Edit Set; nothing has been written."
+    )]
+    NoteEventsLost(String),
+
     #[error("apply never writes in place: -o {0} is the input Take")]
     WriteInPlace(PathBuf),
 

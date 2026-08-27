@@ -60,8 +60,8 @@ in `CHARTER.md`, because agents are the ones most likely to break them.
   separate command reference to keep in sync with the binary.
 - `--json` on `info`, `inspect` and `diff` gives structured output. Prefer it
   over parsing human output.
-- Edits are mechanical only — add, delete, move, resize a note, change a
-  velocity, change a CC. Musical intent is the agent's job to hold and the
+- Edits are mechanical only — add, delete, move, transpose, resize a note,
+  change a velocity, change a CC. Musical intent is the agent's job to hold and the
   core's job to never encode. Do not add an Edit like `make_sadder`.
 - `mid apply` never writes in place. Always produce a new Take.
 - `mid play` states which Rig it used, on stderr and in `--json`. If a Rig is

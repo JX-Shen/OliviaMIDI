@@ -5,6 +5,10 @@ tick — with an occurrence index disambiguating notes that collide on all four.
 Edit Sets and diffs refer to notes by that identity, and every identity in an
 Edit Set is resolved against the input Take before any Edit in it is applied.
 
+An Edit that changes what an identity is derived from — a note's start Tick, or
+its pitch — and an Edit that creates a note both place that note after every
+event already at its Tick.
+
 ## Considered Options
 
 **Synthetic ids assigned at parse time** (track index plus event order) are
@@ -37,6 +41,40 @@ Resolving identities up front makes an Edit Set atomic with respect to identity.
 ordered, while their *targets* were all fixed before the first one ran. The cost
 is that an Edit cannot refer to a note created by an earlier `add_note` in
 the same Edit Set.
+
+**Where a changed note lands is a rule about identity rather than about Edits,
+which is why it is recorded here.** The occurrence index is counted in note-on
+order within a track. So a note arriving at a Tick where another of the same
+track, channel and pitch already begins settles which of the two is `n0` purely
+by where its note-on is written. Placed ahead, it takes `n0` and renames a note
+nobody asked to touch. Placed behind, every identity already there survives and
+the new note takes the next index. Only the second lets both of the things this
+project promises hold at once: that a note `add_note` created is
+indistinguishable from one that was always there, and that notes an Edit Set did
+not name keep the identities they had.
+
+It reaches `move_note` and `transpose_note` for the same reason it reaches
+`add_note`, although only `add_note` looks like it makes something. A move
+changes a note's start Tick and a transpose changes its pitch, and both are
+content an identity is derived from — so both can land a note on top of another
+and renumber it. `set_velocity` and `resize_note` change nothing an identity is
+derived from, and so leave a note exactly where it sits.
+
+A note-off is placed the other way, before the events already at its Tick, and
+that is not an identity rule at all: occurrence indices are counted in note-on
+order and a release has no say in them. The reason is audible instead. A release
+landing exactly on the next strike of the same pitch would, placed last, silence
+the note that strike had just begun — a synthesiser stops a pitch, not an
+identity.
+
+**This is also what closes the question left open below, for one of the two
+cases it names.** Which of two simultaneous note-ons is written first is no
+longer whatever the encoder happened to do; within a single `apply` it is this
+rule, applied deliberately. The suite now builds a genuine collision on purpose
+— `apply` is the first thing in this tool that can — and asserts that the note
+already there keeps `n0` while the new one takes `n1`. What is still unexercised
+is a Take arriving from elsewhere, written by a program that ordered its
+simultaneous events differently.
 
 The remaining cost is the disambiguation rule. Two notes genuinely identical in
 track, channel, pitch and start tick — a doubled voice, a stacked layer — are

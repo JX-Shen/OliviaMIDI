@@ -55,3 +55,26 @@ a write and a re-read. Event-level identity says the events come back in the
 order they went in, which is what that question needed — but only for Takes this
 tool wrote. A Take that arrives from elsewhere and is re-read is still
 unexercised, and still waits on a fixture with a genuine collision in it.
+
+## Amended: the mechanism changed, the guarantee did not
+
+The five Edits that followed `set_velocity` cannot reach one event and stop. A
+transpose changes the key on *both* of a note's events; a move changes when both
+happen, and with them the delta times of their neighbours; a delete takes two
+events out and an add puts two in. So `apply` no longer edits the parsed event
+list in place. It reads each track once into slots addressed by index, lets Edits
+mark, move and add slots without any index ever shifting, and derives the delta
+times again at the end from the Ticks.
+
+What the paragraph above was protecting survives intact, and is what the
+round-trip assertion still tests: an event no Edit named keeps the Tick it
+arrived with, its content, and its order relative to every other event that
+stayed put — so a track nothing touched re-encodes to exactly the events it came
+in as. What has gone is the *means*. Read "reaches the event it names and leaves
+the rest of the parsed Take untouched" as the promise it was making rather than
+as the mechanism it happened to name.
+
+The option rejected above is untouched and still rejected. This rebuilds a track's
+*event list*, out of that track's own events, and never a Take out of its notes.
+Every event the note model does not carry is still carried through, because it was
+never taken out in the first place.

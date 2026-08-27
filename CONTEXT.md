@@ -22,8 +22,8 @@ _中文_: 条 (as in a studio's 再来一条)
 _Avoid_: version, revision, draft; 版本、稿
 
 **Edit**:
-One mechanical change to a Take: add, delete, move or resize a note, change a
-velocity, change a CC. Never carries musical intent — no "make it sadder".
+One mechanical change to a Take: add, delete, move, transpose or resize a note,
+change a velocity, change a CC. Never carries musical intent — no "make it sadder".
 An **Edit Set** is a batch of them, applied together (`edits.json`).
 _中文_: 改动
 _Avoid_: patch, mutation, operation; 补丁
@@ -33,6 +33,19 @@ not reach it — its musical sense belongs to transformational theory, not to
 notation — but an operation sounds large enough to carry intent, and an Edit is
 deliberately flatter than that. So the discriminator key in `edits.json` is
 `kind`, never `op`.
+
+**Transpose**:
+Moving a note by a number of semitones and changing nothing else — its start,
+its length and its velocity are untouched. One kind of Edit.
+_中文_: 移调
+_Avoid_: modulate, shift; 转调、变调
+
+Not 转调. A modulation is a piece changing key, which is a reading of the music
+and not a thing done to one note — and an Edit never carries a reading. Moving
+one note down two semitones is not a modulation, and would still not be one if
+every note in the Take were moved with it. 变调 is vaguer again: in ordinary
+Chinese use it is whatever the button on a karaoke machine does, which is
+sometimes this and sometimes a change of speed.
 
 ## Hearing it
 

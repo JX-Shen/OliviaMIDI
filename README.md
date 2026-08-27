@@ -170,11 +170,13 @@ The first milestone is a single sentence, and it was meant to be uncomfortable:
 > language → the agent inspects the MIDI → a few notes change → `mid diff` →
 > `mid play` → the human hears the result.
 
-That loop now closes. All five commands exist and are deliberately thin: `apply`
-understands a single kind of Edit, `set_velocity`; `diff` matches notes exactly
-and reports only Added, Removed and VelocityChanged; and the output without
-`--json` is plain rather than musical. None of it is good yet, and that is the
-right order — nothing gets to be elegant before the loop closes.
+That loop now closes. All five commands exist, and are being made good one at a
+time rather than all at once. `apply` understands the whole Edit vocabulary —
+move, transpose, resize, add, delete a note, and change a velocity. `diff` still
+matches notes exactly and reports only Added, Removed and VelocityChanged, so a
+moved note reads as one of each. The output without `--json` is still plain
+rather than musical. Not all of it is good yet, and that is the right order —
+nothing gets to be elegant before the loop closes.
 
 ```
 cargo build --release          # target/release/mid
