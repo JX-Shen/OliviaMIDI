@@ -41,7 +41,18 @@ pub struct Args {
 }
 
 pub fn run(args: Args) -> battuta::Result<()> {
-    let audition = battuta::rig::play(&args.take, args.bars, args.rig, &mut std::io::stderr())?;
+    // The library decides *that* the Rig is disclosed and when; this decides
+    // what it says and where it goes. Stderr, so that `--json` on stdout stays
+    // one JSON document, and so that a shell pipeline cannot drop the
+    // attribution by redirecting the payload. See ADR-0009.
+    let audition = battuta::rig::play(
+        &args.take,
+        args.bars,
+        args.rig,
+        &mut |rig: &battuta::Rig| {
+            eprintln!("rig: {}", rig.soundfont.display());
+        },
+    )?;
 
     if args.json {
         println!("{}", crate::json(&audition));

@@ -64,17 +64,28 @@ pub struct Audition {
 }
 
 /// The whole of `mid play`: resolve the Rig, hand the Take to FluidSynth, and
-/// state what was heard.
+/// disclose which Rig was used.
 ///
 /// Synthesis is not this project's problem (ADR-0001), so `mid` locates
 /// `fluidsynth` on PATH and shells out. Not finding it and not having a Rig are
 /// two different failures with two different remedies, and are never merged
 /// into one "playback failed".
+///
+/// `disclose` is handed the resolved Rig once, at the only moment it can
+/// truthfully be handed it: after FluidSynth has started, so it names the Rig
+/// that *was* used rather than the one that would have been, and before the
+/// audio ends, so an audition somebody interrupts has still been disclosed.
+///
+/// That moment is the library's, and so is the obligation — a caller cannot
+/// reach an `Audition` without being told what it was heard through. The
+/// sentence is not: `CHARTER.md` gives it to the binary, in as many words
+/// ("`mid play` always states which Rig it used"), and a consumer that is not
+/// `mid` has its own product to answer for. See ADR-0009.
 pub fn play(
     take: &Path,
     bars: Option<BarRange>,
     rig: Option<PathBuf>,
-    disclose: &mut dyn std::io::Write,
+    disclose: &mut dyn FnMut(&Rig),
 ) -> Result<Audition> {
     // The passage is cut before the Rig is resolved. A Bar range that cannot be
     // honoured is a mistake in the command rather than in the machine, and it
@@ -105,9 +116,9 @@ pub fn play(
             _ => Error::FluidsynthUnusable(source),
         })?;
 
-    // Disclosed only once FluidSynth has actually started, so the line says
-    // which Rig was used rather than which one would have been.
-    let _ = writeln!(disclose, "rig: {}", rig.soundfont.display());
+    // Disclosed only once FluidSynth has actually started, so what the caller
+    // is told is which Rig was used rather than which one would have been.
+    disclose(&rig);
 
     let status = child.wait().map_err(Error::FluidsynthUnusable)?;
     if !status.success() {
