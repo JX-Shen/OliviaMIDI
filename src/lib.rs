@@ -26,3 +26,4 @@ pub use error::{Error, Result};
 pub use note::{Note, NoteId};
 pub use rig::{Audition, Rig};
 pub use take::{Info, Take, Tempo, TimeSignature};
+pub use temporary::remove_temporary_takes_on_signals;

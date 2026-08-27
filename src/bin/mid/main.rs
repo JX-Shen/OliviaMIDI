@@ -42,6 +42,12 @@ enum Command {
 }
 
 fn main() {
+    // `mid` owns its process, so it consents to `battuta` catching the signals
+    // that mean stop — which is what keeps a temporary passage from outliving a
+    // Ctrl-C. Nothing is installed until there is a passage to clean up, and a
+    // library consumer decides this for itself. See ADR-0010.
+    battuta::remove_temporary_takes_on_signals();
+
     let cli = Cli::parse();
     let result = match cli.command {
         Command::Info(args) => info::run(args),

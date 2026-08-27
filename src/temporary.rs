@@ -20,7 +20,7 @@ use std::ffi::CString;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::ptr;
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::Once;
 
 /// A Take on disk that removes itself: when this value drops, and when the
@@ -148,8 +148,37 @@ extern "C" fn remove_and_die(signal: libc::c_int) {
 
 static INSTALLED: Once = Once::new();
 
+/// Whether the process has agreed to have its signals caught. Nothing is caught
+/// until it has.
+static CONSENTED: AtomicBool = AtomicBool::new(false);
+
+/// Consent to `battuta` catching the signals that mean *stop*.
+///
+/// A temporary Take is removed on every route out of a command that runs a
+/// destructor. A signal is the one route that does not, and covering it means
+/// installing handlers for `SIGINT`, `SIGTERM` and `SIGHUP`. Those are a
+/// *process-global* resource, and a library has no business taking one without
+/// being asked: a host application holding its own `SIGTERM` handler for its own
+/// shutdown would lose it — permanently, because nothing here restores it — the
+/// first time it auditioned a single passage, and would then die where it used
+/// to shut down cleanly.
+///
+/// So it is asked for. `mid` consents in `main`, because `mid` owns its process.
+/// A consumer that does not consent keeps its own handlers and still has every
+/// temporary Take removed by `Drop`: on success, on failure, on an unwinding
+/// panic. What it gives up is the signal alone, and only for the seconds an
+/// audition is actually running.
+///
+/// Calling this more than once, or from several threads, is harmless. Handlers
+/// are still installed lazily — at the first temporary Take rather than here —
+/// so a process that consents and then never auditions anything has its signals
+/// left alone as well. See ADR-0010.
+pub fn remove_temporary_takes_on_signals() {
+    CONSENTED.store(true, Ordering::Release);
+}
+
 /// Catch the three signals that mean *stop*, the first time there is anything
-/// to clean up.
+/// to clean up in a process that has agreed to it.
 ///
 /// Lazily, so that a consumer of this library which never writes a temporary
 /// Take never has its signals touched. A signal that is already being ignored
@@ -161,6 +190,11 @@ static INSTALLED: Once = Once::new();
 /// with a core dump, and a file left in the temporary directory is a smaller
 /// harm than interfering with somebody debugging.
 fn install() {
+    // Read before the `Once` and not inside it, so that consent arriving after
+    // the first temporary Take still installs the handlers at the next one.
+    if !CONSENTED.load(Ordering::Acquire) {
+        return;
+    }
     INSTALLED.call_once(|| {
         for signal in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP] {
             // SAFETY: `remove_and_die` calls only async-signal-safe functions.

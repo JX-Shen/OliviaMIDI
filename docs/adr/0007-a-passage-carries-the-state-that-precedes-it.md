@@ -45,16 +45,22 @@ re-raises the signal with the default disposition restored, so that a shell
 still reports the command as interrupted rather than as having chosen some exit
 code of its own.
 
+In a process that has agreed to it. Signal dispositions are process-global, so
+catching them is asked for rather than assumed: `mid` consents in `main`, and a
+library consumer that does not keeps its own handlers and its cleanup by `Drop`.
+That is ADR-0010, and it is the one qualification on "by any route" — for `mid`,
+which is what this decision is about, nothing changes.
+
 That means a signal handler and a global, in a crate that had neither. Both are
 confined to `src/temporary.rs` and both are the minimum the mechanism admits: a
 handler may not allocate, may not take a lock, and may not read a `Vec` another
 thread might be growing, so the registry is a fixed array of atomic pointers to
 leaked C strings, and the only call made from the handler is `unlink`, which
 POSIX guarantees is safe there. The handlers are installed lazily, the first
-time there is anything to clean up, so a consumer of this library that never
-writes a temporary Take never has its signals touched — and a signal already
-being ignored is left ignored, because that is a decision the process made
-before `battuta` was called.
+time there is anything to clean up in a process that consented, so a consumer
+that never writes a temporary Take never has its signals touched whether it
+consented or not — and a signal already being ignored is left ignored, because
+that is a decision the process made before `battuta` was called.
 
 "Room to remember" is eight paths, and the number is part of the promise rather
 than a detail behind it. `mid play` holds one; the other seven are for a library
