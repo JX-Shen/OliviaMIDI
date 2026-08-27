@@ -16,6 +16,7 @@ pub mod note;
 pub mod passage;
 pub mod rig;
 pub mod take;
+mod temporary;
 
 pub use bars::{BarRange, TickSpan};
 pub use diff::{Diff, VelocityChange};

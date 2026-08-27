@@ -109,20 +109,31 @@ pub struct FakeFluidsynth {
 }
 
 pub fn fake_fluidsynth(dir: &Path) -> FakeFluidsynth {
+    fake(dir, "exit 0")
+}
+
+/// A fake that keeps "playing" instead of returning, so that a test can catch
+/// `mid` in the middle of an audition — which is where an interrupt lands.
+pub fn lingering_fake_fluidsynth(dir: &Path) -> FakeFluidsynth {
+    fake(dir, "/bin/sleep 30")
+}
+
+/// Absolute paths for `/bin/cp` and `/bin/sleep`: the child's PATH is the
+/// fake's own directory alone, so that `fluidsynth` can only be the fake and
+/// nothing else is reachable on it.
+fn fake(dir: &Path, last_act: &str) -> FakeFluidsynth {
     let bin_dir = dir.join("bin");
     std::fs::create_dir_all(&bin_dir).expect("scratch dir is writable");
     let log = dir.join("fluidsynth-argv");
     let handed = dir.join("handed.mid");
-    // `/bin/cp` by absolute path: the child's PATH is this directory alone, so
-    // that `fluidsynth` can only be the fake, and nothing else is on it.
     let script = format!(
         "#!/bin/sh\n\
-         printf '%s\\n' \"$@\" > \"{}\"\n\
          for arg in \"$@\"; do last=\"$arg\"; done\n\
          /bin/cp \"$last\" \"{}\"\n\
-         exit 0\n",
-        log.display(),
-        handed.display()
+         printf '%s\\n' \"$@\" > \"{}\"\n\
+         {last_act}\n",
+        handed.display(),
+        log.display()
     );
     let path = bin_dir.join("fluidsynth");
     std::fs::write(&path, script).expect("fake is writable");

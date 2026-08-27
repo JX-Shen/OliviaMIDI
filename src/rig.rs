@@ -1,10 +1,10 @@
 use crate::bars::BarRange;
 use crate::error::{Error, Result};
 use crate::take::Take;
+use crate::temporary::TemporaryTake;
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tempfile::NamedTempFile;
 
 /// The apparatus a Take is heard through. In V0 that is one soundfont for the
 /// whole Piece; the name is `Rig` rather than `Soundfont` because V1's named
@@ -86,9 +86,12 @@ pub fn play(
         .transpose()?;
     let rig = Rig::resolve(rig)?;
 
-    // Written out only now that there is something to play it through.
-    let passage = passage.map(hold_for_playback).transpose()?;
-    let heard = passage.as_ref().map_or(take, NamedTempFile::path);
+    // Written out only now that there is something to play it through, and
+    // written where nothing will find it afterwards.
+    let passage = passage
+        .map(|passage| TemporaryTake::holding(&passage))
+        .transpose()?;
+    let heard = passage.as_ref().map_or(take, TemporaryTake::path);
 
     let mut child = Command::new("fluidsynth")
         .args(rig.fluidsynth_args(heard))
@@ -119,30 +122,4 @@ pub fn play(
         bars,
         rig: rig.soundfont,
     })
-}
-
-/// The passage, put somewhere it can be handed to FluidSynth and then
-/// forgotten.
-///
-/// FluidSynth plays a file from its beginning and has no range playback, so the
-/// only way to hear four Bars is to give it four Bars. The file lives in the
-/// temporary directory and is deleted when the returned handle drops: writing
-/// it beside the user's Take would leave something that looks like a Take they
-/// made, and it is not one.
-fn hold_for_playback(passage: Take) -> Result<NamedTempFile> {
-    let file = tempfile::Builder::new()
-        .prefix("battuta-passage-")
-        .suffix(".mid")
-        .tempfile()
-        .map_err(Error::PassageUnwritable)?;
-    // Creating the file and filling it are one condition with one remedy, and
-    // the user is never told the temporary file's name: it is not a file they
-    // have, so it is not a file they can go and fix.
-    passage.write(file.path()).map_err(|error| match error {
-        Error::Write { source, .. } => Error::PassageUnwritable(source),
-        // `Take::write` fails no other way; keeping the value rather than
-        // renaming it is the safe direction if it ever grows one.
-        other => other,
-    })?;
-    Ok(file)
 }

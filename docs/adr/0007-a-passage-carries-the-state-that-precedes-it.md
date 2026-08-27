@@ -32,9 +32,33 @@ at 11516, because the Take stops four Ticks inside its last Bar and the passage
 does not. Eight Bars is eight Bars.
 
 It is never presented as a Take. It is written to the temporary directory rather
-than beside the user's files, it is deleted when the command returns, and
-`mid play --json` names the user's Take and the passage of it that was heard,
-never the temporary file.
+than beside the user's files; it is removed when the command ends, by any route
+it can end by; and `mid play --json` names the user's Take and the passage of it
+that was heard, never the temporary file.
+
+"By any route" includes the interrupt, and that is the part that costs
+something. `play` blocks for as long as the audio lasts, so Ctrl-C is the
+ordinary way to stop a passage part way through rather than an edge case — and
+a process killed by a signal runs no destructor. So `battuta` catches `SIGINT`,
+`SIGTERM` and `SIGHUP`, unlinks whatever temporary Takes are outstanding, and
+re-raises the signal with the default disposition restored, so that a shell
+still reports the command as interrupted rather than as having chosen some exit
+code of its own.
+
+That means a signal handler and a global, in a crate that had neither. Both are
+confined to `src/temporary.rs` and both are the minimum the mechanism admits: a
+handler may not allocate, may not take a lock, and may not read a `Vec` another
+thread might be growing, so the registry is a fixed array of atomic pointers to
+leaked C strings, and the only call made from the handler is `unlink`, which
+POSIX guarantees is safe there. The handlers are installed lazily, the first
+time there is anything to clean up, so a consumer of this library that never
+writes a temporary Take never has its signals touched — and a signal already
+being ignored is left ignored, because that is a decision the process made
+before `battuta` was called.
+
+`SIGQUIT` is deliberately not caught: its purpose is an abrupt abort with a core
+dump, and one file in the temporary directory is a smaller harm than getting in
+the way of somebody debugging. `SIGKILL` cannot be caught by anyone.
 
 ## Why the state travels
 
@@ -112,20 +136,14 @@ to prevent.
 A Take that states no time signature governing the whole of it cannot be played
 by Bar range at all, by ADR-0006. `mid play` without `--bars` still plays it.
 
-What is deliberately still open, and what is simply not solved yet, are two
-different lists.
+The signal handling is a component rather than a patch on playback, which is why
+it lives in `src/temporary.rs` and knows nothing about passages: what must not
+be left behind is a fact about the file. Anything this tool writes for its own
+use later — a render on the way to somewhere else, a preview — inherits the same
+guarantee by being a `TemporaryTake`, and inherits it without installing a
+second handler.
 
-Open on purpose: state is gathered at Tick 0 as a set of values, so a controller
-that was mid-sweep when the passage began arrives at its last value rather than
-continuing to move. No Take has needed better, and pretending otherwise would
-mean interpolating something the file does not say.
-
-Not solved: the temporary Take survives an interrupt. It is removed when `mid`
-returns by any route, including every failure, but Ctrl-C kills the process
-before that can happen — and since `play` blocks for as long as the audio lasts,
-Ctrl-C is the ordinary way to stop it rather than an edge case. What is left
-behind is in the temporary directory, never beside the user's files, so the part
-of this decision that protects the Piece holds; what fails is the promise that
-nothing is left at all. Fixing it means handling SIGINT, which means a signal
-handler and a global in a crate that has neither, and that is a trade to make
-deliberately rather than on the way past.
+What is deliberately still open: state is gathered at Tick 0 as a set of values,
+so a controller that was mid-sweep when the passage began arrives at its last
+value rather than continuing to move. No Take has needed better, and pretending
+otherwise would mean interpolating something the file does not say.

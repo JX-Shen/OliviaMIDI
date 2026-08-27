@@ -16,7 +16,8 @@ use std::path::PathBuf;
 /// rather than after the Bars in front of it, it is heard at the Take's own
 /// tempo and time signature, and it carries whatever the Take had already set
 /// by then — the program, the controllers. Your Take is not touched: what
-/// FluidSynth is handed is a temporary file, and it is gone when this returns.
+/// FluidSynth is handed is a temporary file, and nothing is left behind when
+/// the command ends, Ctrl-C included.
 ///
 /// Playback is FluidSynth, found on PATH. "FluidSynth is missing" and "no Rig is
 /// configured" are two different failures with two different remedies.

@@ -517,3 +517,60 @@ fn the_passage_inherits_the_program_change_that_precedes_it() {
         "the passage does not state the program the Take set before it"
     );
 }
+
+/// The argv the fake was given, once it has finished writing it.
+///
+/// The lingering fake logs its arguments and then stays where it is, so the log
+/// appearing is how a test knows `mid` is in the middle of an audition rather
+/// than about to start one.
+fn wait_for_argv(log: &std::path::Path) -> Vec<String> {
+    for _ in 0..600 {
+        if let Ok(text) = std::fs::read_to_string(log) {
+            let lines: Vec<String> = text.lines().map(str::to_string).collect();
+            if lines.len() == 5 {
+                return lines;
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("the fake never recorded what it was given");
+}
+
+/// `play` blocks for as long as the audio lasts, so Ctrl-C is the ordinary way
+/// to stop a passage part way through rather than an edge case — and it is the
+/// one way the temporary Take could outlive the command. It does not.
+#[test]
+fn an_interrupt_takes_the_temporary_take_with_it() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let fake = common::lingering_fake_fluidsynth(dir.path());
+    let soundfont = common::fake_soundfont(&dir.path().join("chosen.sf2"));
+
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("mid"))
+        .args(["play", FIXTURE, "--bars", "5:8", "--rig"])
+        .arg(&soundfont)
+        .env("PATH", &fake.dir)
+        .env_remove(battuta::rig::SOUNDFONT_ENV)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .expect("mid runs");
+
+    let argv = wait_for_argv(&fake.log);
+    let passage = std::path::PathBuf::from(argv.last().expect("a file was handed over"));
+    assert!(passage.exists(), "the passage was never written");
+
+    // SAFETY: `kill` on a child this test spawned and has not yet reaped.
+    unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGINT) };
+    let status = child.wait().expect("mid exits");
+
+    assert!(!passage.exists(), "the interrupt left {passage:?} behind");
+    // Interrupted, not exited: the handler restores the default disposition
+    // and re-raises, so a shell reports what actually happened rather than an
+    // exit code invented inside `mid`.
+    use std::os::unix::process::ExitStatusExt;
+    assert_eq!(
+        status.signal(),
+        Some(libc::SIGINT),
+        "mid died of something other than the interrupt: {status:?}"
+    );
+}
