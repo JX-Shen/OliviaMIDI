@@ -59,6 +59,21 @@ happens when the Take states none or states two, is ADR-0006.
 _中文_: 小节
 _Avoid_: measure, battuta (taken as the crate name); 拍、节
 
+**Passage**:
+The stretch of a Take a Bar range names — what `--bars 5:8` selects, for
+`inspect` to list and `play` to sound. Under no obligation to be a unit of the
+music: a passage is wherever the two of us are pointing, which may be the second
+half of one phrase and the start of the next.
+_中文_: 片段
+_Avoid_: section, excerpt, clip, range; 乐段、乐句、段落
+
+The Chinese is 片段 rather than 乐段 or 乐句 because both of those name formal
+units — a period and a phrase — and a Bar range is not obliged to be either;
+段落 has the same problem one level up. In English, `section` is taken twice
+over, by musical form and by software, `excerpt` and `clip` both suggest
+something lifted out to keep, and `range` names the argument rather than the
+music it selects.
+
 **Time signature**:
 How many notes of what value make one bar, as carried by the MIDI time signature
 meta event. Part of the Piece, not of the Rig. Every bar line is derived from it

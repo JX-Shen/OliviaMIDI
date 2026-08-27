@@ -42,4 +42,10 @@ pub struct Note {
     /// alone; never part of the published contract.
     #[serde(skip)]
     pub(crate) on_event: usize,
+
+    /// Where the note-off that ends it lives, in the same list. Carried so that
+    /// restricting a Take to a passage can keep a note whole — both of its
+    /// events or neither — without pairing the track a second time.
+    #[serde(skip)]
+    pub(crate) off_event: usize,
 }

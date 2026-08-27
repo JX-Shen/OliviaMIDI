@@ -139,6 +139,13 @@ pub enum Error {
     #[error("the Rig's soundfont {0} does not exist")]
     RigMissing(PathBuf),
 
+    #[error(
+        "the passage could not be written to a temporary file: {0}. A Bar range is played from \
+         a temporary Take, never from one written beside your own files, so playing one needs a \
+         writable temporary directory."
+    )]
+    PassageUnwritable(#[source] std::io::Error),
+
     #[error("fluidsynth is not on PATH. Install it — on macOS, `brew install fluid-synth`.")]
     NoFluidsynth,
 

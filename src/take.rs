@@ -71,8 +71,17 @@ impl Take {
         Ok(take)
     }
 
-    pub(crate) fn from_bytes(bytes: Vec<u8>) -> Take {
-        Take { path: None, bytes }
+    /// A Take from an event stream, encoded back to bytes.
+    ///
+    /// The only way a Take is made from anything but a file, and so the only
+    /// place the encoder is called: `apply` hands it an edited stream and
+    /// `passage` a restricted one. Neither has a path, because neither is a
+    /// file until somebody writes it.
+    pub(crate) fn from_smf(smf: &Smf) -> Result<Take> {
+        let mut bytes = Vec::new();
+        smf.write(&mut bytes)
+            .map_err(|source| Error::Encode(source.to_string()))?;
+        Ok(Take { path: None, bytes })
     }
 
     pub fn write(&self, path: &Path) -> Result<()> {
@@ -278,6 +287,7 @@ impl Take {
                             duration: tick - open_note.start,
                             velocity: open_note.velocity,
                             on_event: open_note.on_event,
+                            off_event: event_index,
                         });
                     }
                     _ => {}
@@ -314,6 +324,7 @@ impl Take {
                     duration: p.duration,
                     velocity: p.velocity,
                     on_event: p.on_event,
+                    off_event: p.off_event,
                 };
                 *occurrence += 1;
                 note
@@ -338,4 +349,5 @@ struct Pairing {
     duration: u32,
     velocity: u8,
     on_event: usize,
+    off_event: usize,
 }

@@ -39,6 +39,29 @@ pub fn event_stream(path: &Path) -> String {
     format!("{:?}\n{:#?}", smf.header, smf.tracks)
 }
 
+/// The program changes a Take states, as (tick, program). Read straight from
+/// the file, like `event_stream`: no command reports them, and a passage has to
+/// carry the ones set before it.
+pub fn program_changes(path: &Path) -> Vec<(u32, u8)> {
+    let bytes = std::fs::read(path).expect("Take is readable");
+    let smf = midly::Smf::parse(&bytes).expect("Take parses");
+    let mut stated = Vec::new();
+    for track in &smf.tracks {
+        let mut tick = 0u32;
+        for event in track {
+            tick += event.delta.as_int();
+            if let midly::TrackEventKind::Midi {
+                message: midly::MidiMessage::ProgramChange { program },
+                ..
+            } = event.kind
+            {
+                stated.push((tick, program.as_int()));
+            }
+        }
+    }
+    stated
+}
+
 pub fn note_ids(json: &str) -> Vec<String> {
     notes(json)
         .iter()
@@ -48,6 +71,18 @@ pub fn note_ids(json: &str) -> Vec<String> {
 
 pub fn notes(json: &str) -> Vec<serde_json::Value> {
     serde_json::from_str(json).expect("inspect --json is JSON")
+}
+
+/// `mid info --json`, parsed. The Take a passage was cut from and the passage
+/// itself are described by the same command, so a test can ask both.
+pub fn info_json(path: &Path) -> serde_json::Value {
+    let output = mid()
+        .args(["info", "--json"])
+        .arg(path)
+        .output()
+        .expect("mid runs");
+    assert!(output.status.success(), "info failed on {path:?}");
+    serde_json::from_slice(&output.stdout).expect("info --json is JSON")
 }
 
 pub fn inspect_json(path: &Path) -> String {
@@ -63,24 +98,40 @@ pub fn inspect_json(path: &Path) -> String {
 /// A stand-in for FluidSynth, placed on the child's PATH.
 ///
 /// Playback is tested by watching what `mid` hands to the synthesiser, not by
-/// adding a flag to the product that makes playback skippable.
+/// adding a flag to the product that makes playback skippable. The fake copies
+/// the file it was handed as well as logging its argv, because a passage is
+/// handed over as a temporary Take that is gone by the time `mid` returns.
 pub struct FakeFluidsynth {
     pub dir: PathBuf,
     pub log: PathBuf,
+    /// A copy of the Take the fake was given, taken while it still existed.
+    pub handed: PathBuf,
 }
 
 pub fn fake_fluidsynth(dir: &Path) -> FakeFluidsynth {
     let bin_dir = dir.join("bin");
     std::fs::create_dir_all(&bin_dir).expect("scratch dir is writable");
     let log = dir.join("fluidsynth-argv");
+    let handed = dir.join("handed.mid");
+    // `/bin/cp` by absolute path: the child's PATH is this directory alone, so
+    // that `fluidsynth` can only be the fake, and nothing else is on it.
     let script = format!(
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\nexit 0\n",
-        log.display()
+        "#!/bin/sh\n\
+         printf '%s\\n' \"$@\" > \"{}\"\n\
+         for arg in \"$@\"; do last=\"$arg\"; done\n\
+         /bin/cp \"$last\" \"{}\"\n\
+         exit 0\n",
+        log.display(),
+        handed.display()
     );
     let path = bin_dir.join("fluidsynth");
     std::fs::write(&path, script).expect("fake is writable");
     make_executable(&path);
-    FakeFluidsynth { dir: bin_dir, log }
+    FakeFluidsynth {
+        dir: bin_dir,
+        log,
+        handed,
+    }
 }
 
 fn make_executable(path: &Path) {
@@ -138,6 +189,9 @@ pub type StatedTimeSignature = (u32, u8, u8);
 /// A note a built Take contains: (start, duration, pitch).
 pub type NoteSpec = (u32, u32, u8);
 
+/// A program change a built Take states on its voice track: (tick, program).
+pub type StatedProgram = (u32, u8);
+
 /// Write a small purpose-built Take, shaped like an ordinary export: a conductor
 /// track carrying the time signature and a second track carrying the notes.
 ///
@@ -150,6 +204,18 @@ pub fn build_take(
     path: &Path,
     ppq: u16,
     stated: &[StatedTimeSignature],
+    notes: &[NoteSpec],
+) -> PathBuf {
+    build_take_with_programs(path, ppq, stated, &[], notes)
+}
+
+/// The same, with program changes on the voice track — the state a passage
+/// beginning part way through the Take has to inherit to sound like itself.
+pub fn build_take_with_programs(
+    path: &Path,
+    ppq: u16,
+    stated: &[StatedTimeSignature],
+    programs: &[StatedProgram],
     notes: &[NoteSpec],
 ) -> PathBuf {
     use midly::num::{u15, u24, u28, u4, u7};
@@ -192,6 +258,17 @@ pub fn build_take(
     conductor.push((conductor_end, TrackEventKind::Meta(MetaMessage::EndOfTrack)));
 
     let mut voice: Vec<(u32, TrackEventKind<'static>)> = Vec::new();
+    for &(tick, program) in programs {
+        voice.push((
+            tick,
+            TrackEventKind::Midi {
+                channel: u4::new(0),
+                message: MidiMessage::ProgramChange {
+                    program: u7::new(program),
+                },
+            },
+        ));
+    }
     for &(start, duration, pitch) in notes {
         voice.push((
             start,
@@ -217,6 +294,7 @@ pub fn build_take(
     let voice_end = notes
         .iter()
         .map(|&(start, duration, _)| start + duration)
+        .chain(programs.iter().map(|&(tick, _)| tick))
         .max()
         .unwrap_or(0);
     voice.push((voice_end, TrackEventKind::Meta(MetaMessage::EndOfTrack)));

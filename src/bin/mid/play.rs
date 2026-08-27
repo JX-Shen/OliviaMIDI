@@ -10,6 +10,14 @@ use std::path::PathBuf;
 /// The Rig used is always stated — on stderr, and in the payload under `--json`.
 /// No flag suppresses it.
 ///
+/// `--bars 5:8` hears a passage instead of the whole Take: 1-indexed, both ends
+/// included, and the same Bar range `mid inspect --bars` reads, refused in the
+/// same words when it cannot be honoured. The passage starts playing at once
+/// rather than after the Bars in front of it, it is heard at the Take's own
+/// tempo and time signature, and it carries whatever the Take had already set
+/// by then — the program, the controllers. Your Take is not touched: what
+/// FluidSynth is handed is a temporary file, and it is gone when this returns.
+///
 /// Playback is FluidSynth, found on PATH. "FluidSynth is missing" and "no Rig is
 /// configured" are two different failures with two different remedies.
 #[derive(clap::Args)]
@@ -17,6 +25,10 @@ use std::path::PathBuf;
 pub struct Args {
     /// The Take to hear.
     take: PathBuf,
+
+    /// The passage to hear, as FIRST:LAST — 1-indexed, both ends included.
+    #[arg(long, value_name = "FIRST:LAST")]
+    bars: Option<battuta::BarRange>,
 
     /// The Rig to hear it through: a soundfont path.
     #[arg(long)]
@@ -28,7 +40,7 @@ pub struct Args {
 }
 
 pub fn run(args: Args) -> battuta::Result<()> {
-    let audition = battuta::rig::play(&args.take, args.rig, &mut std::io::stderr())?;
+    let audition = battuta::rig::play(&args.take, args.bars, args.rig, &mut std::io::stderr())?;
 
     if args.json {
         println!("{}", crate::json(&audition));

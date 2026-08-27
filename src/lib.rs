@@ -13,6 +13,7 @@ pub mod diff;
 pub mod edit;
 mod error;
 pub mod note;
+pub mod passage;
 pub mod rig;
 pub mod take;
 

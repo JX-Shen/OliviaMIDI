@@ -1,7 +1,8 @@
 //! Musical position: Bars, and the span of Ticks one covers.
 //!
 //! Ticks are the truth; a Bar is a derived view of them. Deriving it needs a
-//! time signature, and nothing here invents one — see ADR-0006.
+//! time signature, and nothing here invents one — see ADR-0006. Cutting the
+//! passage a span selects out of a Take is `crate::passage`.
 
 use crate::error::{Error, Result};
 use crate::note::Note;
@@ -46,6 +47,24 @@ impl FromStr for BarRange {
             return Err(Error::BarRangeInverted { first, last });
         }
         Ok(BarRange { first, last })
+    }
+}
+
+/// Written the way it is typed: `5:8`. `mid play --json` records the passage it
+/// auditioned in the form the flag accepts, so nothing has to be reassembled to
+/// ask for it again.
+impl std::fmt::Display for BarRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.first, self.last)
+    }
+}
+
+impl serde::Serialize for BarRange {
+    fn serialize<S: serde::Serializer>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
     }
 }
 

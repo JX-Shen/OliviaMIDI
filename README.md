@@ -172,10 +172,9 @@ The first milestone is a single sentence, and it was meant to be uncomfortable:
 
 That loop now closes. All five commands exist and are deliberately thin: `apply`
 understands a single kind of Edit, `set_velocity`; `diff` matches notes exactly
-and reports only Added, Removed and VelocityChanged; `--bars` selects a passage
-for `inspect` but not yet for `play`; and the output without `--json` is plain
-rather than musical. None of it is good yet, and that is the right order —
-nothing gets to be elegant before the loop closes.
+and reports only Added, Removed and VelocityChanged; and the output without
+`--json` is plain rather than musical. None of it is good yet, and that is the
+right order — nothing gets to be elegant before the loop closes.
 
 ```
 cargo build --release          # target/release/mid

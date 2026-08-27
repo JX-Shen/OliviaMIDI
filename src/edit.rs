@@ -98,10 +98,7 @@ pub fn apply(take: &Take, edit_set: &EditSet) -> Result<Take> {
         }
     }
 
-    let mut bytes = Vec::new();
-    smf.write(&mut bytes)
-        .map_err(|source| Error::Encode(source.to_string()))?;
-    Ok(Take::from_bytes(bytes))
+    Take::from_smf(&smf)
 }
 
 /// The whole of `mid apply`: read the Take, read the Edit Set, and write a new
