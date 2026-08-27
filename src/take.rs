@@ -204,9 +204,13 @@ impl Take {
         self.path.clone().unwrap_or_else(|| PathBuf::from("<take>"))
     }
 
-    pub fn info(&self) -> Result<Info> {
-        let smf = self.smf()?;
-        let ppq = match smf.header.timing {
+    /// Ticks per quarter note: the unit every Tick in this Take is counted in.
+    ///
+    /// Public because a Tick only means something alongside it. Two Takes are
+    /// comparable when they agree on this and not otherwise, which is what
+    /// `diff` checks before it compares a single Tick.
+    pub fn ppq(&self) -> Result<u16> {
+        let ppq = match self.smf()?.header.timing {
             Timing::Metrical(ppq) => ppq.as_int(),
             Timing::Timecode(..) => {
                 return Err(Error::NotMetrical {
@@ -219,6 +223,12 @@ impl Take {
                 path: self.described_path(),
             });
         }
+        Ok(ppq)
+    }
+
+    pub fn info(&self) -> Result<Info> {
+        let ppq = self.ppq()?;
+        let smf = self.smf()?;
 
         let mut tempo: Option<(u32, u32)> = None; // (tick, micros per quarter)
         let mut length_ticks = 0u32;

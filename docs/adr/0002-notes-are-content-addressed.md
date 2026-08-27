@@ -36,6 +36,17 @@ an Edit Set that can be inverted into its own undo. Both of those are load
 bearing — see *Diff is a first-class creative object* and *Reversibility
 encourages exploration* in `CHARTER.md`.
 
+**What content addressing cannot do is say that two identities are the same
+note.** A note that moved or was transposed changes content an identity is
+derived from, so it is called one thing in the before Take and another in the
+after, and the diff of "this note moved" is a claim these identities are unable
+to make on their own. Nothing here is amended by that: it is the price of
+identities that are stable under everything *else*, and it is paid deliberately.
+Where the claim is made instead is `mid diff`'s second matching pass, on the
+evidence of a stated tolerance, and ADR-0004 holds the whole of that decision —
+including why the evidence is a parameter the human sets and why every diff
+reports the value it used.
+
 Resolving identities up front makes an Edit Set atomic with respect to identity.
 "Operations apply in the order given" therefore means their *effects* are
 ordered, while their *targets* were all fixed before the first one ran. The cost

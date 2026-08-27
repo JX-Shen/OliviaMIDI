@@ -172,11 +172,11 @@ The first milestone is a single sentence, and it was meant to be uncomfortable:
 
 That loop now closes. All five commands exist, and are being made good one at a
 time rather than all at once. `apply` understands the whole Edit vocabulary —
-move, transpose, resize, add, delete a note, and change a velocity. `diff` still
-matches notes exactly and reports only Added, Removed and VelocityChanged, so a
-moved note reads as one of each. The output without `--json` is still plain
-rather than musical. Not all of it is good yet, and that is the right order —
-nothing gets to be elegant before the loop closes.
+move, transpose, resize, add, delete a note, and change a velocity. `diff` now
+says a note *moved* rather than that one vanished and another appeared, on the
+evidence of a `--tolerance` it states with every answer. The output without
+`--json` is still plain rather than musical. Not all of it is good yet, and that
+is the right order — nothing gets to be elegant before the loop closes.
 
 ```
 cargo build --release          # target/release/mid

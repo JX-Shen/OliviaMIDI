@@ -45,6 +45,22 @@ fn play_help_states_how_the_rig_is_resolved() {
         .stdout(predicates::str::contains("--rig"));
 }
 
+/// The tolerance is what decides whether a note "moved" or was "deleted and
+/// re-added", and `mid diff --help` is the only place its default is documented.
+#[test]
+fn diff_help_states_the_tolerance_and_its_default() {
+    mid()
+        .args(["diff", "--help"])
+        .assert()
+        .success()
+        .stdout(predicates::str::contains("--tolerance"))
+        // The default, as a note value and as the Ticks it comes to.
+        .stdout(predicates::str::contains("sixteenth"))
+        .stdout(predicates::str::contains("120"))
+        // That the exact-only reading is still reachable.
+        .stdout(predicates::str::contains("0 matches by identity alone"));
+}
+
 #[test]
 fn an_unknown_command_fails() {
     mid().arg("reharmonize").assert().failure();

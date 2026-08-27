@@ -49,6 +49,20 @@ pub enum Error {
     ZeroPpq { path: PathBuf },
 
     #[error(
+        "{before} counts {before_ppq} ticks to the quarter note and {after} counts {after_ppq}, \
+         so a Tick in one names no place in the other and the two cannot be compared. battuta \
+         compares Ticks and never converts them: the same four quarter notes at these two \
+         denominations share only the one starting at Tick 0. Re-export one of the Takes at the \
+         other's ticks per quarter note."
+    )]
+    PpqMismatch {
+        before: PathBuf,
+        before_ppq: u16,
+        after: PathBuf,
+        after_ppq: u16,
+    },
+
+    #[error(
         "{path} places an event past Tick 4294967295, the largest absolute Tick battuta holds. \
          Ticks accumulate along a track and a delta time is only 28 bits, so a file can be built \
          out of gaps that are each writable and whose running total runs further than this. A \

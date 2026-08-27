@@ -20,7 +20,7 @@ mod temporary;
 mod track;
 
 pub use bars::{BarRange, TickSpan};
-pub use diff::{Diff, VelocityChange};
+pub use diff::{Change, Diff, NoteChange};
 pub use edit::{apply, Edit, EditSet};
 pub use error::{Error, Result};
 pub use note::{Note, NoteId};
