@@ -6,6 +6,21 @@ within the same track, bounded by a tick tolerance. Whatever remains unpaired is
 Added or Removed. Paired notes that differ are classified in a fixed order:
 PitchChanged, TimingChanged, VelocityChanged.
 
+## Implementation state
+
+**Not implemented.** `mid diff` performs the first pass and stops there: a note
+pairs with a note in the other Take when track, channel, pitch and start Tick
+are identical, and everything left over is Added or Removed. There is no
+tolerance parameter, because there is no second pass for one to bound, and a
+note that moved reports as one Removed and one Added — which `mid diff --help`
+and `battuta::diff` both say in as many words.
+
+The second pass is issue #6. Read everything above as what that pass will be
+when it arrives: the paragraph about the tolerance being named, defaulted and
+documented is a constraint on that work, not a description of shipped
+behaviour. Nothing in the binary today can be interrogated about a tolerance,
+because nothing in it has one.
+
 ## Consequences
 
 The tolerance is a named, documented parameter with a stated default, not a

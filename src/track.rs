@@ -1,9 +1,9 @@
 //! Rewriting one track's event list, once, for a whole Edit Set.
 //!
-//! `apply` began by reaching a single event at a stored position and changing
+//! `apply` began by reaching a single event at a stored address and changing
 //! one byte of it. That works for exactly one kind of Edit. Four of the other
 //! five move events, remove them or insert them — and every one of those
-//! invalidates a position some later Edit is still holding.
+//! invalidates an address some later Edit is still holding.
 //!
 //! The fix is to stop asking one number to mean three things. In an encoded
 //! track, an event's place in the list is at once its *address* (how a resolved
@@ -225,29 +225,48 @@ impl<'a> Rewrite<'a> {
         self.slots.sort_by_key(|slot| (slot.tick, slot.order));
         let end = end.max(self.slots.last().map_or(0, |slot| slot.tick));
 
-        let mut events = Vec::with_capacity(self.slots.len() + 1);
-        let mut previous = 0u32;
-        for slot in self.slots {
-            events.push(TrackEvent {
-                delta: gap(slot.tick - previous)?,
-                kind: slot.kind,
-            });
-            previous = slot.tick;
-        }
-        events.push(TrackEvent {
-            delta: gap(end - previous)?,
-            kind: TrackEventKind::Meta(MetaMessage::EndOfTrack),
-        });
-        Ok(events)
+        with_delta_times(
+            self.slots
+                .into_iter()
+                .map(|slot| (slot.tick, slot.kind))
+                .chain([(end, TrackEventKind::Meta(MetaMessage::EndOfTrack))]),
+        )
     }
 }
 
-/// The distance from the previous event, as the format writes it.
+/// Absolute Ticks in, delta times out: the one rule for placing events back
+/// into a track the format can hold.
 ///
-/// `u28::new` masks rather than refuses, so a gap too large to encode would be
-/// written as a smaller one with nothing to say it had been. Refused instead.
-fn gap(ticks: u32) -> Result<u28> {
-    u28::try_from(ticks).ok_or(Error::GapUnwritable(ticks))
+/// Both places that re-derive delta times come through here — the track `apply`
+/// rewrote, and the passage `play --bars` cut — because it is one question, and
+/// `u28` offers two answers to it. `u28::try_from` refuses a gap too large to
+/// encode; `u28::new` masks it, writing a smaller gap with nothing left to say
+/// it had been. Masking is the worse of the two failures by a distance: the
+/// command succeeds, the file is valid MIDI, and the music is wrong. Having the
+/// rule in one place is what stops the two callers from making that choice
+/// separately, which is how they came to disagree.
+///
+/// Events arrive in ascending Tick order, by construction at both call sites:
+/// one has just sorted its slots, the other builds its list while walking a
+/// track it reads in order. A violation would be a fault in `battuta` rather
+/// than in anybody's Take, so it is reported as one instead of underflowing.
+pub(crate) fn with_delta_times<'a>(
+    events: impl IntoIterator<Item = (u32, TrackEventKind<'a>)>,
+) -> Result<Vec<TrackEvent<'a>>> {
+    let mut previous = 0u32;
+    events
+        .into_iter()
+        .map(|(tick, kind)| {
+            let gap = tick.checked_sub(previous).ok_or_else(|| {
+                Error::Encode(format!("an event at tick {tick} follows one at {previous}"))
+            })?;
+            previous = tick;
+            Ok(TrackEvent {
+                delta: u28::try_from(gap).ok_or(Error::GapUnwritable(gap))?,
+                kind,
+            })
+        })
+        .collect()
 }
 
 /// Whether an event ends a note. Both spellings count: a note-on with velocity 0
@@ -260,5 +279,69 @@ fn releases_a_note(kind: &TrackEventKind) -> bool {
             _ => false,
         },
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! This crate's tests are at the process boundary, in `tests/`, because that
+    //! is where `mid`'s behaviour is observable. The encoding rule is the
+    //! exception. The difference between refusing an unwritable gap and masking
+    //! it into a smaller one shows up only in a Take sparse enough to need a
+    //! delta of 268 million Ticks, and committing a fixture that strange — or
+    //! generating one — to watch a single `u28` conversion would cost more than
+    //! stating the property here does.
+
+    use super::*;
+
+    /// The largest delta time the format holds.
+    const LARGEST: u32 = 268_435_455;
+
+    /// An event with nothing to say about it. What is being encoded here is the
+    /// distance between events, so which events they are does not matter.
+    fn anything() -> TrackEventKind<'static> {
+        TrackEventKind::Meta(MetaMessage::EndOfTrack)
+    }
+
+    #[test]
+    fn absolute_ticks_become_the_gaps_between_them() {
+        let events = with_delta_times([(0, anything()), (480, anything()), (500, anything())])
+            .expect("ordinary Ticks are writable");
+        let deltas: Vec<u32> = events.iter().map(|event| event.delta.as_int()).collect();
+        assert_eq!(deltas, vec![0, 480, 20]);
+    }
+
+    #[test]
+    fn the_largest_delta_the_format_holds_is_written() {
+        let events = with_delta_times([(0, anything()), (LARGEST, anything())])
+            .expect("the largest encodable gap is encodable");
+        assert_eq!(events[1].delta.as_int(), LARGEST);
+    }
+
+    /// The defect this rule exists to make impossible. `u28::new` masks rather
+    /// than refuses, so this gap would be written as 0 — an event moved to the
+    /// front of the track, in a file that is valid MIDI and different music.
+    #[test]
+    fn a_gap_the_format_cannot_reach_is_refused_and_not_masked() {
+        let too_far = LARGEST + 1;
+        let refused = with_delta_times([(0, anything()), (too_far, anything())])
+            .expect_err("a gap past the format's reach is not writable");
+        match refused {
+            Error::GapUnwritable(ticks) => assert_eq!(
+                ticks, too_far,
+                "the refusal named a gap other than the one asked for"
+            ),
+            other => panic!("refused for the wrong reason: {other}"),
+        }
+    }
+
+    /// Ascending Tick order is this rule's one precondition, and both callers
+    /// meet it. A caller that stopped meeting it is a fault in `battuta`, and is
+    /// reported as one rather than underflowing into a nonsense gap.
+    #[test]
+    fn events_out_of_order_are_a_fault_and_not_an_underflow() {
+        let refused = with_delta_times([(480, anything()), (0, anything())])
+            .expect_err("events out of Tick order cannot be encoded");
+        assert!(matches!(refused, Error::Encode(_)), "{refused}");
     }
 }

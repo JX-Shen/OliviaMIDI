@@ -430,8 +430,13 @@ fn midi_value(value: i64, largest: u8) -> Option<u8> {
 ///
 /// "Somewhere else" is enforced here rather than left to the caller. `apply`
 /// never writes in place — losing the Take you liked has to be impossible, not
-/// merely discouraged — so an output path that resolves to the input is refused
-/// before anything is read.
+/// merely discouraged — so an output naming the same file as the input is
+/// refused before anything is read, whichever of its names it was asked for by.
+///
+/// The refusal is the message; it is not what makes the input safe. That is
+/// `Take::write`, which writes a new file and renames it onto the output and so
+/// never writes through a file the input also names. A check tells the user
+/// what they did; the structure is what holds when a check is wrong.
 pub fn apply_to_new_take(input: &Path, edit_set: &Path, output: &Path) -> Result<()> {
     if same_file(input, output) {
         return Err(Error::WriteInPlace(output.to_path_buf()));
@@ -441,19 +446,36 @@ pub fn apply_to_new_take(input: &Path, edit_set: &Path, output: &Path) -> Result
     apply(&take, &edit_set)?.write(output)
 }
 
-/// Whether two paths name the same file, resolving symlinks and `..` where the
-/// filesystem can. An output file usually does not exist yet, so its directory
-/// is resolved and the file name compared.
+/// Whether two paths name the same file.
+///
+/// By identity — device and inode — wherever the filesystem can be asked,
+/// because a pathname cannot answer this question. Two hard links to one Take
+/// are one file under two canonical pathnames, so comparing names calls them
+/// different and `apply` writes through one of them into the other.
+///
+/// The pathname comparison is kept for the ordinary case where the output does
+/// not exist yet. A path naming nothing cannot be the input, which had to exist
+/// to be read, so that comparison is answering a different and easier question.
 fn same_file(a: &Path, b: &Path) -> bool {
-    fn resolved(path: &Path) -> Option<std::path::PathBuf> {
-        if let Ok(canonical) = path.canonicalize() {
-            return Some(canonical);
-        }
-        let parent = path.parent().filter(|p| !p.as_os_str().is_empty())?;
-        Some(parent.canonicalize().ok()?.join(path.file_name()?))
+    use std::os::unix::fs::MetadataExt;
+    // `metadata` follows symlinks, which is what makes an output symlinked at
+    // the input resolve to the file it points at rather than to itself.
+    if let (Ok(a), Ok(b)) = (std::fs::metadata(a), std::fs::metadata(b)) {
+        return a.dev() == b.dev() && a.ino() == b.ino();
     }
     match (resolved(a), resolved(b)) {
         (Some(a), Some(b)) => a == b,
         _ => a == b,
     }
+}
+
+/// A path with symlinks and `..` resolved as far as the filesystem allows. An
+/// output file usually does not exist yet, so its directory is resolved and the
+/// file name put back on the end.
+fn resolved(path: &Path) -> Option<std::path::PathBuf> {
+    if let Ok(canonical) = path.canonicalize() {
+        return Some(canonical);
+    }
+    let parent = path.parent().filter(|p| !p.as_os_str().is_empty())?;
+    Some(parent.canonicalize().ok()?.join(path.file_name()?))
 }

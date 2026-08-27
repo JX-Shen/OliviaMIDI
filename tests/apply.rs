@@ -151,23 +151,102 @@ fn output_is_required() {
         .failure();
 }
 
+/// One file has as many names as something has given it, and every one of them
+/// has to be refused.
+///
+/// A canonical pathname answers this for the same path twice, for a symlink and
+/// for `..`, and gets a hard link wrong: two links to one Take are two different
+/// canonical names and one inode, so a check comparing names lets `apply` write
+/// the edited Take through one of them into the other. The input is asked for
+/// its identity instead.
 #[test]
-fn apply_refuses_to_write_over_its_input() {
+fn apply_refuses_every_name_of_its_own_input() {
     let dir = tempfile::tempdir().expect("temp dir");
     let take = dir.path().join("take-01.mid");
     std::fs::write(&take, fixture_bytes()).expect("scratch Take is writable");
+    std::fs::hard_link(&take, dir.path().join("hard-link.mid")).expect("hard link");
+    std::os::unix::fs::symlink(&take, dir.path().join("symlink.mid")).expect("symlink");
+    std::fs::create_dir(dir.path().join("sub")).expect("scratch dir is writable");
+
+    let edits = set_velocity_edit_set(dir.path(), &first_note_id(), "40");
     let before = std::fs::read(&take).expect("scratch Take is readable");
+
+    for alias in [
+        take.clone(),
+        dir.path().join("hard-link.mid"),
+        dir.path().join("symlink.mid"),
+        dir.path().join("sub/../take-01.mid"),
+    ] {
+        mid()
+            .arg("apply")
+            .arg(&take)
+            .arg(&edits)
+            .arg("-o")
+            .arg(&alias)
+            .assert()
+            .failure();
+
+        assert_eq!(
+            before,
+            std::fs::read(&take).expect("still readable"),
+            "-o {alias:?} was allowed to write through the input"
+        );
+    }
+
+    // The refusal is about identity and not about caution: a genuinely
+    // different file, in the same directory, is still written.
+    let elsewhere = dir.path().join("take-02.mid");
+    mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("-o")
+        .arg(&elsewhere)
+        .assert()
+        .success();
+    assert_ne!(before, std::fs::read(&elsewhere).expect("written"));
+}
+
+/// `apply` replaces the file it was given a name for, and reaches through it
+/// into nothing else.
+///
+/// The Take is written beside its destination and renamed onto it, so a
+/// destination sharing an inode with another file — a hard link a backup tool
+/// made, or a person did — loses only the name that was asked for. This is the
+/// property the refusal above is a message about rather than the cause of: it
+/// holds for files `apply` never reads and cannot check.
+#[test]
+fn apply_replaces_its_output_and_writes_through_nothing() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = dir.path().join("take-01.mid");
+    std::fs::write(&take, fixture_bytes()).expect("scratch Take is writable");
+
+    // Two names for one file, neither of them the input.
+    let output = dir.path().join("take-02.mid");
+    let other_name = dir.path().join("kept-elsewhere.mid");
+    let older = b"an older Take".to_vec();
+    std::fs::write(&output, &older).expect("scratch file is writable");
+    std::fs::hard_link(&output, &other_name).expect("hard link");
 
     mid()
         .arg("apply")
         .arg(&take)
-        .arg(empty_edit_set(dir.path()))
+        .arg(set_velocity_edit_set(dir.path(), &first_note_id(), "40"))
         .arg("-o")
-        .arg(&take)
+        .arg(&output)
         .assert()
-        .failure();
+        .success();
 
-    assert_eq!(before, std::fs::read(&take).expect("still readable"));
+    assert_ne!(
+        older,
+        std::fs::read(&output).expect("readable"),
+        "the output was never written"
+    );
+    assert_eq!(
+        older,
+        std::fs::read(&other_name).expect("readable"),
+        "apply wrote through {output:?} into {other_name:?}"
+    );
 }
 
 /// The reference Piece is a fixed input. Nothing this suite runs may edit it.
@@ -918,4 +997,50 @@ fn stacked_at(take: &Path, track: u64, pitch: u64, start: u64) -> Vec<(String, u
             )
         })
         .collect()
+}
+
+/// A release landing exactly on the next strike of the same pitch is written
+/// before it, and the reason is audible rather than arithmetic: a synthesiser
+/// stops a pitch, not an identity, so a release placed after that strike would
+/// silence the note the strike had just begun.
+///
+/// Read from the file, because nothing `mid` reports can tell the two orders
+/// apart. A reader hands a release to the oldest note of that channel and pitch
+/// still sounding, so both orders come back as the same two notes with the same
+/// two durations — and only one of them sounds like the Take.
+#[test]
+fn a_release_landing_on_the_next_strike_is_written_before_it() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("two-notes.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(0, 480, 60), (960, 480, 60)],
+    );
+    let out = dir.path().join("moved.mid");
+
+    // The first note moves so that it now ends exactly where the second begins.
+    mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(edit_set(
+            dir.path(),
+            "move-onto-the-next-strike",
+            r#"{ "kind": "move_note", "id": "t1:c0:p60:s0:n0", "delta_ticks": 480 }"#,
+        ))
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    assert_eq!(
+        common::note_events(&out),
+        vec![
+            (480, "strikes", 60),
+            (960, "releases", 60),
+            (960, "strikes", 60),
+            (1440, "releases", 60),
+        ],
+        "the release at Tick 960 was not written before the strike it lands on"
+    );
 }

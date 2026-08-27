@@ -40,7 +40,7 @@ that was heard, never the temporary file.
 something. `play` blocks for as long as the audio lasts, so Ctrl-C is the
 ordinary way to stop a passage part way through rather than an edge case — and
 a process killed by a signal runs no destructor. So `battuta` catches `SIGINT`,
-`SIGTERM` and `SIGHUP`, unlinks whatever temporary Takes are outstanding, and
+`SIGTERM` and `SIGHUP`, unlinks the temporary Takes it has room to remember, and
 re-raises the signal with the default disposition restored, so that a shell
 still reports the command as interrupted rather than as having chosen some exit
 code of its own.
@@ -55,6 +55,26 @@ time there is anything to clean up, so a consumer of this library that never
 writes a temporary Take never has its signals touched — and a signal already
 being ignored is left ignored, because that is a decision the process made
 before `battuta` was called.
+
+"Room to remember" is eight paths, and the number is part of the promise rather
+than a detail behind it. `mid play` holds one; the other seven are for a library
+consumer auditioning passages on several threads. A ninth outstanding at the
+same moment is still removed by `Drop` on every ordinary route out, including a
+failure — it is only a *signal* arriving while nine are open that leaves one
+behind. The array is not grown to some larger number that would have the same
+edge one step further out, and it is not made a `Vec`, because a handler may not
+read one another thread might be growing. If a consumer ever needs more than
+eight concurrent auditions, the fix is a registry designed for that and not a
+bigger constant.
+
+The temporary Take is also the one file in this crate that `Take::write` does
+not write. That method writes a new file beside its destination and renames it
+on, which is what keeps `apply` from ever writing through a file its input also
+names — and it is wrong here, because the path is already on the handler's list
+and the intermediate file would not be. A signal landing mid-write would remove
+the registered path and leave the other one behind, which is the exact failure
+this section exists to prevent. So the bytes go straight into the file that was
+registered.
 
 `SIGQUIT` is deliberately not caught: its purpose is an abrupt abort with a core
 dump, and one file in the temporary directory is a smaller harm than getting in

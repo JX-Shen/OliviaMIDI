@@ -62,6 +62,41 @@ pub fn program_changes(path: &Path) -> Vec<(u32, u8)> {
     stated
 }
 
+/// Every note event of a Take, in the order the file lists them, as
+/// (tick, whether it strikes or releases, pitch).
+///
+/// Read straight from the file, because nothing `mid` reports can see this.
+/// Which of two events sharing a Tick comes first does not change what a reader
+/// pairs the notes into — it hands a release to the oldest note of that channel
+/// and pitch either way — and it is exactly what a synthesiser acts on.
+pub fn note_events(path: &Path) -> Vec<(u32, &'static str, u8)> {
+    let bytes = std::fs::read(path).expect("Take is readable");
+    let smf = midly::Smf::parse(&bytes).expect("Take parses");
+    let mut found = Vec::new();
+    for track in &smf.tracks {
+        let mut tick = 0u32;
+        for event in track {
+            tick += event.delta.as_int();
+            let midly::TrackEventKind::Midi { message, .. } = event.kind else {
+                continue;
+            };
+            // A note-on at velocity 0 is a note-off; the format uses the two
+            // interchangeably and so does this.
+            match message {
+                midly::MidiMessage::NoteOn { key, vel } if vel.as_int() > 0 => {
+                    found.push((tick, "strikes", key.as_int()));
+                }
+                midly::MidiMessage::NoteOff { key, .. }
+                | midly::MidiMessage::NoteOn { key, .. } => {
+                    found.push((tick, "releases", key.as_int()));
+                }
+                _ => {}
+            }
+        }
+    }
+    found
+}
+
 pub fn note_ids(json: &str) -> Vec<String> {
     notes(json)
         .iter()
@@ -238,6 +273,35 @@ pub fn build_take_with_programs(
     programs: &[StatedProgram],
     notes: &[NoteSpec],
 ) -> PathBuf {
+    use midly::num::{u4, u7};
+    let setting: Vec<(u32, midly::TrackEventKind<'static>)> = programs
+        .iter()
+        .map(|&(tick, program)| {
+            (
+                tick,
+                midly::TrackEventKind::Midi {
+                    channel: u4::new(0),
+                    message: midly::MidiMessage::ProgramChange {
+                        program: u7::new(program),
+                    },
+                },
+            )
+        })
+        .collect();
+    build_take_setting(path, ppq, stated, &setting, notes)
+}
+
+/// The same again, with whatever events a test names on the voice track.
+///
+/// ADR-0007's carry/leave-behind rule is one statement about a dozen event
+/// kinds, so the kinds are a list here rather than a builder parameter each.
+pub fn build_take_setting(
+    path: &Path,
+    ppq: u16,
+    stated: &[StatedTimeSignature],
+    setting: &[(u32, midly::TrackEventKind<'static>)],
+    notes: &[NoteSpec],
+) -> PathBuf {
     use midly::num::{u15, u24, u28, u4, u7};
     use midly::{
         Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind,
@@ -277,18 +341,7 @@ pub fn build_take_with_programs(
     let conductor_end = stated.iter().map(|&(tick, ..)| tick).max().unwrap_or(0);
     conductor.push((conductor_end, TrackEventKind::Meta(MetaMessage::EndOfTrack)));
 
-    let mut voice: Vec<(u32, TrackEventKind<'static>)> = Vec::new();
-    for &(tick, program) in programs {
-        voice.push((
-            tick,
-            TrackEventKind::Midi {
-                channel: u4::new(0),
-                message: MidiMessage::ProgramChange {
-                    program: u7::new(program),
-                },
-            },
-        ));
-    }
+    let mut voice: Vec<(u32, TrackEventKind<'static>)> = setting.to_vec();
     for &(start, duration, pitch) in notes {
         voice.push((
             start,
@@ -314,7 +367,7 @@ pub fn build_take_with_programs(
     let voice_end = notes
         .iter()
         .map(|&(start, duration, _)| start + duration)
-        .chain(programs.iter().map(|&(tick, _)| tick))
+        .chain(setting.iter().map(|&(tick, _)| tick))
         .max()
         .unwrap_or(0);
     voice.push((voice_end, TrackEventKind::Meta(MetaMessage::EndOfTrack)));
@@ -324,5 +377,45 @@ pub fn build_take_with_programs(
         tracks: vec![deltas(conductor), deltas(voice)],
     };
     smf.save(path).expect("built Take is writable");
+    path.to_path_buf()
+}
+
+/// A Take whose delta times are each writable and whose running total is not.
+///
+/// A delta time is 28 bits and a track may hold any number of them, so a file
+/// can be built entirely out of encodable gaps and still run past the largest
+/// absolute Tick `battuta` holds. Assembled byte by byte rather than through
+/// `build_take`, because every builder places its events at absolute Ticks
+/// first and so cannot express this file at all.
+pub fn build_take_past_the_tick_range(path: &Path) -> PathBuf {
+    /// The largest delta time the format holds, as the variable-length bytes
+    /// the format writes it in.
+    const LARGEST_DELTA: [u8; 4] = [0xff, 0xff, 0xff, 0x7f];
+
+    let mut track = Vec::new();
+    // Seventeen maximal gaps. Sixteen of them still fit a `u32`; the
+    // seventeenth is what takes the total past it.
+    for _ in 0..16 {
+        track.extend_from_slice(&LARGEST_DELTA);
+        track.extend_from_slice(&[0xff, 0x01, 0x01, b'x']); // a one-byte text event
+    }
+    track.extend_from_slice(&LARGEST_DELTA);
+    track.extend_from_slice(&[0xff, 0x2f, 0x00]); // end of track
+
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"MThd");
+    bytes.extend_from_slice(&6u32.to_be_bytes());
+    bytes.extend_from_slice(&0u16.to_be_bytes()); // format 0
+    bytes.extend_from_slice(&1u16.to_be_bytes()); // one track
+    bytes.extend_from_slice(&480u16.to_be_bytes()); // ticks per quarter note
+    bytes.extend_from_slice(b"MTrk");
+    bytes.extend_from_slice(
+        &u32::try_from(track.len())
+            .expect("a small track")
+            .to_be_bytes(),
+    );
+    bytes.extend_from_slice(&track);
+
+    std::fs::write(path, bytes).expect("built Take is writable");
     path.to_path_buf()
 }

@@ -193,3 +193,39 @@ fn reports_no_bar_count_when_the_bars_cannot_be_derived() {
             "(bars need one stated time signature)",
         ));
 }
+
+/// The same input has to give the same answer whichever profile `mid` was built
+/// in, and a refusal is the answer.
+///
+/// A delta time is 28 bits and a track may hold any number of them, so a
+/// well-formed file can accumulate past the largest absolute Tick `battuta`
+/// holds. That total was added up unchecked: a debug build panicked at it, and a
+/// release build wrapped and reported the wrapped Tick as the length — one file,
+/// two results, neither of them true. Exit 1 is the refusal, 101 the panic and 0
+/// the false answer, so the code alone tells the three apart.
+///
+/// Asserted through `info` alone because the check is at `Take::read`, which is
+/// the one door every command comes through. Five commands would be five tests
+/// of one boundary.
+#[test]
+fn a_take_past_the_tick_range_is_refused_rather_than_answered() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_past_the_tick_range(&dir.path().join("past-the-range.mid"));
+
+    let output = mid().arg("info").arg(&take).output().expect("mid runs");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "a Take past the Tick range is a refusal, not a panic and not an answer: {stderr}"
+    );
+    assert!(
+        stderr.contains("largest absolute Tick"),
+        "the refusal does not say what was exceeded: {stderr}"
+    );
+    assert!(
+        !stderr.contains("panicked"),
+        "the refusal is a typed error, not a panic: {stderr}"
+    );
+}

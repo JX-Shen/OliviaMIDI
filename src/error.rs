@@ -49,6 +49,15 @@ pub enum Error {
     ZeroPpq { path: PathBuf },
 
     #[error(
+        "{path} places an event past Tick 4294967295, the largest absolute Tick battuta holds. \
+         Ticks accumulate along a track and a delta time is only 28 bits, so a file can be built \
+         out of gaps that are each writable and whose running total runs further than this. A \
+         Take reaching this far is some nine million quarter notes long, which is almost always a \
+         corrupt delta time rather than music: check what wrote it."
+    )]
+    TakeTooLong { path: PathBuf },
+
+    #[error(
         "{path} states no time signature, so it has no Bars to select. battuta never \
          assumes 4/4: a Bar number derived from a time signature the Take does not state is a \
          wrong answer with nothing to reveal it. Inspect the whole Take, or state the time \
@@ -198,8 +207,11 @@ pub enum Error {
     },
 
     #[error(
-        "an Edit left {0} ticks between two events, and a MIDI delta time cannot reach that far — \
-         268435455 ticks is as far as one goes. Move the note a shorter distance."
+        "{0} ticks separate two events, and a MIDI delta time cannot reach that far — 268435455 \
+         ticks is as far as one goes, so this Take cannot be written. If an Edit moved a note, \
+         move it a shorter distance. If a Bar range was asked for, the events left behind either \
+         side of it are further apart than the format can write; ask for a range that does not \
+         span this much silence."
     )]
     GapUnwritable(u32),
 
@@ -209,7 +221,11 @@ pub enum Error {
     )]
     NoteEventsLost(String),
 
-    #[error("apply never writes in place: -o {0} is the input Take")]
+    #[error(
+        "apply never writes in place: -o {0} names the input Take. One file has as many names as \
+         something has given it, and a symlink or a second hard link to your input is still your \
+         input. Choose an output that does not already name it."
+    )]
     WriteInPlace(PathBuf),
 
     #[error(

@@ -53,15 +53,17 @@ impl TemporaryTake {
             slot: remember(&path),
             path,
         };
+        // Written *into* the registered file, which is the one place in this
+        // crate that must not use `Take::write`. That writes a new file beside
+        // the destination and renames it on, which is right for a Take somebody
+        // keeps and wrong here: this path is on the handler's list and the
+        // intermediate file would not be, so a signal landing mid-write would
+        // remove the registered path and leave the other behind.
+        //
         // Creating the file and filling it are one condition with one remedy,
         // and the user is never told this file's name: it is not a file they
         // have, so it is not a file they can go and fix.
-        take.write(&temporary.path).map_err(|error| match error {
-            Error::Write { source, .. } => Error::PassageUnwritable(source),
-            // `Take::write` fails no other way; keeping the value rather than
-            // renaming it is the safe direction if it ever grows one.
-            other => other,
-        })?;
+        std::fs::write(&temporary.path, take.bytes()).map_err(Error::PassageUnwritable)?;
         Ok(temporary)
     }
 
@@ -93,7 +95,9 @@ impl Drop for TemporaryTake {
 ///
 /// `mid play` holds exactly one. The room for eight is for a library consumer
 /// auditioning passages on several threads; one that wanted more would still
-/// get its files removed on the way out, just not by a signal.
+/// get its files removed on the way out, just not by a signal. The number is
+/// part of what ADR-0007 promises rather than a detail behind it, which is why
+/// growing it is not the answer to a consumer that needs more.
 const SLOTS: usize = 8;
 
 /// The paths a signal handler has to remove.

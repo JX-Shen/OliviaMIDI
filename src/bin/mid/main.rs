@@ -23,8 +23,8 @@ use clap::{Parser, Subcommand};
 /// Rig. `mid` never blurs the two: a diff reports only the Piece, and `play`
 /// always says which Rig you heard.
 ///
-/// Ticks are the truth. Positions and durations are in the file's own ticks,
-/// relative to the PPQ that `mid info` reports.
+/// Ticks are the truth. Where a note starts and how long it lasts are both in
+/// the file's own Ticks, relative to the PPQ that `mid info` reports.
 #[derive(Parser)]
 #[command(name = "mid", version, verbatim_doc_comment)]
 struct Cli {

@@ -518,6 +518,165 @@ fn the_passage_inherits_the_program_change_that_precedes_it() {
     );
 }
 
+/// ADR-0007's taxonomy, both sides of it, in one pass.
+///
+/// A passage inherits the state the Take had already set by the time it began,
+/// and leaves behind what belongs to a moment it does not contain. Each half is
+/// a rule about a dozen event kinds, and only three of them were exercised —
+/// tempo, time signature and program change, which are what the fixture and the
+/// earlier tests happen to carry. The untested ones are where this fails
+/// worst: a passage that lost a controller or a pitch bend plays perfectly, on
+/// the wrong sound, and the human forms an opinion about the music anyway.
+///
+/// One test stating one Take, rather than a test per kind. The rule is a
+/// partition, and what makes a partition right is where the line falls — which
+/// is only visible with both sides in front of you.
+#[test]
+fn a_passage_inherits_the_state_before_it_and_leaves_the_rest_behind() {
+    use midly::num::{u14, u24, u4, u7};
+    use midly::{MetaMessage, MidiMessage, TrackEventKind};
+
+    let on_channel = |message| TrackEventKind::Midi {
+        channel: u4::new(0),
+        message,
+    };
+    let meta = TrackEventKind::Meta;
+
+    // Everything the Take sets before the passage begins: one event per branch
+    // of the rule, carried and left behind alike, all inside Bar 1.
+    let setting = vec![
+        // Carried: in the file, so the Piece, so part of what the passage is.
+        (
+            0,
+            on_channel(MidiMessage::ProgramChange {
+                program: u7::new(42),
+            }),
+        ),
+        (
+            0,
+            on_channel(MidiMessage::Controller {
+                controller: u7::new(7),
+                value: u7::new(90),
+            }),
+        ),
+        (
+            0,
+            on_channel(MidiMessage::PitchBend {
+                bend: midly::PitchBend(u14::new(9000)),
+            }),
+        ),
+        (
+            0,
+            on_channel(MidiMessage::ChannelAftertouch { vel: u7::new(64) }),
+        ),
+        (0, TrackEventKind::SysEx(&[0x7e, 0x7f, 0x09, 0x01])),
+        (0, meta(MetaMessage::Tempo(u24::new(400_000)))),
+        (0, meta(MetaMessage::KeySignature(2, false))),
+        (0, meta(MetaMessage::TrackName(b"right hand"))),
+        (0, meta(MetaMessage::InstrumentName(b"a piano"))),
+        (0, meta(MetaMessage::MidiPort(u7::new(1)))),
+        // Left behind: each belongs to its own moment, and the passage is not it.
+        (
+            240,
+            on_channel(MidiMessage::Aftertouch {
+                key: u7::new(60),
+                vel: u7::new(80),
+            }),
+        ),
+        (240, TrackEventKind::Escape(&[0xf8])),
+        (240, meta(MetaMessage::Marker(b"Chorus"))),
+        (
+            240,
+            meta(MetaMessage::SmpteOffset(
+                midly::SmpteTime::new(0, 0, 2, 0, 0, midly::Fps::Fps25)
+                    .expect("a valid SMPTE time"),
+            )),
+        ),
+        (240, meta(MetaMessage::SequencerSpecific(&[0x01, 0x02]))),
+    ];
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    // 3/4 at 480 ticks a quarter: Bar 1 is Ticks 0-1439, Bar 2 begins at 1440.
+    let take = common::build_take_setting(
+        &dir.path().join("stating-everything.mid"),
+        480,
+        &[(0, 3, 4)],
+        &setting,
+        &[(0, 240, 60), (1440, 240, 62)],
+    );
+
+    let played = play(
+        dir.path(),
+        &[take.to_str().expect("path is UTF-8"), "--bars", "2:2"],
+    );
+    assert!(played.output.status.success(), "{}", played.stderr());
+
+    assert_eq!(
+        kinds_in(&played.handed),
+        [
+            "a note",
+            "channel pressure",
+            "controller",
+            "instrument name",
+            "key signature",
+            "midi port",
+            "pitch bend",
+            "program change",
+            "sysex",
+            "tempo",
+            "time signature",
+            "track name",
+        ]
+        .into_iter()
+        .collect::<std::collections::BTreeSet<_>>(),
+        "the passage does not carry exactly the state the Take set before it"
+    );
+}
+
+/// The kinds of event a Take holds, named one word each so that a failure reads
+/// as a statement about the taxonomy rather than about `midly`'s `Debug`.
+///
+/// End-of-track is left out: every track has one and it says nothing about what
+/// travelled.
+fn kinds_in(path: &std::path::Path) -> std::collections::BTreeSet<&'static str> {
+    use midly::{MetaMessage, MidiMessage, TrackEventKind};
+
+    let bytes = std::fs::read(path).expect("Take is readable");
+    let smf = midly::Smf::parse(&bytes).expect("Take parses");
+    let mut found = std::collections::BTreeSet::new();
+    for track in &smf.tracks {
+        for event in track {
+            let named = match event.kind {
+                TrackEventKind::Midi { message, .. } => match message {
+                    MidiMessage::ProgramChange { .. } => "program change",
+                    MidiMessage::Controller { .. } => "controller",
+                    MidiMessage::PitchBend { .. } => "pitch bend",
+                    MidiMessage::ChannelAftertouch { .. } => "channel pressure",
+                    MidiMessage::Aftertouch { .. } => "a note's aftertouch",
+                    MidiMessage::NoteOn { .. } | MidiMessage::NoteOff { .. } => "a note",
+                },
+                TrackEventKind::SysEx(_) => "sysex",
+                TrackEventKind::Escape(_) => "escape",
+                TrackEventKind::Meta(meta) => match meta {
+                    MetaMessage::EndOfTrack => continue,
+                    MetaMessage::Tempo(_) => "tempo",
+                    MetaMessage::TimeSignature(..) => "time signature",
+                    MetaMessage::KeySignature(..) => "key signature",
+                    MetaMessage::TrackName(_) => "track name",
+                    MetaMessage::InstrumentName(_) => "instrument name",
+                    MetaMessage::MidiPort(_) => "midi port",
+                    MetaMessage::Marker(_) => "marker",
+                    MetaMessage::SmpteOffset(_) => "smpte offset",
+                    MetaMessage::SequencerSpecific(_) => "sequencer specific",
+                    _ => "something this test did not state",
+                },
+            };
+            found.insert(named);
+        }
+    }
+    found
+}
+
 /// The argv the fake was given, once it has finished writing it.
 ///
 /// The lingering fake logs its arguments and then stays where it is, so the log
@@ -536,11 +695,34 @@ fn wait_for_argv(log: &std::path::Path) -> Vec<String> {
     panic!("the fake never recorded what it was given");
 }
 
-/// `play` blocks for as long as the audio lasts, so Ctrl-C is the ordinary way
+/// `play` blocks for as long as the audio lasts, so a signal is the ordinary way
 /// to stop a passage part way through rather than an edge case — and it is the
-/// one way the temporary Take could outlive the command. It does not.
+/// one way the temporary Take could outlive the command.
+///
+/// `battuta` catches three, and ADR-0007 promises all three. Only the interrupt
+/// was exercised: removing `SIGTERM` and `SIGHUP` from the installer left every
+/// playback test green, and either of them would then have left a file behind
+/// under a name nobody was ever told. One test each rather than a loop, so that
+/// a signal which stops being caught names itself in the failure.
 #[test]
 fn an_interrupt_takes_the_temporary_take_with_it() {
+    a_caught_signal_takes_the_temporary_take_with_it(libc::SIGINT);
+}
+
+/// The signal a service manager, a `kill`, or a timeout sends.
+#[test]
+fn a_termination_takes_the_temporary_take_with_it() {
+    a_caught_signal_takes_the_temporary_take_with_it(libc::SIGTERM);
+}
+
+/// The signal a closing terminal sends, which is how an audition left running
+/// in a window somebody shuts ends.
+#[test]
+fn a_hangup_takes_the_temporary_take_with_it() {
+    a_caught_signal_takes_the_temporary_take_with_it(libc::SIGHUP);
+}
+
+fn a_caught_signal_takes_the_temporary_take_with_it(signal: libc::c_int) {
     let dir = tempfile::tempdir().expect("temp dir");
     let fake = common::lingering_fake_fluidsynth(dir.path());
     let soundfont = common::fake_soundfont(&dir.path().join("chosen.sf2"));
@@ -560,17 +742,17 @@ fn an_interrupt_takes_the_temporary_take_with_it() {
     assert!(passage.exists(), "the passage was never written");
 
     // SAFETY: `kill` on a child this test spawned and has not yet reaped.
-    unsafe { libc::kill(child.id() as libc::pid_t, libc::SIGINT) };
+    unsafe { libc::kill(child.id() as libc::pid_t, signal) };
     let status = child.wait().expect("mid exits");
 
-    assert!(!passage.exists(), "the interrupt left {passage:?} behind");
-    // Interrupted, not exited: the handler restores the default disposition
-    // and re-raises, so a shell reports what actually happened rather than an
-    // exit code invented inside `mid`.
+    assert!(!passage.exists(), "signal {signal} left {passage:?} behind");
+    // Killed by the signal, not exited: the handler restores the default
+    // disposition and re-raises, so a shell reports what actually happened
+    // rather than an exit code invented inside `mid`.
     use std::os::unix::process::ExitStatusExt;
     assert_eq!(
         status.signal(),
-        Some(libc::SIGINT),
-        "mid died of something other than the interrupt: {status:?}"
+        Some(signal),
+        "mid died of something other than signal {signal}: {status:?}"
     );
 }

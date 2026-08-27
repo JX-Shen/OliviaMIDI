@@ -9,7 +9,7 @@
 use crate::bars::{BarRange, TickSpan};
 use crate::error::Result;
 use crate::take::Take;
-use midly::num::u28;
+use crate::track::with_delta_times;
 use midly::{MetaMessage, MidiMessage, TrackEvent, TrackEventKind};
 use std::collections::HashSet;
 
@@ -40,7 +40,7 @@ impl Take {
         }
 
         for (index, track) in smf.tracks.iter_mut().enumerate() {
-            *track = restricted(track, span, &kept[index]);
+            *track = restricted(track, span, &kept[index])?;
         }
         Take::from_smf(&smf)
     }
@@ -52,11 +52,16 @@ impl Take {
 /// happens inside it, and the state the Take had already set when it began,
 /// gathered at Tick 0 in the order it was set. The Take's own end-of-track is
 /// not one of them — the passage ends where the passage ends.
+///
+/// Leaving events behind merges the gaps around them, so a passage can need a
+/// longer delta time than any the Take it came from held. That is why this
+/// refuses rather than returning: the encoding rule is `track`'s
+/// `with_delta_times`, and it is the same rule `apply` writes through.
 fn restricted<'a>(
     track: &[TrackEvent<'a>],
     span: TickSpan,
     kept_notes: &HashSet<usize>,
-) -> Vec<TrackEvent<'a>> {
+) -> Result<Vec<TrackEvent<'a>>> {
     let mut inherited: Vec<TrackEventKind<'a>> = Vec::new();
     let mut inside: Vec<(u32, TrackEventKind<'a>)> = Vec::new();
     let mut tick = 0u32;
@@ -97,18 +102,7 @@ fn restricted<'a>(
         .max(span.end - span.start);
     events.push((end, TrackEventKind::Meta(MetaMessage::EndOfTrack)));
 
-    let mut previous = 0u32;
-    events
-        .into_iter()
-        .map(|(tick, kind)| {
-            let event = TrackEvent {
-                delta: u28::new(tick - previous),
-                kind,
-            };
-            previous = tick;
-            event
-        })
-        .collect()
+    with_delta_times(events)
 }
 
 fn is_a_note(kind: &TrackEventKind) -> bool {

@@ -7,9 +7,19 @@ use std::path::{Path, PathBuf};
 
 /// One `.mid` file — a version of the Piece that can be heard.
 ///
-/// A Take *is* its bytes. Everything else — the header, the notes, the length —
-/// is derived from them on demand, which is what lets `write` be a byte copy and
-/// keeps the file the single source of truth.
+/// A Take holds its file's bytes and derives everything else — the header, the
+/// notes, the length — from them on demand, which keeps the file the single
+/// source of truth and lets a Take nothing edited go back out as it arrived.
+///
+/// Holding the bytes is not the same as *being* them. Two encodings of the same
+/// events are the same Take: what a Take is, is its event stream, and how a
+/// status byte or a varint got packed belongs to whichever program wrote the
+/// file. That is ADR-0005, and it is the reading `apply`'s round-trip guarantee
+/// is stated in.
+///
+/// Every Tick in a Take fits a `u32`. Both constructors refuse one whose delta
+/// times accumulate past that, which is what lets the rest of the crate add a
+/// delta to a Tick and know the sum is a Tick — see `within_tick_range`.
 #[derive(Debug, Clone)]
 pub struct Take {
     path: Option<PathBuf>,
@@ -65,9 +75,10 @@ impl Take {
             path: Some(path.to_path_buf()),
             bytes,
         };
-        // Parse once here so an unreadable Take fails at `read`, naming the file,
-        // rather than at whatever later call happened to touch it first.
-        take.smf()?;
+        // Parsed here so an unreadable Take fails at `read`, naming the file,
+        // rather than at whatever later call happened to touch it first. The
+        // same pass settles the Tick range.
+        take.within_tick_range()?;
         Ok(take)
     }
 
@@ -81,14 +92,105 @@ impl Take {
         let mut bytes = Vec::new();
         smf.write(&mut bytes)
             .map_err(|source| Error::Encode(source.to_string()))?;
-        Ok(Take { path: None, bytes })
+        let take = Take { path: None, bytes };
+        // Checked here as well as in `read`, at the cost of parsing back what
+        // was just written. No Edit can reach past the range — every one of them
+        // lands its Ticks through a `u32` conversion, and a passage only ever
+        // moves events earlier — so this holds today by argument. The invariant
+        // is worth more than the argument: it is what every unchecked `+=` in
+        // this crate rests on, and an argument is a thing a later Edit breaks
+        // silently.
+        take.within_tick_range()?;
+        Ok(take)
     }
 
+    /// Refuse a Take whose events accumulate past the largest absolute Tick this
+    /// model holds.
+    ///
+    /// A delta time is a `u28` and a track may carry any number of them, so a
+    /// well-formed file can be built out of gaps that are each writable and
+    /// whose running total leaves `u32` behind. Every Tick in `battuta` is a
+    /// `u32` — a Note's start and duration, `Info`'s length, the span a Bar range
+    /// resolves to, every number a `--json` payload carries — so the total is
+    /// checked once, here, at the only two places a Take comes into existence.
+    ///
+    /// Once, rather than at each of the five places that accumulate a Tick; and
+    /// checked, rather than left to wrap. Unchecked, one file gave two answers:
+    /// a debug build panicked, and a release build reported a wrapped Tick as
+    /// though it were the length. Refusing at the boundary is what makes the
+    /// two agree and what licenses the plain `+=` everywhere downstream.
+    ///
+    /// The alternative was widening every public Tick to `u64`; ADR-0008 records
+    /// why refusing was chosen over paying that on every Take anyone has.
+    fn within_tick_range(&self) -> Result<()> {
+        for track in &self.smf()?.tracks {
+            let mut tick = 0u32;
+            for event in track {
+                tick =
+                    tick.checked_add(event.delta.as_int())
+                        .ok_or_else(|| Error::TakeTooLong {
+                            path: self.described_path(),
+                        })?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Write this Take to a path, as a new file there rather than into the file
+    /// that path already names.
+    ///
+    /// The bytes go to a temporary file beside the destination and are renamed
+    /// onto it. Two things follow, and both are load bearing.
+    ///
+    /// Nothing is ever written *through* the destination. A path can name a file
+    /// the input also names — a second hard link to a Take canonicalises to a
+    /// different pathname and the same inode — and an in-place write through
+    /// such a path would edit the Take it was reading. `apply` refuses that path
+    /// before it reads anything, but that refusal is a check and this is a
+    /// structure: the input keeps its bytes even if the check is ever wrong.
+    ///
+    /// And the destination holds either the Take it held before or the whole of
+    /// this one. An in-place write that ran out of disk part way through would
+    /// leave a truncated file that is not a Take at all, under a name its owner
+    /// is about to trust.
     pub fn write(&self, path: &Path) -> Result<()> {
-        std::fs::write(path, &self.bytes).map_err(|source| Error::Write {
+        use std::os::unix::fs::PermissionsExt;
+        let failed = |source: std::io::Error| Error::Write {
             path: path.to_path_buf(),
             source,
-        })
+        };
+        // Beside the destination, because a rename across two filesystems is
+        // not a rename and not atomic. Named so that one left behind by a
+        // process that died mid-write does not read as somebody's Take.
+        let directory = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        let mut file = tempfile::Builder::new()
+            .prefix(".battuta-writing-")
+            .tempfile_in(directory)
+            .map_err(failed)?;
+        std::io::Write::write_all(&mut file, &self.bytes).map_err(failed)?;
+        // A temporary file is created private to its owner, and a Take is not a
+        // secret — it is a file somebody is about to open in something else. Set
+        // the mode rather than let it depend on which route wrote the file.
+        file.as_file()
+            .set_permissions(std::fs::Permissions::from_mode(0o644))
+            .map_err(failed)?;
+        file.persist(path).map_err(|unrenamed| Error::Write {
+            path: path.to_path_buf(),
+            source: unrenamed.error,
+        })?;
+        Ok(())
+    }
+
+    /// The Take's bytes, for the one writer that must not use `write`.
+    ///
+    /// `temporary` writes into a file it has already registered for removal, so
+    /// it cannot have the new-file-and-rename that `write` performs — see the
+    /// reason at the call site.
+    pub(crate) fn bytes(&self) -> &[u8] {
+        &self.bytes
     }
 
     pub(crate) fn smf(&self) -> Result<Smf<'_>> {

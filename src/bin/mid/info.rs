@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-/// Report what a Take is: format, tracks, PPQ, tempo, metre and length.
+/// Report what a Take is: format, tracks, PPQ, tempo, time signature and length.
 ///
 /// Length is in Ticks, and so is everything else; the Bar count beside it is the
 /// derived view. Bars need one time signature governing the whole Take, so a Take
