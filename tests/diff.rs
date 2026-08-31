@@ -403,3 +403,81 @@ fn states_the_tolerance_it_matched_with() {
         .success()
         .stderr(predicates::str::contains("120"));
 }
+
+/// A changed note reads as a description: where it is, then what about it is
+/// different, in the fixed order the library reports. Both facts of a note that
+/// was transposed *and* softened are on the one line, because it is one note.
+///
+/// The identities are not here. They are what an Edit Set names, and `--json`
+/// carries both of them; a human reading this wants to know what happened to
+/// the music, and two forty-character identities per line is what stops them.
+#[test]
+fn reads_as_a_description_of_what_changed() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let id = first_note_id();
+    let after = derived(
+        dir.path(),
+        "transposed-and-softened",
+        &format!(
+            r#"{{ "kind": "transpose_note", "id": "{id}", "semitones": -2 }},
+               {{ "kind": "set_velocity",   "id": "{id}", "velocity": 40 }}"#
+        ),
+    );
+    assert_eq!(
+        common::human_output(&["diff", FIXTURE, after.to_str().expect("a path")]),
+        "changed  bar 1 beat 1  track 1  pitch A4 -> G4, velocity 50 -> 40\n"
+    );
+}
+
+/// A note that moved is reported as *moved*, in Bars and Beats, so that "it came
+/// in a sixteenth early" is readable as that rather than as two Tick counts.
+///
+/// Where it was is the row's own position column, so the clause says only where
+/// it went. Naming both would put `bar 1 beat 1` on the line twice.
+#[test]
+fn says_where_a_moved_note_went_in_bars_and_beats() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let id = first_note_id();
+    let after = derived(
+        dir.path(),
+        "nudged",
+        &format!(r#"{{ "kind": "move_note", "id": "{id}", "delta_ticks": 60 }}"#),
+    );
+    assert_eq!(
+        common::human_output(&["diff", FIXTURE, after.to_str().expect("a path")]),
+        "changed  bar 1 beat 1  track 1  moved to bar 1 beat 1+60\n"
+    );
+}
+
+/// A note that arrived and one that left are described the same way a note is
+/// listed by `inspect`, and in the same columns.
+#[test]
+fn describes_an_added_and_a_removed_note_as_notes() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let id = first_note_id();
+    let after = derived(
+        dir.path(),
+        "swapped",
+        &format!(
+            r#"{{ "kind": "delete_note", "id": "{id}" }},
+               {{ "kind": "add_note", "track": 1, "channel": 0, "pitch": 71,
+                  "start": 2880, "duration": 480, "velocity": 60 }}"#
+        ),
+    );
+    assert_eq!(
+        common::human_output(&["diff", FIXTURE, after.to_str().expect("a path")]),
+        "\
+added    bar 3 beat 1  track 1  B4  velocity 60  duration 480
+removed  bar 1 beat 1  track 1  A4  velocity 50  duration 1435
+"
+    );
+}
+
+/// Two Takes that differ in nothing say so, rather than printing nothing at all.
+#[test]
+fn says_when_two_takes_differ_in_nothing() {
+    assert_eq!(
+        common::human_output(&["diff", FIXTURE, FIXTURE]),
+        "no differences\n"
+    );
+}

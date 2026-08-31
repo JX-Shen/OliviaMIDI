@@ -13,6 +13,7 @@ mod diff;
 mod info;
 mod inspect;
 mod play;
+mod wording;
 
 use clap::{Parser, Subcommand};
 

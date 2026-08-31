@@ -19,11 +19,11 @@ pub mod take;
 mod temporary;
 mod track;
 
-pub use bars::{BarRange, TickSpan};
+pub use bars::{BarLines, BarRange, Position, TickSpan};
 pub use diff::{Change, Diff, NoteChange};
 pub use edit::{apply, Edit, EditSet};
 pub use error::{Error, Result};
-pub use note::{Note, NoteId};
+pub use note::{pitch_name, Note, NoteId, PitchName};
 pub use rig::{Audition, Rig};
 pub use take::{Info, Take, Tempo, TimeSignature};
 pub use temporary::remove_temporary_takes_on_signals;

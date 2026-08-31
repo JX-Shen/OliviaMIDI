@@ -337,3 +337,129 @@ fn a_time_signature_that_yields_no_bar_length_is_refused() {
         "a fractional Bar was not refused as one"
     );
 }
+
+/// The passage as a musician would point at it: Bar and Beat first, then the
+/// note by name, and the identity last because that is what an Edit Set copies.
+/// In the order the music happens rather than track by track, so the Bar numbers
+/// only go forwards and the two notes of a chord sit next to each other.
+///
+/// Asserted whole. The columns and the order are the point — a `contains` on one
+/// line could tell neither whether the lines line up nor which line came first.
+#[test]
+fn lists_a_passage_by_bar_beat_and_note_name() {
+    assert_eq!(
+        common::human_output(&["inspect", FIXTURE, "--bars", "5:6"]),
+        "\
+bar 5 beat 1  track 1  F#4  velocity 50  duration 955   t1:c0:p66:s5760:n0
+bar 5 beat 1  track 2  A2   velocity 45  duration 475   t2:c1:p45:s5760:n0
+bar 5 beat 2  track 2  A3   velocity 38  duration 955   t2:c1:p57:s6240:n0
+bar 5 beat 2  track 2  C#4  velocity 38  duration 955   t2:c1:p61:s6240:n0
+bar 5 beat 3  track 1  E4   velocity 50  duration 475   t1:c0:p64:s6720:n0
+bar 6 beat 1  track 1  D4   velocity 50  duration 1435  t1:c0:p62:s7200:n0
+bar 6 beat 1  track 2  A2   velocity 45  duration 475   t2:c1:p45:s7200:n0
+bar 6 beat 2  track 2  A3   velocity 38  duration 955   t2:c1:p57:s7680:n0
+bar 6 beat 2  track 2  C#4  velocity 38  duration 955   t2:c1:p61:s7680:n0
+"
+    );
+}
+
+/// A Take with no Bars to be positioned in is still listed, in the Ticks that
+/// are the truth underneath them. `info` reports the missing Bar count and
+/// `inspect --bars` refuses the range; listing every note refuses nothing,
+/// because the Take is exactly the one you most need to look at.
+#[test]
+fn falls_back_to_ticks_when_the_bars_cannot_be_derived() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("no-time-signature.mid"),
+        480,
+        &[],
+        &[(0, 240, 60), (960, 240, 62)],
+    );
+    assert_eq!(
+        common::human_output(&["inspect", take.to_str().expect("a path")]),
+        "\
+tick 0    track 1  C4  velocity 64  duration 240  t1:c0:p60:s0:n0
+tick 960  track 1  D4  velocity 64  duration 240  t1:c0:p62:s960:n0
+"
+    );
+}
+
+/// A note that does not land on a Beat is placed by the Beat it follows and the
+/// Ticks it is past it — never rounded to the nearest one, which would put two
+/// different notes in the same place and say the Take had said so.
+#[test]
+fn places_a_note_that_does_not_land_on_a_beat() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("upbeat.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(240, 240, 66)],
+    );
+    assert_eq!(
+        common::human_output(&["inspect", take.to_str().expect("a path")]),
+        "bar 1 beat 1+240  track 1  F#4  velocity 64  duration 240  t1:c0:p66:s240:n0\n"
+    );
+}
+
+/// The two conventions a MIDI file does not state, at the ends where they show:
+/// pitch 60 is middle C and middle C is called C4, so pitch 0 is C-1 and pitch
+/// 127 is G9. See ADR-0011.
+#[test]
+fn names_middle_c_and_both_ends_of_the_pitch_range() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("range.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(0, 240, 0), (480, 240, 60), (960, 240, 127)],
+    );
+    assert_eq!(
+        common::human_output(&["inspect", take.to_str().expect("a path")]),
+        "\
+bar 1 beat 1  track 1  C-1  velocity 64  duration 240  t1:c0:p0:s0:n0
+bar 1 beat 2  track 1  C4   velocity 64  duration 240  t1:c0:p60:s480:n0
+bar 1 beat 3  track 1  G9   velocity 64  duration 240  t1:c0:p127:s960:n0
+"
+    );
+}
+
+/// A Take bigger than the fixture keeps its columns: every column is as wide as
+/// its widest value, so a Bar in three figures or a duration in four does not
+/// shunt the rest of its line out of line with the others.
+#[test]
+fn widens_a_column_to_its_widest_value() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("wide.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(0, 240, 60), (1920, 1920, 61), (46080, 96, 127)],
+    );
+    assert_eq!(
+        common::human_output(&["inspect", take.to_str().expect("a path")]),
+        "\
+bar 1 beat 1   track 1  C4   velocity 64  duration 240   t1:c0:p60:s0:n0
+bar 2 beat 1   track 1  C#4  velocity 64  duration 1920  t1:c0:p61:s1920:n0
+bar 25 beat 1  track 1  G9   velocity 64  duration 96    t1:c0:p127:s46080:n0
+"
+    );
+}
+
+/// A passage with nothing in it says so. Silence would read as a command that
+/// had not run.
+#[test]
+fn says_when_a_passage_holds_no_notes() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("gap.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(0, 240, 60), (3840, 240, 62)],
+    );
+    assert_eq!(
+        common::human_output(&["inspect", take.to_str().expect("a path"), "--bars", "2:2"]),
+        "no notes\n"
+    );
+}

@@ -153,3 +153,85 @@ impl Take {
         Ok(quarters_worth / denominator)
     }
 }
+
+/// Where a Tick falls in the Bars of a Take: which Bar, which Beat of that Bar,
+/// and how far past that Beat it lands.
+///
+/// A derived view, like every other reading of a Tick. Nothing here is written
+/// in the file — the Take says 5760, and this says that 5760 is the first Beat
+/// of Bar 5 in a Take whose Bars are 1440 Ticks long.
+///
+/// It carries no wording. Whether that reads as `bar 5 beat 1` is the
+/// consumer's, on the same cut as ADR-0009: the placement is a fact about the
+/// Take, the sentence about it is `mid`'s.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Position {
+    /// 1-indexed, the same counting as `--bars`.
+    pub bar: u32,
+
+    /// 1-indexed within the Bar. A Bar has as many Beats as the time
+    /// signature's numerator says notes: three in 3/4, six in 6/8. That is the
+    /// signature read literally, and reading it any other way — 6/8 felt in two
+    /// — is an interpretation of the music, which a derived view of a Tick has
+    /// no standing to make.
+    pub beat: u32,
+
+    /// Ticks past that Beat, so 0 when the Tick lands on it. Never rounded to
+    /// the nearest Beat: two notes a sixteenth apart are in two places, and
+    /// saying otherwise would report the Take as having said something it did
+    /// not.
+    pub ticks_into_beat: u32,
+}
+
+/// The lines a Take's Ticks are read against: one Bar's worth of them, and one
+/// Beat's.
+///
+/// Derived once and then asked repeatedly, because placing every note of a
+/// passage is the ordinary case and re-reading the Take's time signature per
+/// note would be the same answer computed each time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BarLines {
+    bar_ticks: u32,
+    beat_ticks: u32,
+}
+
+impl BarLines {
+    /// Where a Tick falls. Total: every Tick a Take can hold is inside some Bar,
+    /// including one past the end of the Take.
+    pub fn position_of(&self, tick: u32) -> Position {
+        // Both divisors are non-zero by construction in `Take::bar_lines`.
+        let into_bar = tick % self.bar_ticks;
+        Position {
+            bar: tick / self.bar_ticks + 1,
+            beat: into_bar / self.beat_ticks + 1,
+            ticks_into_beat: into_bar % self.beat_ticks,
+        }
+    }
+}
+
+impl Take {
+    /// The Bar and Beat lines this Take is measured by, or `None` when it states
+    /// nothing to derive them from.
+    ///
+    /// `None` rather than an error, because a caller asking this is asking
+    /// whether a musical position is available at all — and the answer for a
+    /// Take that states no time signature, or states one only part way in, is
+    /// that it is not. Every reason is ADR-0006's, and `inspect --bars` is where
+    /// each one is reported with its remedy; a listing that refused the Take
+    /// would refuse exactly the Take a human most needs to look at.
+    ///
+    /// The last reason is not ADR-0006's: a Bar has one Beat per numerator, and
+    /// a Take whose Bar is not a whole number of Beats has none to be placed on.
+    /// It takes a PPQ small enough that a Bar is fewer Ticks than it has Beats.
+    pub fn bar_lines(&self) -> Option<BarLines> {
+        let bar_ticks = self.bar_ticks(self.ppq().ok()?).ok()?;
+        let beats = u32::from(self.stated_time_signature().ok()?.numerator);
+        if beats == 0 || bar_ticks % beats != 0 {
+            return None;
+        }
+        Some(BarLines {
+            bar_ticks,
+            beat_ticks: bar_ticks / beats,
+        })
+    }
+}

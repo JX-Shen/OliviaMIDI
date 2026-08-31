@@ -49,3 +49,55 @@ pub struct Note {
     #[serde(skip)]
     pub(crate) off_event: usize,
 }
+
+/// A pitch under the two conventions a MIDI file does not carry: which letter
+/// and accidental name a semitone, and which octave number it sits in.
+///
+/// Sharps only, and pitch 60 is C4. Both are choices about a file that states
+/// neither — see ADR-0011. Held apart into letter, accidental and octave rather
+/// than handed over as `"F#4"`, because the choice of *which note this is* is
+/// the library's and the choice of how to write it down is the consumer's; the
+/// same cut as ADR-0009.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PitchName {
+    /// `A` through `G`.
+    pub letter: char,
+
+    /// Whether the letter is raised a semitone. Never lowered: a MIDI file
+    /// carries no enharmonic spelling, so G♭ is not available to be wrong about.
+    pub sharp: bool,
+
+    /// Middle C — pitch 60 — is octave 4, which puts pitch 0 in octave −1 and
+    /// pitch 127 in octave 9.
+    pub octave: i8,
+}
+
+/// What to call a pitch.
+///
+/// Total over every value MIDI can hold: the table has an entry per semitone and
+/// the octave is arithmetic, so there is no pitch this refuses to name.
+pub fn pitch_name(pitch: u8) -> PitchName {
+    /// The twelve semitones from C, as a letter and whether it is raised.
+    const SEMITONES: [(char, bool); 12] = [
+        ('C', false),
+        ('C', true),
+        ('D', false),
+        ('D', true),
+        ('E', false),
+        ('F', false),
+        ('F', true),
+        ('G', false),
+        ('G', true),
+        ('A', false),
+        ('A', true),
+        ('B', false),
+    ];
+
+    let (letter, sharp) = SEMITONES[usize::from(pitch % 12)];
+    PitchName {
+        letter,
+        sharp,
+        // At most 127 / 12 = 10, so the subtraction cannot leave `i8`.
+        octave: (pitch / 12) as i8 - 1,
+    }
+}

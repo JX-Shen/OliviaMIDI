@@ -419,3 +419,19 @@ pub fn build_take_past_the_tick_range(path: &Path) -> PathBuf {
     std::fs::write(path, bytes).expect("built Take is writable");
     path.to_path_buf()
 }
+
+/// The stdout of a `mid` run that must succeed.
+///
+/// Human output is asserted whole rather than a line at a time: what is under
+/// test is the layout — which facts are on a line, in what order, and how the
+/// lines line up with each other — and a `contains` on one line of it cannot
+/// see any of that.
+pub fn human_output(args: &[&str]) -> String {
+    let output = mid().args(args).output().expect("mid runs");
+    assert!(
+        output.status.success(),
+        "mid {args:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("stdout is UTF-8")
+}

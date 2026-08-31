@@ -72,6 +72,40 @@ happens when the Take states none or states two, is ADR-0006.
 _中文_: 小节
 _Avoid_: measure, battuta (taken as the crate name); 拍、节
 
+**Beat**:
+One of the equal divisions a Bar is counted in. A Bar has as many Beats as its
+time signature's numerator says: three in 3/4, six in 6/8. Beats are 1-indexed
+within their Bar, and a note falling between two of them is placed by the Beat it
+follows and the Ticks it is past it — never by the nearest one, which would put
+two different notes in the same place.
+_中文_: 拍
+_Avoid_: pulse, count; 节拍、拍子
+
+Six Beats in 6/8 is the time signature read literally, and a literal reading is
+the only one available here. A musician conducting 6/8 beats it in two, and is
+right — but that is a reading of the music, and a derived view of a Tick has no
+standing to make one. It is the line drawn under **Time signature** between the
+sign and the metre, one level further down.
+
+节拍 and 拍子 are avoided for the reasons they are already avoided there: 节拍
+drags speed along with it, and 拍子 names the feel rather than the count. **Bar**
+lists 拍 among the words to avoid, which is this term claiming it rather than a
+contradiction — 小节 is the Bar, 拍 is what it is counted in.
+
+**Position**:
+Where a Tick falls once the Bars are derived: which Bar, which Beat of it, and
+how far past that Beat. What `mid inspect` prints in place of a raw Tick, and
+what a Take with no derivable Bars has none of — there the Tick is printed as
+itself.
+_中文_: 位置
+_Avoid_: location, place, spot; 位点、坐标
+
+**Tick** lists `position` among the words to avoid, and this does not overturn
+that; why it does not is argued there, next to the list it narrows. The short of
+it is that a Tick is the truth and a Position is one reading of it, and the
+section they both sit in has been called Musical position since before either
+term existed.
+
 **Passage**:
 The stretch of a Take a Bar range names — what `--bars 5:8` selects, for
 `inspect` to list and `play` to sound. Under no obligation to be a unit of the
@@ -117,6 +151,27 @@ are the truth; bars, beats and seconds are all derived views of them.
 _中文_: 刻度
 _Avoid_: time, position, offset
 
+Avoided as names *for a Tick*. A Tick is the root, and naming the root after one
+of its readings would make the truth sound derived.
+
+**Position** then takes one of the three, which needs saying because this entry
+is where it would be checked. An avoid list bans a word as a synonym for its own
+term; it does not retire the word. `CHARTER.md` settles the same question for
+`patch`, which **Rig** and **Edit** both avoid and which the Rig side may
+"legitimately use" for a sound preset. Read the other way — the word retired —
+this file would already contradict itself, since **Bar** avoids 拍 and **Beat**
+is 拍.
+
+The test is whether the claimant is the banned term wearing a different word. A
+Position is not: it cannot be stored in a file, no Edit accepts one, and a Take
+that states no time signature has none at all while still having every Tick it
+ever had. What `position` may never name is the count in the file.
+
+The near case is under **Time signature**, which declined `time` for itself on
+the strength of this entry. It was right to: *in 3/4 time* is genuine, but a
+`time` in a MIDI tool is read as a moment, and a moment is what a Tick is. The
+word was a synonym; a Position is a reading.
+
 **Tempo**:
 How fast a Take's ticks pass, as carried by the MIDI tempo meta event:
 microseconds per quarter note, which `mid info` also reports as beats per minute.
@@ -124,6 +179,28 @@ Part of the Piece, not of the Rig. Italian wins here by the rule in `CHARTER.md`
 which names tempo as a case where it genuinely does.
 _中文_: 速度
 _Avoid_: speed, rhythm; 节奏、节拍
+
+**Pitch**:
+Which key is struck, as the MIDI note number the file carries: 0 to 127, one
+semitone apart, with 60 as middle C. Part of the Piece, not of the Rig.
+
+Its **pitch name** (音名) is what `mid` prints beside it — `F#4`, `A2` — under
+two conventions the file does not state: sharps rather than flats, and middle C
+in octave 4. A name is a gloss on the number and never a replacement: an identity
+still reads `p66`, `--json` still carries the number, and no Edit accepts a name.
+See ADR-0011.
+_中文_: 音高 (the name: 音名)
+_Avoid_: note, tone, key; 音符、音调
+_Avoid for the name_: note name, note letter; 唱名
+
+唱名 is the other naming system entirely — do, re, mi — which is a degree of a
+scale rather than a pitch, and moves when the key does. A pitch name does not
+move: `F#4` is pitch 66 in every Take.
+
+Not `note`. A note is the whole event — pitch, start, length and velocity — so
+spending the word on one of its four fields would leave the event with nothing to
+be called. 音调 is vaguer still: in ordinary Chinese it is as often a tone of
+voice or the key a song is in as it is this number.
 
 **Velocity**:
 How hard a note is struck, as carried by the MIDI note event. Part of the Piece,

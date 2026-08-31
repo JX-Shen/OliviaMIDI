@@ -229,3 +229,20 @@ fn a_take_past_the_tick_range_is_refused_rather_than_answered() {
         "the refusal is a typed error, not a panic: {stderr}"
     );
 }
+
+/// The whole block, because the layout is the thing under test: which facts are
+/// reported, in what order, and lined up so the values form a column.
+#[test]
+fn reads_as_a_summary_of_what_the_take_is() {
+    assert_eq!(
+        common::human_output(&["info", FIXTURE]),
+        "\
+format          1
+tracks          3
+ppq             480
+tempo           60 bpm (1000000 us per quarter)
+time signature  3/4
+length          11516 ticks (8 bars)
+"
+    );
+}

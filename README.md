@@ -174,9 +174,37 @@ That loop now closes. All five commands exist, and are being made good one at a
 time rather than all at once. `apply` understands the whole Edit vocabulary —
 move, transpose, resize, add, delete a note, and change a velocity. `diff` now
 says a note *moved* rather than that one vanished and another appeared, on the
-evidence of a `--tolerance` it states with every answer. The output without
-`--json` is still plain rather than musical. Not all of it is good yet, and that
-is the right order — nothing gets to be elegant before the loop closes.
+evidence of a `--tolerance` it states with every answer.
+
+And the output without `--json` now reads as music rather than as numbers. A note
+is placed where a musician would point at it, called by its name, and listed in
+the order the music happens — with the identity an Edit Set copies last on the
+line:
+
+```
+$ mid inspect fixtures/olivia.mid --bars 7:8
+bar 7 beat 1  track 1  E4   velocity 50  duration 955   t1:c0:p64:s8640:n0
+bar 7 beat 1  track 2  D2   velocity 45  duration 475   t2:c1:p38:s8640:n0
+bar 7 beat 2  track 2  F#3  velocity 38  duration 955   t2:c1:p54:s9120:n0
+bar 7 beat 2  track 2  A3   velocity 38  duration 955   t2:c1:p57:s9120:n0
+bar 7 beat 3  track 1  C#4  velocity 50  duration 475   t1:c0:p61:s9600:n0
+bar 8 beat 1  track 1  D4   velocity 50  duration 1435  t1:c0:p62:s10080:n0
+bar 8 beat 1  track 2  D2   velocity 45  duration 475   t2:c1:p38:s10080:n0
+```
+
+That is the last two bars landing on D: the melody on D4 over a D2 in the bass,
+after an A major chord the bar before. Reading it was the point.
+
+`diff` reads the same way — `changed  bar 5 beat 1  track 1  pitch F#4 -> F4` —
+and a note that moved says it moved.
+
+The number is never replaced: `p64` is still in the identity, and `--json` is
+untouched, in the Take's own order. Naming a pitch chooses two things the file
+does not state, which is
+[ADR-0011](./docs/adr/0011-a-pitch-is-named-with-sharps-counting-from-c4.md).
+
+Not all of it is good yet, and that is the right order — nothing gets to be
+elegant before the loop closes.
 
 ```
 cargo build --release          # target/release/mid
