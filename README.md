@@ -52,11 +52,11 @@ mid play    song.mid --bars 5:8
 The loop they exist to close: **inspect → change → listen → react.** Listening
 is the arbiter. A change that is theoretically better and sounds worse loses.
 
-Edits are mechanical — add, delete, move, resize a note, change a velocity,
-change a CC. There is no `make_sadder`, and there never will be. Musical
-intent belongs to the agent; execution belongs to the core. Keeping that line
-sharp is what makes an agent's work *auditable*: you can always know exactly
-what it did to your music.
+Edits are mechanical — move, transpose, resize, add or delete a note, or change
+a velocity. There is no `make_sadder`, and there never will be. Musical intent
+belongs to the agent; execution belongs to the core. Keeping that line sharp is
+what makes an agent's work *auditable*: you can always know exactly what it did
+to your music.
 
 ## The one rule worth knowing before anything else
 
@@ -202,6 +202,15 @@ The number is never replaced: `p64` is still in the identity, and `--json` is
 untouched, in the Take's own order. Naming a pitch chooses two things the file
 does not state, which is
 [ADR-0011](./docs/adr/0011-a-pitch-is-named-with-sharps-counting-from-c4.md).
+
+Two things inside a Take are still unspoken for. A program change and a
+controller are both in the file, and so both are the Piece by the one rule
+above — but `mid` carries them without ever mentioning them: `play` respects
+them, `apply` does not disturb a byte of them, and `inspect`, `diff` and the
+Edit vocabulary are silent. Preserved, invisible, untouchable. That is
+[V0.1.1](https://github.com/JX-Shen/OliviaMIDI/issues/11), and the reason it
+matters is that the invisible middle term is where you fix a badly shaped
+phrase by rewriting a good line.
 
 Not all of it is good yet, and that is the right order — nothing gets to be
 elegant before the loop closes.
