@@ -11,6 +11,16 @@ use std::path::{Path, PathBuf};
 /// The reference Take. Never written to by any test.
 pub const FIXTURE: &str = "fixtures/olivia.mid";
 
+/// The Take built to collide. Never written to by any test either.
+///
+/// `FIXTURE` cannot produce a collision — all 36 of its notes are distinct in
+/// track, channel, pitch and start Tick — so ADR-0002's occurrence index was
+/// only ever exercised on collisions `apply` had just created. This one arrives
+/// already collided, and from outside: its events are hand-written, so the order
+/// of two note-ons sharing a Tick is a fact about the file rather than about our
+/// own builder. See `tests/stacked.rs`, which states its contents.
+pub const STACKED: &str = "fixtures/stacked.mid";
+
 pub fn mid() -> assert_cmd::Command {
     let mut command = assert_cmd::Command::cargo_bin("mid").expect("mid builds");
     // Nothing in this suite may be steered by whatever Rig the machine happens

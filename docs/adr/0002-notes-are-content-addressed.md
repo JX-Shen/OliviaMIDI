@@ -78,20 +78,45 @@ landing exactly on the next strike of the same pitch would, placed last, silence
 the note that strike had just begun — a synthesiser stops a pitch, not an
 identity.
 
-**This is also what closes the question left open below, for one of the two
-cases it names.** Which of two simultaneous note-ons is written first is no
-longer whatever the encoder happened to do; within a single `apply` it is this
-rule, applied deliberately. The suite now builds a genuine collision on purpose
-— `apply` is the first thing in this tool that can — and asserts that the note
-already there keeps `n0` while the new one takes `n1`. What is still unexercised
-is a Take arriving from elsewhere, written by a program that ordered its
-simultaneous events differently.
+**This is also what closes the question left open below.** Which of two
+simultaneous note-ons is written first is no longer whatever the encoder
+happened to do; within a single `apply` it is this rule, applied deliberately.
+The suite builds a genuine collision on purpose — `apply` is the first thing in
+this tool that can — and asserts that the note already there keeps `n0` while
+the new one takes `n1`.
+
+A Take arriving from elsewhere is now exercised too. `fixtures/stacked.mid` is
+hand-written rather than emitted by our own builder, so the order of two
+note-ons sharing a Tick is a fact about the file: it strikes the quieter half of
+a doubled voice first, and writes a release behind the three strikes that share
+its Tick. Every colliding note in it differs in velocity, which is what makes a
+swapped index observable at all — two notes that collide agree on track,
+channel, pitch and start by definition, so if they agreed on everything else no
+assertion could tell which of them took `n0`. `tests/stacked.rs` states the
+whole of it.
 
 The remaining cost is the disambiguation rule. Two notes genuinely identical in
 track, channel, pitch and start tick — a doubled voice, a stacked layer — are
-separated only by occurrence index, which is positional. Two things follow.
-Within a single Edit Set the up-front binding above neutralises it. Across a
-write and a re-read it does not: if serialisation reorders events sharing a
-tick, the occurrence indices swap and nothing reports an error. Whether that can
-happen is not a matter of judgement but of what the round-trip actually
-guarantees, which is an open question until the first implementation answers it.
+separated only by occurrence index, which is positional. Three things follow.
+
+Within a single Edit Set the up-front binding above neutralises it.
+
+**Across a write and a re-read it holds, and that is now measured rather than
+assumed.** This paragraph used to end by calling it an open question — whether
+serialisation could reorder events sharing a tick, swapping the indices with
+nothing to report an error. It cannot. A track is re-sorted by `(tick, order)`
+where an untouched event keeps the order it was read in, so a Take that changed
+nothing comes back with the same event stream and the same identities; the
+bytes are free to differ under ADR-0005, and do, because `midly` writes running
+status where the fixture spells each status byte out. Five successive writes
+were asserted, not one, because a reordering that was itself stable would
+survive a single round trip while drifting one place per write.
+
+**Across a delete it does not hold, and cannot.** Removing a note renumbers
+every later note at its address — delete `n1` of three and the third becomes
+`n1`. This is not a defect to be fixed but the arithmetic of a positional index,
+and the up-front binding is exactly what confines the damage to one Edit Set: a
+stale Edit Set written against an earlier Take is the case that stays dangerous,
+and it is the one ADR-0002 cannot help with, because a renumbered identity still
+resolves. What protects a human there is `mid diff` — *an Edit Set states what
+was asked for; a diff states what happened*, in `CHARTER.md`.
