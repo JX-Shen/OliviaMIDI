@@ -8,6 +8,11 @@ The reasoning is in `CHARTER.md` under the Piece/Rig boundary; recorded here
 because a future contributor will read this as a missing convenience and try to
 "fix" it.
 
+This is also the worked example of *Refuse rather than answer plausibly* in
+`CHARTER.md`, and the one ADR-0004, ADR-0006 and ADR-0007 each argue from when
+they refuse something of their own. The asymmetric-cost paragraph below is what
+they are pointing at, so it is load bearing beyond the Rig.
+
 ## Consequences
 
 The first `mid play` on any new machine fails. That is the intended shape of the

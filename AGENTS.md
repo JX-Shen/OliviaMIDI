@@ -52,6 +52,27 @@ in `CHARTER.md`, because agents are the ones most likely to break them.
   reusing an existing term differently, stop — that is a contradiction, and the
   Working Philosophy says to verify with a human.
 
+## Where a decision goes
+
+Two homes, and the boundary is not about importance:
+
+- **`CHARTER.md` holds postures, scope and obligations** — what is true of the
+  project whatever the code happens to do.
+- **An ADR records what the code does, and why it does it that way.** Every one
+  of the eleven opens by describing a behaviour. A decision that changes no code
+  is not an ADR; it is a charter clause.
+
+**An ADR is amended in place.** ADR-0002 and ADR-0004 have both been rewritten
+where they were wrong, and neither was superseded by a new number — ADR-0004
+says inside itself what it used to claim and why that was wrong. Do not open a
+new ADR saying "supersedes ADR-000N". Correct the one that is wrong and record
+what changed. A new number is for a subject that has genuinely split, never for
+a second opinion about an old one.
+
+`docs/adr/README.md` indexes what has been decided. Add a line when you add an
+ADR; it is the only place that answers "what has this project already settled?"
+without opening eleven files.
+
 ## How agents drive this tool
 
 `mid` is meant to be driven by agents, and it is self-describing on purpose:

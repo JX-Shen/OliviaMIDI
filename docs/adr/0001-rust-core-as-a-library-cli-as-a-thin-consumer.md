@@ -26,6 +26,16 @@ The library/binary split is the concession to the Swift case: when a native Mac
 product is genuinely wanted, it links `battuta` rather than reimplementing it.
 Drawing that boundary now costs nothing; drawing it after the fact is expensive.
 
+It costs something to keep, though, and two ADRs are that cost being paid for a
+consumer that does not exist yet. ADR-0009 moved the wording of the Rig
+disclosure out of the library, which was choosing English on behalf of a caller
+that may want none. ADR-0010 stopped the library installing signal handlers
+until a consumer asks, because it was taking over a host's `SIGTERM` and never
+giving it back. Both were found in one review, both were fixed on this
+boundary's account alone, and both answer the same pressure differently — one
+keeps an obligation mandatory while changing who words it, the other makes the
+behaviour opt-in entirely.
+
 Shelling out to FluidSynth means `mid` has a runtime dependency it cannot
 vendor, and playback failures surface as subprocess failures. That is accepted:
 synthesis is not this project's problem, and CoreAudio output is FluidSynth's

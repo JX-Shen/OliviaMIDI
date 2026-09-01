@@ -70,6 +70,23 @@ answer. The point is not human-in-the-loop; it is that the human remains the
 authorial centre. If it becomes agent-writes, agent-reviews, agent-revises and
 the human only clicks Accept, the product has already failed.
 
+**Refuse rather than answer plausibly.** Where the tool cannot answer truthfully
+it fails and says why. It does not substitute a soundfont it was not given,
+assume 4/4 for a Take that states no time signature, truncate a Tick it cannot
+hold, or compare two Takes that count Ticks differently. Each of those produces
+an answer that looks right and carries nothing in it to reveal that it is not,
+and the costs are asymmetric: setting an environment variable costs thirty
+seconds, while an aesthetic judgement formed about the wrong thing costs
+something nobody can later detect was spent. ADR-0003 is the worked example the
+others argue from.
+
+The limit matters as much as the rule. Refuse when the alternative is to assert
+something false; do not refuse in order to protect a check that another surface
+already provides. `Take::bar_lines` answers *no bars* rather than failing, so
+that `mid inspect` can still list the Take a human most needs to look at, and
+nothing caps how long an Edit Set may be in order to keep it readable — the diff
+is what makes a long one auditable.
+
 **Artifact-first, conversation-second.** The conversation orbits a real,
 evolving MIDI artifact — the chat log is not the work. The right interaction is
 "we are looking at bars 5–8, we just changed the left hand, this is the current
@@ -104,6 +121,20 @@ inspect → change → listen → react, not a loop of prose.
 engineering history; it is part of understanding the work. The human should be
 able to answer "what actually differs between A and B?" — in musical terms, not
 in bytes. Over time the diff becomes a way of learning one's own preferences.
+
+It carries a second duty that the first one hides. **An Edit Set states what was
+asked for; a diff states what happened.** The two come apart: a `move_note` can
+land a note on top of another and renumber a note nobody named, and the Edit Set
+that asked for the move cannot state that consequence while a diff can see it.
+So the diff is also how the human checks the agent, and where the two disagree
+the diff is what to trust.
+
+That is what keeps an Edit Set free to stay dumb. It never has to grow a way of
+summarising itself, and every way of giving it one — a selector naming a range
+of events, a label saying what the batch was for — is a step towards the
+composition DSL below. It also settles where a legibility debt is owed: when a
+change is mechanically large but musically small, the command that must be made
+to explain it is `diff`, not `edits.json`.
 
 **Reversibility encourages exploration.** Any significant change must be easy to
 compare, undo, and keep alongside alternatives. The human should never feel "if

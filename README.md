@@ -285,7 +285,7 @@ V1's named Rigs, and a stated non-goal for V0.
 | --- | --- |
 | [`CHARTER.md`](./CHARTER.md) | the binding decisions — boundary, principles, scope, non-goals |
 | [`CONTEXT.md`](./CONTEXT.md) | the glossary; every term pins a Chinese equivalent |
-| [`docs/adr/`](./docs/adr/) | why the engineering went the way it did |
+| [`docs/adr/`](./docs/adr/README.md) | why the engineering went the way it did — the index is one line per decision |
 | [`AGENTS.md`](./AGENTS.md) | how agents are expected to behave here |
 
 This README is an introduction, not an authority. Where it and `CHARTER.md`
