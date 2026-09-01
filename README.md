@@ -195,8 +195,15 @@ bar 8 beat 1  track 2  D2   velocity 45  duration 475   t2:c1:p38:s10080:n0
 That is the last two bars landing on D: the melody on D4 over a D2 in the bass,
 after an A major chord the bar before. Reading it was the point.
 
-`diff` reads the same way — `changed  bar 5 beat 1  track 1  pitch F#4 -> F4` —
-and a note that moved says it moved.
+`diff` reads the same way — `changed  bar 5 beat 1  track 1  F#4  transposed to
+F4` — and a note that moved says it moved.
+
+A diff row names a note the way the listing above does, because a row carrying
+only a position and a track would be true of both notes of that chord in bar 7.
+Where notes genuinely collide — same track, channel, pitch and start Tick, a
+doubled voice — not even the pitch separates them, and the row says which
+occurrence: `E4 n1`. That appears only at an address where something actually
+collides.
 
 The number is never replaced: `p64` is still in the identity, and `--json` is
 untouched, in the Take's own order. Naming a pitch chooses two things the file

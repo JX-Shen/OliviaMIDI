@@ -37,6 +37,15 @@ pub struct Note {
     pub duration: u32,
     pub velocity: u8,
 
+    /// Which of the notes colliding on track, channel, pitch and start Tick this
+    /// one is, counted in note-on order — the fifth component of `id`, and the
+    /// only one `Note` did not publish as a number.
+    ///
+    /// Not serialised: `id` already carries it, and an agent consuming the
+    /// payload is entitled to one spelling of an identity rather than two.
+    #[serde(skip)]
+    pub occurrence: u32,
+
     /// Where the note-on lives in its track's event list. Carried so that an
     /// Edit changes the event it names and leaves every other byte of the Take
     /// alone; never part of the published contract.

@@ -429,6 +429,7 @@ impl Take {
                     .or_insert(0);
                 let note = Note {
                     id: NoteId::new(p.track, p.channel, p.pitch, p.start, *occurrence),
+                    occurrence: *occurrence,
                     track: p.track,
                     channel: p.channel,
                     pitch: p.pitch,

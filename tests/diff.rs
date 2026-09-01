@@ -6,9 +6,15 @@ use std::path::{Path, PathBuf};
 
 /// A Take derived from the fixture by an Edit Set spelled out at the call site.
 fn derived(dir: &Path, name: &str, edits: &str) -> PathBuf {
+    derived_from(dir, FIXTURE, name, edits)
+}
+
+/// The same, from whichever Take the test names — `common::STACKED` where what
+/// is under test only happens to a Take that collides.
+fn derived_from(dir: &Path, take: &str, name: &str, edits: &str) -> PathBuf {
     let out = dir.join(format!("{name}.mid"));
     mid()
-        .args(["apply", FIXTURE])
+        .args(["apply", take])
         .arg(edit_set(dir, name, edits))
         .arg("-o")
         .arg(&out)
@@ -404,13 +410,23 @@ fn states_the_tolerance_it_matched_with() {
         .stderr(predicates::str::contains("120"));
 }
 
-/// A changed note reads as a description: where it is, then what about it is
-/// different, in the fixed order the library reports. Both facts of a note that
-/// was transposed *and* softened are on the one line, because it is one note.
+/// A changed note reads as a description: which note it is, then what about it
+/// is different, in the fixed order the library reports. Both facts of a note
+/// that was transposed *and* softened are on the one line, because it is one
+/// note.
 ///
-/// The identities are not here. They are what an Edit Set names, and `--json`
-/// carries both of them; a human reading this wants to know what happened to
-/// the music, and two forty-character identities per line is what stops them.
+/// The note is named the way `inspect` names it and the way an added or removed
+/// note is described — position, track, pitch — because a row that named only a
+/// position would be true of every note of a chord. See #14.
+///
+/// A pitch change reads as *transposed to*, for the reason a `start` change
+/// reads as *moved to*: the row opens with the note as it was, so naming the
+/// pitch it came from would put `A4` on the line twice.
+///
+/// The identities are still not here. They are what an Edit Set names, and
+/// `--json` carries both of them; a human reading this wants to know what
+/// happened to the music, and two forty-character identities per line is what
+/// stops them.
 #[test]
 fn reads_as_a_description_of_what_changed() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -425,7 +441,7 @@ fn reads_as_a_description_of_what_changed() {
     );
     assert_eq!(
         common::human_output(&["diff", FIXTURE, after.to_str().expect("a path")]),
-        "changed  bar 1 beat 1  track 1  pitch A4 -> G4, velocity 50 -> 40\n"
+        "changed  bar 1 beat 1  track 1  A4  transposed to G4, velocity 50 -> 40\n"
     );
 }
 
@@ -445,7 +461,78 @@ fn says_where_a_moved_note_went_in_bars_and_beats() {
     );
     assert_eq!(
         common::human_output(&["diff", FIXTURE, after.to_str().expect("a path")]),
-        "changed  bar 1 beat 1  track 1  moved to bar 1 beat 1+60\n"
+        "changed  bar 1 beat 1  track 1  A4  moved to bar 1 beat 1+60\n"
+    );
+}
+
+/// The failure #14 was opened for: two notes of a chord share a position and a
+/// track, so a row carrying only those two is true of both.
+///
+/// `fixtures/olivia.mid` has such a chord — an F#3 and an A3 struck together on
+/// track 2, both at velocity 38 — so the row this used to print, `changed bar 7
+/// beat 2 track 2 velocity 38 -> 60`, described either of them. The pitch is
+/// what settles it, and a chord is common enough that this was the ordinary
+/// case rather than an exotic one.
+#[test]
+fn names_the_note_of_a_chord_that_changed() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let after = derived(
+        dir.path(),
+        "one-of-a-chord",
+        r#"{ "kind": "set_velocity", "id": "t2:c1:p54:s9120:n0", "velocity": 60 }"#,
+    );
+    assert_eq!(
+        common::human_output(&["diff", FIXTURE, after.to_str().expect("a path")]),
+        "changed  bar 7 beat 2  track 2  F#3  velocity 38 -> 60\n",
+        "the row does not say which note of the chord changed"
+    );
+}
+
+/// And where the notes genuinely collide, naming the pitch is not enough either
+/// — so the row says which occurrence, in the identity's own spelling.
+///
+/// `fixtures/stacked.mid` holds three E4s at one address and a doubled C4 at
+/// another. Nothing musical separates them: they agree on track, channel, pitch
+/// and start Tick, which is what a collision is. `E4 n1` is the note `inspect`
+/// lists as `t1:c0:p64:s960:n1`, so a human reading this row can find it.
+#[test]
+fn names_which_of_a_collision_changed() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let after = derived_from(
+        dir.path(),
+        common::STACKED,
+        "one-of-a-stack",
+        r#"{ "kind": "set_velocity", "id": "t1:c0:p64:s960:n1", "velocity": 99 },
+           { "kind": "move_note",    "id": "t1:c0:p60:s0:n1",   "delta_ticks": 120 }"#,
+    );
+    assert_eq!(
+        common::human_output(&["diff", common::STACKED, after.to_str().expect("a path")]),
+        "\
+changed  bar 1 beat 1  track 1  C4 n1  moved to bar 1 beat 1+120
+changed  bar 1 beat 3  track 1  E4 n1  velocity 30 -> 99
+",
+        "the row does not say which note of the collision changed"
+    );
+}
+
+/// A note that is alone at its address is named without an occurrence, in the
+/// same Take that has collisions elsewhere.
+///
+/// The disambiguator is per address, not per Take: it appears where the music
+/// cannot name a note and nowhere else, so an ordinary row does not pay for a
+/// collision two Bars away.
+#[test]
+fn does_not_disambiguate_a_note_nothing_collides_with() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let after = derived_from(
+        dir.path(),
+        common::STACKED,
+        "the-lonely-one",
+        r#"{ "kind": "set_velocity", "id": "t1:c0:p62:s1920:n0", "velocity": 20 }"#,
+    );
+    assert_eq!(
+        common::human_output(&["diff", common::STACKED, after.to_str().expect("a path")]),
+        "changed  bar 2 beat 1  track 1  D4  velocity 80 -> 20\n"
     );
 }
 

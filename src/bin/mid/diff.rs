@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Say what differs between two Takes.
@@ -82,18 +83,47 @@ pub fn run(args: Args) -> battuta::Result<()> {
     for note in &diff.removed {
         rows.push(described("removed", before_lines, note));
     }
+    // How many notes share each address, so that a row describing one of a
+    // collision can say which. Read from the before Take, because that is the
+    // one the row names a note in.
+    let crowding = crowding(&before)?;
     for change in &diff.changed {
-        rows.push(vec![
-            "changed".to_string(),
-            // Where it was, not where it went: the reader knows the before Take,
-            // and a `start` change says the rest.
-            crate::wording::at(before_lines, change.before.start),
-            format!("track {}", change.before.track),
-            stated(change, after_lines),
-        ]);
+        let mut row = vec!["changed".to_string()];
+        // The note as it was, not as it became: the reader knows the before
+        // Take, and each clause says where its field went.
+        row.extend(crate::wording::names(
+            before_lines,
+            &change.before,
+            crowding_at(&crowding, &change.before),
+        ));
+        row.push(stated(change, after_lines));
+        rows.push(row);
     }
     crate::wording::table(&rows);
     Ok(())
+}
+
+/// How many notes share each address — track, channel, pitch and start Tick —
+/// in a Take.
+///
+/// One is the ordinary answer and means the address names a note. More than one
+/// is a collision, and is what `wording::names` needs to know before it can
+/// claim to have pointed at a note rather than at a place several notes are.
+fn crowding(take: &battuta::Take) -> battuta::Result<HashMap<(usize, u8, u8, u32), usize>> {
+    let mut counted = HashMap::new();
+    for note in take.notes()? {
+        *counted
+            .entry((note.track, note.channel, note.pitch, note.start))
+            .or_insert(0) += 1;
+    }
+    Ok(counted)
+}
+
+fn crowding_at(counted: &HashMap<(usize, u8, u8, u32), usize>, note: &battuta::Note) -> usize {
+    counted
+        .get(&(note.track, note.channel, note.pitch, note.start))
+        .copied()
+        .unwrap_or(1)
 }
 
 /// A note that arrived or left, described the way `inspect` lists one — the
@@ -119,9 +149,11 @@ fn stated(change: &battuta::diff::NoteChange, after_lines: Option<battuta::BarLi
         .changes
         .iter()
         .map(|&kind| match kind {
+            // `transposed to`, not one pitch arrow to another, for the reason
+            // `moved to` reads that way: the row already opens with the note as
+            // it was, so naming the pitch it came from would say it twice.
             Change::Pitch => format!(
-                "pitch {} -> {}",
-                crate::wording::pitch(change.before.pitch),
+                "transposed to {}",
                 crate::wording::pitch(change.after.pitch)
             ),
             Change::Start => format!(

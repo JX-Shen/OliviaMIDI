@@ -4,11 +4,13 @@
 //! decides that they read as `bar 5 beat 1` and `F#4`. The same cut as ADR-0009,
 //! applied twice more: the fact is `battuta`'s, the sentence is `mid`'s.
 //!
-//! `note` is the one description of a note, and `inspect` and `diff` both build
-//! their lines out of it. They surround it differently — a listing ends with the
-//! identity an Edit Set copies, a diff begins with what became of the note — but
-//! the note itself is described in one place, in one order, so that the two
-//! commands cannot drift into two vocabularies for the same thing.
+//! `names` says which note, and `note` is that plus how hard it was struck and
+//! how long it lasts. Every line `inspect` and `diff` print is built out of one
+//! or the other, so the two commands cannot drift into two vocabularies for the
+//! same thing. They surround it differently — a listing ends with the identity
+//! an Edit Set copies, a diff opens with what became of the note — and a diff
+//! row describing a change stops at `names`, because the fields it goes on to
+//! talk about are the ones `note` would have printed.
 //!
 //! Not `render`: `CHARTER.md` reserves `mid render` for turning a Take into
 //! audio, and a module in this directory taking that name would be sitting in
@@ -48,22 +50,49 @@ pub fn pitch(pitch: u8) -> String {
     format!("{}{}{}", name.letter, accidental, name.octave)
 }
 
-/// One note, described: where it is, whose part it is on, what it is called, how
-/// hard it was struck and how long it lasts.
+/// The cells that *name* a note: where it is, whose part it is on, and what it
+/// is called. Everything a musician would say to point at one note and no other.
 ///
-/// The channel is not here. It is in the identity on the same line — `t2:c1:` —
-/// and a column repeating it would be nine characters per line spent on the one
-/// fact a human reading music does not use: the part is the track. Nothing
-/// becomes ambiguous, because two notes differing only in channel still differ
-/// in their identities.
-pub fn note(lines: Option<BarLines>, note: &Note) -> Vec<String> {
+/// These are exactly the components of the identity that have a musical
+/// rendering. Track and start Tick and pitch do; channel and occurrence index do
+/// not. Velocity and duration are not part of an identity at all, which is why
+/// they are not here — they are properties of the note a diff talks *about*,
+/// not part of pointing at it.
+///
+/// `among` is how many notes share this one's address in the Take being
+/// described. Where it is more than one the three cells above cannot name a
+/// note, because the notes collide on every one of them, and the occurrence
+/// index is all that separates them. It has no musical name, so it is spelled
+/// the way the identity spells it: `E4 n1` is the note `inspect` lists as
+/// `t1:c0:p64:s960:n1`.
+///
+/// The channel is never here. It is a fact a human reading music does not use —
+/// the part is the track — and two notes differing only in channel do not
+/// collide, so nothing becomes ambiguous by leaving it out.
+pub fn names(lines: Option<BarLines>, note: &Note, among: usize) -> Vec<String> {
+    let mut called = pitch(note.pitch);
+    if among > 1 {
+        called.push_str(&format!(" n{}", note.occurrence));
+    }
     vec![
         at(lines, note.start),
         format!("track {}", note.track),
-        pitch(note.pitch),
-        format!("velocity {}", note.velocity),
-        format!("duration {}", note.duration),
+        called,
     ]
+}
+
+/// One note, described: what names it, then how hard it was struck and how long
+/// it lasts.
+///
+/// A listing never needs the disambiguator `names` can add, because `inspect`
+/// ends every line with the identity itself, and `diff` says of an added or
+/// removed note how loud and how long it is — which is what tells two notes at
+/// one address apart when they differ at all.
+pub fn note(lines: Option<BarLines>, note: &Note) -> Vec<String> {
+    let mut row = names(lines, note, 1);
+    row.push(format!("velocity {}", note.velocity));
+    row.push(format!("duration {}", note.duration));
+    row
 }
 
 /// Print rows as columns, each as wide as the widest thing in it.
