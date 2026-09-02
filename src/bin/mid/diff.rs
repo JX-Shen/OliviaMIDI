@@ -57,7 +57,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // field of the `Diff` — and this decides what it says and where it goes.
     // Stderr, so that `--json` on stdout stays one JSON document and a pipeline
     // redirecting the payload cannot drop the disclosure with it. The same
-    // reasoning as the Rig disclosure; see ADR-0009.
+    // reasoning as the Rig disclosure; see ADR-0005.
     eprintln!("tolerance: {} ticks", diff.tolerance_ticks);
 
     if args.json {

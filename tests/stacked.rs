@@ -230,7 +230,7 @@ fn notes_are_listed_in_note_on_order_and_not_in_the_order_they_end() {
 /// valid, and every identity still resolves. The failure would be silent and
 /// would land an Edit Set written against the first file on the wrong note of
 /// the second. It is asserted on the reading rather than on the bytes, because
-/// ADR-0005 lets the encoding differ and it does: `midly` writes running status
+/// ADR-0003 lets the encoding differ and it does: `midly` writes running status
 /// where the fixture spells every status byte out.
 #[test]
 fn a_collision_survives_a_write_and_a_re_read() {

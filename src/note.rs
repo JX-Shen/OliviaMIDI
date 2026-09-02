@@ -63,10 +63,10 @@ pub struct Note {
 /// and accidental name a semitone, and which octave number it sits in.
 ///
 /// Sharps only, and pitch 60 is C4. Both are choices about a file that states
-/// neither — see ADR-0011. Held apart into letter, accidental and octave rather
+/// neither — see #7. Held apart into letter, accidental and octave rather
 /// than handed over as `"F#4"`, because the choice of *which note this is* is
 /// the library's and the choice of how to write it down is the consumer's; the
-/// same cut as ADR-0009.
+/// same cut as ADR-0005.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PitchName {
     /// `A` through `G`.

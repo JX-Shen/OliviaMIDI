@@ -121,7 +121,7 @@ fn the_flag_wins_over_the_environment() {
 
 /// No Rig means no playback. There is no fallback to a system soundfont, to
 /// FluidSynth's compiled-in default, or to whatever Homebrew installed next to
-/// it — see ADR-0003.
+/// it — see *The Rig is never chosen implicitly* in `CHARTER.md`.
 #[test]
 fn refuses_to_play_with_no_rig_configured() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -140,7 +140,7 @@ fn refuses_to_play_with_no_rig_configured() {
     );
 }
 
-/// Refusing is the decision (ADR-0003); leaving the human stuck is not part of
+/// Refusing is the decision (`CHARTER.md`); leaving the human stuck is not part of
 /// it. Someone who has just typed `cargo install battuta` has no README on disk
 /// and this message is all they get, so it has to name a bank they can actually
 /// go and get — and warn off the one that fails silently.
@@ -536,7 +536,7 @@ fn the_passage_inherits_the_program_change_that_precedes_it() {
     );
 }
 
-/// ADR-0007's taxonomy, both sides of it, in one pass.
+/// #4's taxonomy, both sides of it, in one pass.
 ///
 /// A passage inherits the state the Take had already set by the time it began,
 /// and leaves behind what belongs to a moment it does not contain. Each half is
@@ -717,7 +717,7 @@ fn wait_for_argv(log: &std::path::Path) -> Vec<String> {
 /// to stop a passage part way through rather than an edge case — and it is the
 /// one way the temporary Take could outlive the command.
 ///
-/// `battuta` catches three, and ADR-0007 promises all three. Only the interrupt
+/// `battuta` catches three, and #4 promises all three. Only the interrupt
 /// was exercised: removing `SIGTERM` and `SIGHUP` from the installer left every
 /// playback test green, and either of them would then have left a file behind
 /// under a name nobody was ever told. One test each rather than a loop, so that

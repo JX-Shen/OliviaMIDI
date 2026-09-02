@@ -220,8 +220,8 @@ collides.
 
 The number is never replaced: `p64` is still in the identity, and `--json` is
 untouched, in the Take's own order. Naming a pitch chooses two things the file
-does not state, which is
-[ADR-0011](./docs/adr/0011-a-pitch-is-named-with-sharps-counting-from-c4.md).
+does not state, and [#7](https://github.com/JX-Shen/OliviaMIDI/issues/7) records
+which two and why neither is a flag.
 
 Two things inside a Take are still unspoken for. A program change and a
 controller are both in the file, and so both are the Piece by the one rule
@@ -261,15 +261,15 @@ export BATTUTA_SOUNDFONT="$HOME/SoundFonts/GeneralUser-GS.sf2"
 `--rig <path>` overrides it for a single run. There is no third step: no fallback
 to a system soundfont, to FluidSynth's compiled-in default, or to the demo bank
 Homebrew installs beside it. The first `mid play` on a new machine failing is the
-intended shape of that trade rather than a rough edge — see
-[ADR-0003](./docs/adr/0003-no-implicit-rig-fallback.md).
+intended shape of that trade rather than a rough edge — see *The Rig is never
+chosen implicitly* in [`CHARTER.md`](./CHARTER.md).
 
 **Do not use the soundfont Homebrew ships with `fluid-synth`.** It is a
 vintage-synth demo bank — 136 presets, not one piano among them, and bank 0
 program 0, where General MIDI puts Acoustic Grand Piano, is `FM Bells 1`. Since
 `fixtures/olivia.mid` states no program change at all and relies on that default,
 it renders as bells in both hands. It makes sound, so it looks like it worked.
-That is precisely the substitution ADR-0003 exists to prevent.
+That is precisely the substitution the charter refuses to make for you.
 
 ### Across machines
 
@@ -305,7 +305,8 @@ V1's named Rigs, and a stated non-goal for V0.
 | --- | --- |
 | [`CHARTER.md`](./CHARTER.md) | the binding decisions — boundary, principles, scope, non-goals |
 | [`CONTEXT.md`](./CONTEXT.md) | the glossary; every term pins a Chinese equivalent |
-| [`docs/adr/`](./docs/adr/README.md) | why the engineering went the way it did — the index is one line per decision |
+| [`docs/adr/`](./docs/adr/README.md) | the principles the code is built on — the index is one line per principle |
+| [issues labelled `decision`](https://github.com/JX-Shen/OliviaMIDI/issues?q=label%3Adecision) | every judgement made about one behaviour, closed with the options it rejected |
 | [`AGENTS.md`](./AGENTS.md) | how agents are expected to behave here; not shipped in the crate |
 
 This README is an introduction, not an authority. Where it and `CHARTER.md`
@@ -333,9 +334,9 @@ is where the method came from. The grilling discipline that produced the charter
 the domain-modelling discipline that produced the glossary, and the habit of
 recording decisions as ADRs are all his; `docs/agents/` holds that repository's
 own operating documents, kept close to their original form. What is this
-project's own is not the method but the follow-through — eleven decision records,
-twenty-one recorded rejections, and a charter written before the first line of
-code.
+project's own is not the method but the follow-through — a charter written before
+the first line of code, six principles the code answers to, and every judgement
+under them closed with the options it rejected.
 
 Also to [`midly`](https://github.com/negamartin/midly) and
 [FluidSynth](https://www.fluidsynth.org/), which do the parts this project has no

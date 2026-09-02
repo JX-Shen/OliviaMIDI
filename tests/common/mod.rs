@@ -39,7 +39,7 @@ pub fn write(path: &Path, contents: &str) {
 
 /// The Take's event stream, rendered so two Takes can be compared for identity.
 ///
-/// This is the *event-level* reading of "identical" that ADR-0005 settles on:
+/// This is the *event-level* reading of "identical" that ADR-0003 settles on:
 /// same tracks, same events, same delta times. Byte-level encoding choices —
 /// running status, how a delta time is packed into a varint — are the writer's,
 /// not the Piece's.
@@ -303,7 +303,7 @@ pub fn build_take_with_programs(
 
 /// The same again, with whatever events a test names on the voice track.
 ///
-/// ADR-0007's carry/leave-behind rule is one statement about a dozen event
+/// #4's carry/leave-behind rule is one statement about a dozen event
 /// kinds, so the kinds are a list here rather than a builder parameter each.
 pub fn build_take_setting(
     path: &Path,

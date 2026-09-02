@@ -96,7 +96,7 @@ impl Drop for TemporaryTake {
 /// `mid play` holds exactly one. The room for eight is for a library consumer
 /// auditioning passages on several threads; one that wanted more would still
 /// get its files removed on the way out, just not by a signal. The number is
-/// part of what ADR-0007 promises rather than a detail behind it, which is why
+/// part of what #4 promises rather than a detail behind it, which is why
 /// growing it is not the answer to a consumer that needs more.
 const SLOTS: usize = 8;
 
@@ -172,7 +172,7 @@ static CONSENTED: AtomicBool = AtomicBool::new(false);
 /// Calling this more than once, or from several threads, is harmless. Handlers
 /// are still installed lazily — at the first temporary Take rather than here —
 /// so a process that consents and then never auditions anything has its signals
-/// left alone as well. See ADR-0010.
+/// left alone as well. See ADR-0006.
 pub fn remove_temporary_takes_on_signals() {
     CONSENTED.store(true, Ordering::Release);
 }

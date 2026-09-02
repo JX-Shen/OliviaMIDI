@@ -50,11 +50,11 @@ that shape. An implementation that rebuilt a Take from its notes would satisfy
 the round-trip test on this fixture and quietly drop every event the note model
 does not carry.
 
-This does not settle ADR-0002's open question about occurrence indices surviving
-a write and a re-read. Event-level identity says the events come back in the
-order they went in, which is what that question needed — but only for Takes this
-tool wrote. A Take that arrives from elsewhere and is re-read is still
-unexercised, and still waits on a fixture with a genuine collision in it.
+Event-level identity is also what ADR-0002 leans on for occurrence indices
+surviving a write and a re-read: the events come back in the order they went in,
+so two notes sharing a Tick keep the indices they had. That is measured, not
+argued, in `tests/stacked.rs`, against a Take written by a program other than
+this one.
 
 ## Amended: the mechanism changed, the guarantee did not
 

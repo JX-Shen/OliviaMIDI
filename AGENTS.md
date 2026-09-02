@@ -54,24 +54,57 @@ in `CHARTER.md`, because agents are the ones most likely to break them.
 
 ## Where a decision goes
 
-Two homes, and the boundary is not about importance:
+Three homes, and the boundary is not about importance:
 
 - **`CHARTER.md` holds postures, scope and obligations** — what is true of the
-  project whatever the code happens to do.
-- **An ADR records what the code does, and why it does it that way.** Every one
-  of the eleven opens by describing a behaviour. A decision that changes no code
-  is not an ADR; it is a charter clause.
+  project whatever the code happens to do. It cannot be proved false by reading
+  code. *Human owns the taste* is a charter clause.
+- **An ADR holds a principle the code is built on** — a rule that reading the
+  code can prove false, and that code not yet written will have to obey. *The
+  library decides the fact, the consumer decides the wording* is an ADR: open
+  `rig::play`'s signature and you can check it, and the next fact the library
+  learns to state is bound by it.
+- **A judgement about one behaviour is closed in its issue.** Which events a
+  passage carries, that a pitch is spelled with sharps, that a Tick is a `u32`:
+  each was decided once, about one input, and each lives in the issue that
+  asked for it. The issue's last comment is headed **Decision** and states the
+  behaviour and the options rejected; the issue is labelled `decision` and
+  locked; the code cites it as `#N`. Nothing is copied out of it anywhere else.
 
-**An ADR is amended in place.** ADR-0002 and ADR-0004 have both been rewritten
-where they were wrong, and neither was superseded by a new number — ADR-0004
-says inside itself what it used to claim and why that was wrong. Do not open a
-new ADR saying "supersedes ADR-000N". Correct the one that is wrong and record
-what changed. A new number is for a subject that has genuinely split, never for
-a second opinion about an old one.
+The charter derives the ADRs, and the ADRs are what each judgement argues from:
+constitution, statute, case law. A judgement never becomes an ADR by being
+important, and an ADR never becomes a charter clause by being general.
 
-`docs/adr/README.md` indexes what has been decided. Add a line when you add an
-ADR; it is the only place that answers "what has this project already settled?"
-without opening eleven files.
+**Two tests decide whether a decision is an ADR, and it has to pass both.**
+First: strip every command name, flag, type and event kind out of the sentence —
+does it still say something? "A Tick is a `u32`" is empty without the type, so
+it is a judgement. Second: is there code this project has not written yet that
+would have to obey it? A principle constrains the future; a judgement settles
+one case. A principle usually arrives when a *second* judgement is found arguing
+from the first — that is the moment to write the ADR and have both cite it — or
+when a decision on day one constrains a consumer or a feature that does not
+exist. Do not open an ADR for a decision that has one application and
+constrains nothing else, however hard it was to make: its issue is its record.
+
+**A judgement's reasoning is written once, in the Decision comment.** Not in a
+doc comment, not in the ADR it argues from, not in the README. A code comment
+says what the code does and cites the issue for why; a sentence of reasoning
+copied into code is a sentence that will be wrong one day with nothing to
+say so. The Decision comment is dated and locked, so it cannot drift: it says
+what was true when it was decided, and a later issue that changes the behaviour
+carries its own Decision and cites the one it overturns.
+
+**An ADR is amended in place.** Do not open a new ADR saying "supersedes
+ADR-000N". Correct the one that is wrong and record inside it what changed and
+why. A new number is for a subject that has genuinely split, never for a second
+opinion about an old one. Every Decision comment names the ADR or charter clause
+it applies, so `gh issue list --label decision --search ADR-0002` is the list
+of a principle's applications; the ADR does not keep that list itself.
+
+`docs/adr/README.md` indexes the principles, and maps the numbers this
+directory used before 0.1.0 to where each one's content went. Add a line when
+you add an ADR; it is the only place that answers "what has this project
+already settled?" without opening six files.
 
 ## How agents drive this tool
 
@@ -128,4 +161,6 @@ The five canonical triage roles, each label string equal to its name. See `docs/
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` at the root plus `docs/adr/`. See `docs/agents/domain.md`.
+Single-context: `CONTEXT.md` at the root plus `docs/adr/`. See `docs/agents/domain.md`,
+and *Where a decision goes* above for the gate an ADR has to pass here, which is
+stricter than the skill's own.

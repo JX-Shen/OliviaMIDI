@@ -77,7 +77,7 @@ hold, or compare two Takes that count Ticks differently. Each of those produces
 an answer that looks right and carries nothing in it to reveal that it is not,
 and the costs are asymmetric: setting an environment variable costs thirty
 seconds, while an aesthetic judgement formed about the wrong thing costs
-something nobody can later detect was spent. ADR-0003 is the worked example the
+something nobody can later detect was spent. The Rig is the worked example the
 others argue from.
 
 The limit matters as much as the rule. Refuse when the alternative is to assert
@@ -252,17 +252,22 @@ requires it.
 
 **Holding the documents back was considered and rejected.** The case for it was
 that this file, the glossary and the decision records took more thought than the
-code did. The case against is evidence. A third of `src/` is comment, and
-thirty-three of those comments name an ADR or this file outright, several of them
-restating the option that was rejected and why — so withholding the documents
-would not have withheld the reasoning. It would only have left thirty-three
-references pointing at nothing, which advertises an omission without achieving
-it.
+code did. The case against is evidence. A third of `src/` is comment, and those
+comments name this file, a decision record or an issue by number wherever they
+restate a rule — so withholding the documents would not have withheld the
+reasoning. It would only have left the references pointing at nothing, which
+advertises an omission without achieving it.
 
-The deciding argument is what the scarce thing actually is. Twenty-one recorded
-rejections across ten ADRs, and two ADRs amended in place rather than superseded,
-are a record nobody can reconstruct after the fact — including whoever wrote it.
-That kind of record is worth nothing held and something read.
+The deciding argument is what the scarce thing actually is. This project keeps
+its reasoning in three places, and all three are public because the repository
+is: this file holds the postures, `docs/adr/` holds the principles the code is
+built on, and every judgement made about one behaviour is closed in the issue
+that asked for it, under a comment headed *Decision*, with the options it
+rejected. The crate's comments cite all three by name or number, and the
+repository being public is what makes an issue number in a shipped comment
+resolve. That record — rejections written down at the moment they were made —
+is one nobody can reconstruct after the fact, including whoever wrote it, and
+it is worth nothing held and something read.
 
 **Not shipped is not the same as not public.** `AGENTS.md` and `docs/agents/` are
 excluded from the crate because they describe how this repository is worked in

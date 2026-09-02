@@ -68,7 +68,7 @@ Bars are counted from Tick 0 of the Take, and the last one counts even when the
 Take stops part way inside it — `fixtures/olivia.mid` is eight bars of 3/4, not
 seven and a bit. A note belongs to the bar it *starts* in, even when it sustains
 across the bar line. Which time signature the bar lines come from, and what
-happens when the Take states none or states two, is ADR-0006.
+happens when the Take states none or states two, is #3.
 _中文_: 小节
 _Avoid_: measure, battuta (taken as the crate name); 拍、节
 
@@ -125,7 +125,7 @@ music it selects.
 How many notes of what value make one bar, as carried by the MIDI time signature
 meta event. Part of the Piece, not of the Rig. Every bar line is derived from it
 and from nothing else; what happens when a Take states none, or none that governs
-the whole of it, is ADR-0006.
+the whole of it, is #3.
 _中文_: 拍号
 _Avoid_: metre, meter, time sig; 节拍、拍子
 
@@ -133,7 +133,7 @@ Not `metre`, although it is the more musical-sounding of the two. In theory the
 metre is how beats are organised and the time signature is the sign that states
 it, and the sign is what a file can carry and this tool can read. A Take with no
 time signature event does not lack a metre — the music has one, it simply is not
-written down — so `metre` would make every refusal in ADR-0006 a false statement
+written down — so `metre` would make every refusal in #3 a false statement
 about the music, where each is a true one about what the file *says*. Only a sign
 can be the object of saying. `time` on its own is genuinely musical — *in 3/4
 time* — but is already avoided for Tick.
@@ -188,7 +188,7 @@ Its **pitch name** (音名) is what `mid` prints beside it — `F#4`, `A2` — u
 two conventions the file does not state: sharps rather than flats, and middle C
 in octave 4. A name is a gloss on the number and never a replacement: an identity
 still reads `p66`, `--json` still carries the number, and no Edit accepts a name.
-See ADR-0011.
+See #7.
 _中文_: 音高 (the name: 音名)
 _Avoid_: note, tone, key; 音符、音调
 _Avoid for the name_: note name, note letter; 唱名

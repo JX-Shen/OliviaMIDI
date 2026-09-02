@@ -44,7 +44,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // The library decides *that* the Rig is disclosed and when; this decides
     // what it says and where it goes. Stderr, so that `--json` on stdout stays
     // one JSON document, and so that a shell pipeline cannot drop the
-    // attribution by redirecting the payload. See ADR-0009.
+    // attribution by redirecting the payload. See ADR-0005.
     let audition = battuta::rig::play(
         &args.take,
         args.bars,

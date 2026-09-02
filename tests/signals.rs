@@ -25,7 +25,7 @@ extern "C" fn a_consumers_own_handler(_signal: libc::c_int) {}
 /// shut down cleanly.
 ///
 /// So the audition below is a real one — a passage cut, written and handed to a
-/// synthesiser — by a consumer that never consented. ADR-0010.
+/// synthesiser — by a consumer that never consented. ADR-0006.
 #[test]
 fn a_consumer_that_does_not_consent_keeps_its_own_signal_handlers() {
     let caught = [libc::SIGINT, libc::SIGTERM, libc::SIGHUP];

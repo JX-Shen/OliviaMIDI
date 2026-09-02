@@ -27,9 +27,9 @@ product is genuinely wanted, it links `battuta` rather than reimplementing it.
 Drawing that boundary now costs nothing; drawing it after the fact is expensive.
 
 It costs something to keep, though, and two ADRs are that cost being paid for a
-consumer that does not exist yet. ADR-0009 moved the wording of the Rig
+consumer that does not exist yet. ADR-0005 moved the wording of the Rig
 disclosure out of the library, which was choosing English on behalf of a caller
-that may want none. ADR-0010 stopped the library installing signal handlers
+that may want none. ADR-0006 stopped the library installing signal handlers
 until a consumer asks, because it was taking over a host's `SIGTERM` and never
 giving it back. Both were found in one review, both were fixed on this
 boundary's account alone, and both answer the same pressure differently — one

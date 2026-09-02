@@ -23,7 +23,7 @@
 //! Nothing shifts an index: removing an event marks its slot dead, adding one
 //! pushes onto the end. Delta times are derived once, at the end, from the
 //! ticks — so an Edit changes a Tick and never a delta, and every event it did
-//! not name keeps the Tick it arrived with. That is ADR-0005's guarantee, held
+//! not name keeps the Tick it arrived with. That is ADR-0003's guarantee, held
 //! by a different mechanism than the one that held it for `set_velocity`.
 //!
 //! A slot index is an address for the length of one `apply` and is never

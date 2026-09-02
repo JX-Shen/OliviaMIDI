@@ -222,7 +222,7 @@ fn a_bar_range_that_cannot_be_honoured_is_refused() {
 /// assume 4/4; battuta refuses instead, because a Bar number derived from a
 /// time signature the Take never stated is a wrong answer with nothing to
 /// reveal it.
-/// See ADR-0006.
+/// See #3.
 #[test]
 fn a_take_that_states_no_time_signature_refuses_to_talk_about_bars() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -405,7 +405,7 @@ fn places_a_note_that_does_not_land_on_a_beat() {
 
 /// The two conventions a MIDI file does not state, at the ends where they show:
 /// pitch 60 is middle C and middle C is called C4, so pitch 0 is C-1 and pitch
-/// 127 is G9. See ADR-0011.
+/// 127 is G9. See #7.
 #[test]
 fn names_middle_c_and_both_ends_of_the_pitch_range() {
     let dir = tempfile::tempdir().expect("temp dir");

@@ -1,7 +1,7 @@
 //! Musical position: Bars, and the span of Ticks one covers.
 //!
 //! Ticks are the truth; a Bar is a derived view of them. Deriving it needs a
-//! time signature, and nothing here invents one — see ADR-0006. Cutting the
+//! time signature, and nothing here invents one — see #3. Cutting the
 //! passage a span selects out of a Take is `crate::passage`.
 
 use crate::error::{Error, Result};
@@ -162,7 +162,7 @@ impl Take {
 /// of Bar 5 in a Take whose Bars are 1440 Ticks long.
 ///
 /// It carries no wording. Whether that reads as `bar 5 beat 1` is the
-/// consumer's, on the same cut as ADR-0009: the placement is a fact about the
+/// consumer's, on the same cut as ADR-0005: the placement is a fact about the
 /// Take, the sentence about it is `mid`'s.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Position {
@@ -216,11 +216,11 @@ impl Take {
     /// `None` rather than an error, because a caller asking this is asking
     /// whether a musical position is available at all — and the answer for a
     /// Take that states no time signature, or states one only part way in, is
-    /// that it is not. Every reason is ADR-0006's, and `inspect --bars` is where
+    /// that it is not. Every reason is #3's, and `inspect --bars` is where
     /// each one is reported with its remedy; a listing that refused the Take
     /// would refuse exactly the Take a human most needs to look at.
     ///
-    /// The last reason is not ADR-0006's: a Bar has one Beat per numerator, and
+    /// The last reason is not #3's: a Bar has one Beat per numerator, and
     /// a Take whose Bar is not a whole number of Beats has none to be placed on.
     /// It takes a PPQ small enough that a Bar is fewer Ticks than it has Beats.
     pub fn bar_lines(&self) -> Option<BarLines> {

@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 /// Holding the bytes is not the same as *being* them. Two encodings of the same
 /// events are the same Take: what a Take is, is its event stream, and how a
 /// status byte or a varint got packed belongs to whichever program wrote the
-/// file. That is ADR-0005, and it is the reading `apply`'s round-trip guarantee
+/// file. That is ADR-0003, and it is the reading `apply`'s round-trip guarantee
 /// is stated in.
 ///
 /// Every Tick in a Take fits a `u32`. Both constructors refuse one whose delta
@@ -120,7 +120,7 @@ impl Take {
     /// though it were the length. Refusing at the boundary is what makes the
     /// two agree and what licenses the plain `+=` everywhere downstream.
     ///
-    /// The alternative was widening every public Tick to `u64`; ADR-0008 records
+    /// The alternative was widening every public Tick to `u64`; #15 records
     /// why refusing was chosen over paying that on every Take anyone has.
     fn within_tick_range(&self) -> Result<()> {
         for track in &self.smf()?.tracks {
@@ -320,7 +320,7 @@ impl Take {
     /// Three refusals rather than an answer, because they are three different
     /// things to go and look at: a Take that says nothing, a Take that does not
     /// say until part way in, and a Take that says two different things. See
-    /// ADR-0006 for why none of them is answered with 4/4.
+    /// #3 for why none of them is answered with 4/4.
     pub(crate) fn stated_time_signature(&self) -> Result<TimeSignature> {
         let stated = self.time_signatures()?;
         let Some(&(at_tick, first)) = stated.first() else {

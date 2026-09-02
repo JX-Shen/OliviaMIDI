@@ -4,7 +4,7 @@
 //! `crate::bars` decides which Ticks a Bar range covers. This is the surgery
 //! that turns that span into a Take of its own, which `mid play --bars` needs
 //! because FluidSynth plays a file from its beginning and has no range
-//! playback. What travels and what is left behind is ADR-0007.
+//! playback. What travels and what is left behind is decided in #4.
 
 use crate::bars::{BarRange, TickSpan};
 use crate::error::Result;
@@ -23,7 +23,7 @@ impl Take {
     /// It carries the notes that start inside the range, whole; whatever else
     /// happens inside it; and the state the Take had already set by the time
     /// the range began. It leaves behind what belongs to a moment the passage
-    /// does not contain. See ADR-0007.
+    /// does not contain. See #4.
     pub fn passage(&self, bars: BarRange) -> Result<Take> {
         let span = self.tick_span(bars)?;
         let mut smf = self.smf()?;

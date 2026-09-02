@@ -400,7 +400,7 @@ fn states_the_tolerance_it_matched_with() {
     assert_eq!(overridden["tolerance_ticks"], 240);
 
     // And on stderr, for a human, whether or not the payload was asked for —
-    // the same reasoning as the Rig disclosure in ADR-0009.
+    // the same reasoning as the Rig disclosure in ADR-0005.
     mid()
         .arg("diff")
         .arg(&before)

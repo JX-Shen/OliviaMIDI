@@ -74,7 +74,7 @@ const DEFAULT_TOLERANCE_DIVISOR: u32 = 4;
 /// Compare two Takes: what was added, what was removed, and what stayed but
 /// changed.
 ///
-/// Matching is two passes (ADR-0004). First by identity — same track, channel,
+/// Matching is two passes (#6, under ADR-0004). First by identity — same track, channel,
 /// pitch and start Tick — and then, among whatever is left, greedily by
 /// nearest neighbour within the same track and channel, bounded by `tolerance`.
 /// Whatever is still unmatched is Added or Removed.

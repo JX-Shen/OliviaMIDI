@@ -7,7 +7,7 @@ use common::{
 use std::path::Path;
 
 /// The property, not a snapshot: two runs have to *agree*, which is a relation a
-/// stored blob cannot express. See ADR-0005 for what "identical" means here.
+/// stored blob cannot express. See ADR-0003 for what "identical" means here.
 #[test]
 fn an_empty_edit_set_round_trips_the_take() {
     let dir = tempfile::tempdir().expect("temp dir");

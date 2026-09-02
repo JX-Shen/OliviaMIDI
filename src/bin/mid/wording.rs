@@ -1,7 +1,7 @@
 //! How `mid` writes down where a note is and what it is called.
 //!
 //! The library decides which Bar a Tick falls in and which note a pitch is; this
-//! decides that they read as `bar 5 beat 1` and `F#4`. The same cut as ADR-0009,
+//! decides that they read as `bar 5 beat 1` and `F#4`. The same cut as ADR-0005,
 //! applied twice more: the fact is `battuta`'s, the sentence is `mid`'s.
 //!
 //! `names` says which note, and `note` is that plus how hard it was struck and
@@ -14,7 +14,7 @@
 //!
 //! Not `render`: `CHARTER.md` reserves `mid render` for turning a Take into
 //! audio, and a module in this directory taking that name would be sitting in
-//! the seat its implementation will want. `wording` is ADR-0009's own word for
+//! the seat its implementation will want. `wording` is ADR-0005's own word for
 //! what this does.
 
 use battuta::{BarLines, Note};

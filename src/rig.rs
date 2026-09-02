@@ -18,7 +18,7 @@ pub struct Rig {
 pub const SOUNDFONT_ENV: &str = "BATTUTA_SOUNDFONT";
 
 impl Rig {
-    /// `--rig`, then `BATTUTA_SOUNDFONT`, then fail (ADR-0003).
+    /// `--rig`, then `BATTUTA_SOUNDFONT`, then fail. The Rig is never chosen implicitly (`CHARTER.md`).
     ///
     /// There is no third step. Falling back to a system soundfont would make an
     /// audition unattributable, and an unattributable audition is an aesthetic
@@ -80,7 +80,7 @@ pub struct Audition {
 /// reach an `Audition` without being told what it was heard through. The
 /// sentence is not: `CHARTER.md` gives it to the binary, in as many words
 /// ("`mid play` always states which Rig it used"), and a consumer that is not
-/// `mid` has its own product to answer for. See ADR-0009.
+/// `mid` has its own product to answer for. See ADR-0005.
 pub fn play(
     take: &Path,
     bars: Option<BarRange>,

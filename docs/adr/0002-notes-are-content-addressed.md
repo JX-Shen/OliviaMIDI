@@ -1,7 +1,7 @@
 # Notes are content-addressed
 
 A note's identity is derived from its content — track, channel, pitch and start
-tick — with an occurrence index disambiguating notes that collide on all four.
+Tick — with an occurrence index disambiguating notes that collide on all four.
 Edit Sets and diffs refer to notes by that identity, and every identity in an
 Edit Set is resolved against the input Take before any Edit in it is applied.
 
@@ -43,9 +43,8 @@ after, and the diff of "this note moved" is a claim these identities are unable
 to make on their own. Nothing here is amended by that: it is the price of
 identities that are stable under everything *else*, and it is paid deliberately.
 Where the claim is made instead is `mid diff`'s second matching pass, on the
-evidence of a stated tolerance, and ADR-0004 holds the whole of that decision —
-including why the evidence is a parameter the human sets and why every diff
-reports the value it used.
+evidence of a stated tolerance. ADR-0004 is the principle that pass answers to,
+and #6 is the decision that built it.
 
 Resolving identities up front makes an Edit Set atomic with respect to identity.
 "Operations apply in the order given" therefore means their *effects* are
@@ -78,45 +77,26 @@ landing exactly on the next strike of the same pitch would, placed last, silence
 the note that strike had just begun — a synthesiser stops a pitch, not an
 identity.
 
-**This is also what closes the question left open below.** Which of two
-simultaneous note-ons is written first is no longer whatever the encoder
-happened to do; within a single `apply` it is this rule, applied deliberately.
-The suite builds a genuine collision on purpose — `apply` is the first thing in
-this tool that can — and asserts that the note already there keeps `n0` while
-the new one takes `n1`.
-
-A Take arriving from elsewhere is now exercised too. `fixtures/stacked.mid` is
-hand-written rather than emitted by our own builder, so the order of two
-note-ons sharing a Tick is a fact about the file: it strikes the quieter half of
-a doubled voice first, and writes a release behind the three strikes that share
-its Tick. Every colliding note in it differs in velocity, which is what makes a
-swapped index observable at all — two notes that collide agree on track,
-channel, pitch and start by definition, so if they agreed on everything else no
-assertion could tell which of them took `n0`. `tests/stacked.rs` states the
-whole of it.
-
 The remaining cost is the disambiguation rule. Two notes genuinely identical in
-track, channel, pitch and start tick — a doubled voice, a stacked layer — are
+track, channel, pitch and start Tick — a doubled voice, a stacked layer — are
 separated only by occurrence index, which is positional. Three things follow.
 
 Within a single Edit Set the up-front binding above neutralises it.
 
-**Across a write and a re-read it holds, and that is now measured rather than
-assumed.** This paragraph used to end by calling it an open question — whether
-serialisation could reorder events sharing a tick, swapping the indices with
-nothing to report an error. It cannot. A track is re-sorted by `(tick, order)`
-where an untouched event keeps the order it was read in, so a Take that changed
-nothing comes back with the same event stream and the same identities; the
-bytes are free to differ under ADR-0005, and do, because `midly` writes running
-status where the fixture spells each status byte out. Five successive writes
-were asserted, not one, because a reordering that was itself stable would
-survive a single round trip while drifting one place per write.
+**Across a write and a re-read it holds, and that is measured rather than
+assumed.** A track is re-sorted by `(tick, order)` where an untouched event keeps
+the order it was read in, so a Take that changed nothing comes back with the same
+event stream and the same identities; the bytes are free to differ under
+ADR-0003, and do. `tests/stacked.rs` asserts it against a Take that arrived
+already collided, written by a program other than this one, and asserts five
+successive writes rather than one, because a reordering that was itself stable
+would survive a single round trip while drifting one place per write.
 
 **Across a delete it does not hold, and cannot.** Removing a note renumbers
 every later note at its address — delete `n1` of three and the third becomes
 `n1`. This is not a defect to be fixed but the arithmetic of a positional index,
 and the up-front binding is exactly what confines the damage to one Edit Set: a
 stale Edit Set written against an earlier Take is the case that stays dangerous,
-and it is the one ADR-0002 cannot help with, because a renumbered identity still
-resolves. What protects a human there is `mid diff` — *an Edit Set states what
-was asked for; a diff states what happened*, in `CHARTER.md`.
+and it is the one this decision cannot help with, because a renumbered identity
+still resolves. What protects a human there is `mid diff` — *an Edit Set states
+what was asked for; a diff states what happened*, in `CHARTER.md`.
