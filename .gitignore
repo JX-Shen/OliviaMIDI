@@ -11,6 +11,9 @@
 # macOS
 .DS_Store
 
+# Claude Code machine-local settings
+.claude/settings.json
+
 # Python experiments
 experiments/.venv/
 __pycache__/
