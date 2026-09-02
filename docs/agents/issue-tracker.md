@@ -5,9 +5,9 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 ## Account binding — check before any `gh` write
 
 This repo belongs to the **`JX-Shen`** personal account. The machine it was
-created on also holds a second account, and the two are kept apart by
-`GH_CONFIG_DIR`: `direnv` points the company directory tree at a separate gh
-config, and everything outside it — this repo included — uses the default
+created on carries more than one GitHub identity, and they are kept apart by
+`GH_CONFIG_DIR`: `direnv` points particular directory trees at their own gh
+config, and everything outside them — this repo included — uses the default
 config, where `JX-Shen` is active. So the right account is normally selected
 without anyone thinking about it.
 
@@ -24,7 +24,8 @@ means an assumption has broken, not that a switch was forgotten.
 The check is cheap and it is not vacuous: `direnv` hooks into interactive
 shells, so an agent's non-interactive shell does not inherit the per-directory
 selection. It lands on the default config, which is correct for this repo and
-wrong inside the company tree. The habit is what makes that difference visible.
+wrong under any tree that has its own. The habit is what makes that difference
+visible.
 
 ## Conventions
 

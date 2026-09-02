@@ -5,8 +5,10 @@ way. One line each; the file is the argument.
 
 `CHARTER.md` holds the other kind of decision — postures, scope and obligations,
 true of the project whatever the code does. Where the two disagree, the charter
-is right. See *Where a decision goes* in `AGENTS.md`, which also explains why
-there is no ADR here that supersedes another.
+is right. A decision that changes no code is a charter clause and not an ADR,
+and an ADR found to be wrong is amended in place rather than superseded — which
+is why no file here supersedes another. `AGENTS.md` argues both at length, and
+is not shipped with the crate.
 
 | | | |
 | --- | --- | --- |

@@ -120,10 +120,10 @@ fn is_a_note(kind: &TrackEventKind) -> bool {
 /// itself.
 ///
 /// Tempo and time signature are what the passage is measured in. The rest
-/// follow from the same rule and the boundary in `AGENTS.md`: a program change,
-/// a controller, a pitch bend and a SysEx setup message are all in the file, so
-/// they are the Piece, and a passage heard without them is heard as something
-/// the Take does not say.
+/// follow from the same rule and the boundary in `CHARTER.md`: a program
+/// change, a controller, a pitch bend and a SysEx setup message are all in the
+/// file, so they are the Piece, and a passage heard without them is heard as
+/// something the Take does not say.
 ///
 /// Left behind is everything belonging to a moment the passage does not
 /// contain: notes, a note's aftertouch, an SMPTE offset for a start the passage

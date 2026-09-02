@@ -58,6 +58,19 @@ belongs to the agent; execution belongs to the core. Keeping that line sharp is
 what makes an agent's work *auditable*: you can always know exactly what it did
 to your music.
 
+## Install
+
+```
+cargo install battuta
+```
+
+The crate is `battuta`; the binary it installs is `mid`. Rust 1.82 or newer.
+
+Four of the five commands need nothing but the binary. `play` needs two more
+things — FluidSynth on PATH, and a Rig it will never choose for you — and each
+failure names its own remedy, including which bank to go and get. See
+[Setting up a Rig](#setting-up-a-rig).
+
 ## The one rule worth knowing before anything else
 
 > What is inside a Take belongs to the Piece. What is required to turn a Take
@@ -293,7 +306,7 @@ V1's named Rigs, and a stated non-goal for V0.
 | [`CHARTER.md`](./CHARTER.md) | the binding decisions — boundary, principles, scope, non-goals |
 | [`CONTEXT.md`](./CONTEXT.md) | the glossary; every term pins a Chinese equivalent |
 | [`docs/adr/`](./docs/adr/README.md) | why the engineering went the way it did — the index is one line per decision |
-| [`AGENTS.md`](./AGENTS.md) | how agents are expected to behave here |
+| [`AGENTS.md`](./AGENTS.md) | how agents are expected to behave here; not shipped in the crate |
 
 This README is an introduction, not an authority. Where it and `CHARTER.md`
 disagree, the charter is right and this file is stale.
@@ -315,8 +328,15 @@ than one more well-meant principle. It argued itself out of at least one
 position it had recommended a round earlier, which is rarer and more useful than
 being right the first time.
 
-Also to [`mattpocock/skills`](https://github.com/mattpocock/skills), whose
-grilling and domain-modelling disciplines shaped how the interview was run, and
-to [`midly`](https://github.com/negamartin/midly) and
+**[`mattpocock/skills`](https://github.com/mattpocock/skills)** by Matt Pocock
+is where the method came from. The grilling discipline that produced the charter,
+the domain-modelling discipline that produced the glossary, and the habit of
+recording decisions as ADRs are all his; `docs/agents/` holds that repository's
+own operating documents, kept close to their original form. What is this
+project's own is not the method but the follow-through — eleven decision records,
+twenty-one recorded rejections, and a charter written before the first line of
+code.
+
+Also to [`midly`](https://github.com/negamartin/midly) and
 [FluidSynth](https://www.fluidsynth.org/), which do the parts this project has no
 intention of reinventing.

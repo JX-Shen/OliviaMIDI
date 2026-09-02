@@ -116,9 +116,10 @@ but agent shells do not inherit it — verify `gh auth status --active` before a
 ### Plugin
 
 `.claude/settings.json` enables the `JFork@JFork` plugin, which supplies the
-engineering skills these docs are written for. Enabling it only takes effect
-where the marketplace is registered: clone `git@github-personal:JX-Shen/skills`
-(a fork of `mattpocock/skills`) and add it to `extraKnownMarketplaces` in the
+engineering skills these docs are written for. They come from
+[`mattpocock/skills`](https://github.com/mattpocock/skills); this machine runs a
+personal fork of it. Enabling the plugin only takes effect where the marketplace
+is registered: clone either, and add it to `extraKnownMarketplaces` in the
 machine's `~/.claude/settings.json` as a `directory` source.
 
 ### Triage labels

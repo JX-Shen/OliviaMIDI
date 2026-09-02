@@ -140,6 +140,24 @@ fn refuses_to_play_with_no_rig_configured() {
     );
 }
 
+/// Refusing is the decision (ADR-0003); leaving the human stuck is not part of
+/// it. Someone who has just typed `cargo install battuta` has no README on disk
+/// and this message is all they get, so it has to name a bank they can actually
+/// go and get — and warn off the one that fails silently.
+#[test]
+fn the_no_rig_failure_names_a_bank_to_go_and_get() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let fake = fake_fluidsynth(dir.path());
+
+    mid()
+        .args(["play", FIXTURE])
+        .env("PATH", &fake.dir)
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("GeneralUser GS"))
+        .stderr(predicates::str::contains("no piano"));
+}
+
 /// Two conditions, two remedies, two messages — never one merged "playback
 /// failed".
 #[test]

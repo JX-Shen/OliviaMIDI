@@ -243,9 +243,20 @@ pub enum Error {
     WriteInPlace(PathBuf),
 
     #[error(
-        "no Rig configured. Pass --rig <soundfont.sf2>, or set BATTUTA_SOUNDFONT to a soundfont path.\n\
-         battuta never picks a soundfont for you: an audition heard through a Rig you did not choose \
-         is a judgement you cannot trust."
+        "no Rig configured. Pass --rig <soundfont.sf2>, or set BATTUTA_SOUNDFONT to a soundfont \
+         path.\n\
+         \n\
+         No soundfont yet? GeneralUser GS, by S. Christian Collins, is the bank this project is \
+         developed against: all 128 General MIDI melodic presets, and a real grand piano at \
+         program 0. The bank is named rather than linked so that the recipe outlives any one \
+         download page.\n\
+         \n\
+         Not the demo bank that arrives beside fluid-synth — it holds no piano at all, so a Take \
+         stating no program renders as bells. It makes sound, which is exactly what makes it the \
+         worse failure.\n\
+         \n\
+         battuta never picks a soundfont for you: an audition heard through a Rig you did not \
+         choose is a judgement you cannot trust."
     )]
     NoRig,
 

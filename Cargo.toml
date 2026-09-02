@@ -5,6 +5,14 @@ edition = "2021"
 rust-version = "1.82"
 description = "The core of OliviaMIDI: read, change, compare and audition a Take."
 license = "MIT"
+repository = "https://github.com/JX-Shen/OliviaMIDI"
+readme = "README.md"
+keywords = ["midi", "music", "cli", "agent", "composition"]
+categories = ["command-line-utilities", "multimedia::audio", "parser-implementations"]
+
+# Agent operating instructions are how this repository is worked in, not part of
+# what the crate ships. They also name the machine's account layout.
+exclude = [".claude/", "AGENTS.md", "docs/agents/"]
 
 [lib]
 name = "battuta"

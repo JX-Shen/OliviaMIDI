@@ -1,5 +1,9 @@
 # Domain Docs
 
+From [`mattpocock/skills`](https://github.com/mattpocock/skills), kept as
+written — the examples below are that repository's, not this project's. See
+`docs/agents/README.md`.
+
 How the engineering skills should consume this repo's domain documentation when exploring the codebase.
 
 ## Before exploring, read these

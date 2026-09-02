@@ -242,6 +242,39 @@ Nothing may be made elegant before that loop closes. The failure mode to fear is
 learning Rust beautifully, writing an immaculate MIDI parser, and never having
 changed sixteen bars of music together with an agent.
 
+## Distribution
+
+`battuta` is published to crates.io under MIT, the repository is public, and
+`cargo install battuta` is the supported way to get `mid`. Publishing is a
+one-way door: a version can be yanked but never withdrawn, and the name is held
+for good. It is recorded here rather than assumed because nothing about the code
+requires it.
+
+**Holding the documents back was considered and rejected.** The case for it was
+that this file, the glossary and the decision records took more thought than the
+code did. The case against is evidence. A third of `src/` is comment, and
+thirty-three of those comments name an ADR or this file outright, several of them
+restating the option that was rejected and why — so withholding the documents
+would not have withheld the reasoning. It would only have left thirty-three
+references pointing at nothing, which advertises an omission without achieving
+it.
+
+The deciding argument is what the scarce thing actually is. Twenty-one recorded
+rejections across ten ADRs, and two ADRs amended in place rather than superseded,
+are a record nobody can reconstruct after the fact — including whoever wrote it.
+That kind of record is worth nothing held and something read.
+
+**Not shipped is not the same as not public.** `AGENTS.md` and `docs/agents/` are
+excluded from the crate because they describe how this repository is worked in
+rather than what the crate is, and a package should be honest about its own
+scope. They stay readable in the repository. `exclude` is not a privacy
+mechanism and must never be used as one — anything that would actually harm
+someone by being public has to be removed or rewritten, not merely left out of
+the tarball.
+
+Prebuilt binaries, a Homebrew tap and Rigs referable by name are all downstream
+of this, and none of them is V0.
+
 ## Non-goals
 
 - **A composition DSL, or any musical semantics in the edit format.** Edits are
