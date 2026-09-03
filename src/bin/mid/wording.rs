@@ -217,7 +217,7 @@ pub fn controller(
 ) -> Vec<String> {
     let mut row = vec![
         channel(held.channel),
-        format!("CC{}", held.controller),
+        controller_number(held.controller),
         match held.value {
             None => "unstated".to_string(),
             Some(value) => value.to_string(),
@@ -235,12 +235,27 @@ pub fn controller(
 /// The track is here where it is absent from the state above, for the reason it
 /// is on a `StatedProgram` row: this row describes an event somebody can go and
 /// change, and it is what a reader copies a `set_controller` address out of.
+/// A Controller as MIDI's shorthand and, where its table names one, that name:
+/// `CC64 (damper pedal)`.
+///
+/// The `CC` prefix is the attribution. A name here depends on nothing but MIDI —
+/// the way `pitch 66` is `F#4` — so unlike `GM violin` it needs no label saying
+/// whose word it is, and `pitch_name` carries none either. Where the table names
+/// nothing there is no parenthesis: *undefined* is the table saying nothing, and
+/// a bare number says that faithfully.
+pub fn controller_number(controller: u8) -> String {
+    match battuta::spec_name(controller) {
+        Some(name) => format!("CC{controller} ({name})"),
+        None => format!("CC{controller}"),
+    }
+}
+
 pub fn stated_controller(lines: Option<BarLines>, stated: &StatedController) -> Vec<String> {
     vec![
         at(lines, stated.tick),
         format!("track {}", stated.track),
         channel(stated.channel),
-        format!("CC{}", stated.controller),
+        controller_number(stated.controller),
         stated.value.to_string(),
     ]
 }

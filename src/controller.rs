@@ -212,3 +212,152 @@ impl Take {
         })
     }
 }
+
+/// What MIDI's own table calls a Controller, in lower case.
+///
+/// `None` where the specification defines no name — the numbers it leaves
+/// undefined, and everything from {FIRST_CHANNEL_MODE} up, which is not a
+/// Controller at all. *Undefined* is not a name; it is the table saying nothing,
+/// and a caller printing nothing is printing that faithfully. A number a vendor
+/// uses for its own purposes is exactly this case, and a reader seeing no
+/// parenthesis has learned something true: whatever the value means here was
+/// decided outside MIDI.
+///
+/// Quoted rather than improved on. CC64 is *damper pedal* in the specification
+/// and *sustain pedal* to every pianist, and the friendlier word would stop this
+/// being a quotation. The same rule keeps `modulation wheel` over *mod wheel*.
+///
+/// Unlike a GM name this needs no label of its own where it is printed: which
+/// control a number means depends on nothing but MIDI, the way pitch 66 is F#4
+/// in every Take, so the `CC` prefix a consumer already writes is the whole of
+/// the attribution. What it does *not* say is what the value will sound like,
+/// which is the Rig's and is never claimed here.
+///
+/// A wrong string here names the wrong control and would read as a plausible
+/// answer, which is `gm_name`'s hazard with a shorter table: check it against
+/// the MMA's own Control Change list rather than against another tool's.
+pub fn spec_name(controller: u8) -> Option<&'static str> {
+    const NAMES: [Option<&str>; 120] = [
+        Some("bank select"),
+        Some("modulation wheel"),
+        Some("breath controller"),
+        None,
+        Some("foot controller"),
+        Some("portamento time"),
+        Some("data entry msb"),
+        Some("channel volume"),
+        Some("balance"),
+        None,
+        Some("pan"),
+        Some("expression controller"),
+        Some("effect control 1"),
+        Some("effect control 2"),
+        None,
+        None,
+        Some("general purpose controller 1"),
+        Some("general purpose controller 2"),
+        Some("general purpose controller 3"),
+        Some("general purpose controller 4"),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some("bank select lsb"),
+        Some("modulation wheel lsb"),
+        Some("breath controller lsb"),
+        None,
+        Some("foot controller lsb"),
+        Some("portamento time lsb"),
+        None,
+        Some("channel volume lsb"),
+        Some("balance lsb"),
+        None,
+        Some("pan lsb"),
+        Some("expression controller lsb"),
+        Some("effect control 1 lsb"),
+        Some("effect control 2 lsb"),
+        None,
+        None,
+        Some("general purpose controller 1 lsb"),
+        Some("general purpose controller 2 lsb"),
+        Some("general purpose controller 3 lsb"),
+        Some("general purpose controller 4 lsb"),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some("damper pedal"),
+        Some("portamento on/off"),
+        Some("sostenuto"),
+        Some("soft pedal"),
+        Some("legato footswitch"),
+        Some("hold 2"),
+        Some("sound controller 1"),
+        Some("sound controller 2"),
+        Some("sound controller 3"),
+        Some("sound controller 4"),
+        Some("sound controller 5"),
+        Some("sound controller 6"),
+        Some("sound controller 7"),
+        Some("sound controller 8"),
+        Some("sound controller 9"),
+        Some("sound controller 10"),
+        Some("general purpose controller 5"),
+        Some("general purpose controller 6"),
+        Some("general purpose controller 7"),
+        Some("general purpose controller 8"),
+        Some("portamento control"),
+        None,
+        None,
+        None,
+        Some("high resolution velocity prefix"),
+        None,
+        None,
+        Some("effects 1 depth"),
+        Some("effects 2 depth"),
+        Some("effects 3 depth"),
+        Some("effects 4 depth"),
+        Some("effects 5 depth"),
+        Some("data increment"),
+        Some("data decrement"),
+        Some("non-registered parameter number lsb"),
+        Some("non-registered parameter number msb"),
+        Some("registered parameter number lsb"),
+        Some("registered parameter number msb"),
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    ];
+    NAMES.get(usize::from(controller)).copied().flatten()
+}

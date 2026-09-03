@@ -107,7 +107,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
             "controller".to_string(),
             crate::wording::controller_span(before_lines, difference),
             crate::wording::channel(difference.channel),
-            format!("CC{}", difference.controller),
+            crate::wording::controller_number(difference.controller),
             crate::wording::controller_difference(before_lines, after_lines, difference),
         ]);
     }

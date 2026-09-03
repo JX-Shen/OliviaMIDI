@@ -42,7 +42,7 @@ fn states_what_each_channel_of_the_passage_holds() {
         "\
 no programs stated
 
-channel 0  CC11  100
+channel 0  CC11 (expression controller)  100
 
 bar 3 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s2880:n0
 bar 4 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s4320:n0
@@ -118,10 +118,10 @@ fn lists_every_place_the_passage_states_a_controller() {
         "\
 no programs stated
 
-channel 0  CC11  40  peak 100 at bar 2 beat 3+360
+channel 0  CC11 (expression controller)  40  peak 100 at bar 2 beat 3+360
 
-bar 2 beat 2+240  track 1  channel 0  CC11  70
-bar 2 beat 3+360  track 1  channel 0  CC11  100
+bar 2 beat 2+240  track 1  channel 0  CC11 (expression controller)  70
+bar 2 beat 3+360  track 1  channel 0  CC11 (expression controller)  100
 
 bar 2 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s1440:n0
 "
@@ -163,13 +163,13 @@ fn states_where_the_passages_highest_value_falls() {
         "\
 no programs stated
 
-channel 0  CC11  40  peak 100 at bar 2 beat 3
+channel 0  CC11 (expression controller)  40  peak 100 at bar 2 beat 3
 
-bar 2 beat 1+240  track 1  channel 0  CC11  76
-bar 2 beat 2      track 1  channel 0  CC11  80
-bar 2 beat 2+240  track 1  channel 0  CC11  78
-bar 2 beat 3      track 1  channel 0  CC11  100
-bar 2 beat 3+240  track 1  channel 0  CC11  96
+bar 2 beat 1+240  track 1  channel 0  CC11 (expression controller)  76
+bar 2 beat 2      track 1  channel 0  CC11 (expression controller)  80
+bar 2 beat 2+240  track 1  channel 0  CC11 (expression controller)  78
+bar 2 beat 3      track 1  channel 0  CC11 (expression controller)  100
+bar 2 beat 3+240  track 1  channel 0  CC11 (expression controller)  96
 
 bar 2 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s1440:n0
 "
@@ -209,10 +209,10 @@ fn says_unstated_for_a_controller_the_passage_names_and_nothing_set() {
         "\
 no programs stated
 
-channel 0  CC64  unstated  peak 127 at bar 3 beat 2
+channel 0  CC64 (damper pedal)  unstated  peak 127 at bar 3 beat 2
 
-bar 3 beat 2  track 1  channel 0  CC64  127
-bar 4 beat 1  track 1  channel 0  CC64  0
+bar 3 beat 2  track 1  channel 0  CC64 (damper pedal)  127
+bar 4 beat 1  track 1  channel 0  CC64 (damper pedal)  0
 
 bar 3 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s2880:n0
 bar 4 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s4320:n0
@@ -320,7 +320,7 @@ fn reports_a_controller_difference_as_a_span_over_what_is_in_force() {
             before.to_str().expect("a path"),
             after.to_str().expect("a path"),
         ]),
-        "controller  bar 6 beat 1 until bar 7 beat 1  channel 0  CC11  70 -> 100\n"
+        "controller  bar 6 beat 1 until bar 7 beat 1  channel 0  CC11 (expression controller)  70 -> 100\n"
     );
 }
 
@@ -370,8 +370,8 @@ fn never_mentions_a_channel_mode_message() {
         "\
 no programs stated
 
-channel 0  CC11  100
-channel 1  CC64  0
+channel 0  CC11 (expression controller)  100
+channel 1  CC64 (damper pedal)           0
 
 bar 4 beat 1  track 1  D5  velocity 70  duration 1440  t1:c0:p74:s4320:n0
 bar 4 beat 1  track 2  F4  velocity 60  duration 480   t2:c1:p65:s4320:n0
@@ -486,7 +486,13 @@ fn delete_controller_takes_away_one_statement() {
         r#"{ "kind": "delete_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440 }"#,
     );
 
-    let json = common::json_output(&["inspect", out.to_str().expect("a path"), "--bars", "1:4", "--json"]);
+    let json = common::json_output(&[
+        "inspect",
+        out.to_str().expect("a path"),
+        "--bars",
+        "1:4",
+        "--json",
+    ]);
     let (_, stated) = common::controllers(&json);
     assert_eq!(
         stated,
@@ -516,7 +522,13 @@ fn move_controller_carries_a_statement_and_overwrites_the_destination() {
         r#"{ "kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 2880, "delta_ticks": -1440 }"#,
     );
 
-    let json = common::json_output(&["inspect", out.to_str().expect("a path"), "--bars", "1:4", "--json"]);
+    let json = common::json_output(&[
+        "inspect",
+        out.to_str().expect("a path"),
+        "--bars",
+        "1:4",
+        "--json",
+    ]);
     let (_, stated) = common::controllers(&json);
     assert_eq!(
         stated,
@@ -574,7 +586,12 @@ fn applied(
         480,
         &[(0, 3, 4)],
         controllers,
-        &[(0, 480, 69), (1440, 480, 69), (2880, 480, 69), (4320, 480, 69)],
+        &[
+            (0, 480, 69),
+            (1440, 480, 69),
+            (2880, 480, 69),
+            (4320, 480, 69),
+        ],
     );
     let edits = common::edit_set(dir.path(), "edits", edits);
     let out = dir.path().join("take-02.mid");
@@ -587,4 +604,45 @@ fn applied(
         .assert()
         .success();
     out
+}
+
+/// What MIDI's own table calls a Controller, printed beside the number, and
+/// nothing printed where the table names none.
+///
+/// Quoted rather than improved on: CC64 is *damper pedal* in the specification
+/// and *sustain pedal* to every pianist, and reaching for the friendlier word
+/// would stop the parenthesis being a quotation and start it being this tool's
+/// opinion of what the control is for.
+///
+/// The `CC` prefix is where the attribution sits, which is why there is no `GM`
+/// style label here. A GM name depends on which bank is loaded and so is a Rig
+/// fact needing one; which control a number *means* depends on nothing but
+/// MIDI, like `pitch 66` being `F#4`, and `pitch_name` carries no label either.
+///
+/// CC20 is one of the numbers the specification leaves undefined, and it gets no
+/// parenthesis at all. `undefined` is not a name — it is the table saying
+/// nothing — and the honest way to print that is to print nothing, as an
+/// unnamed Program prints `unstated` rather than 0.
+#[test]
+fn names_a_controller_the_way_midis_own_table_does() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_with_controllers(
+        &dir.path().join("named.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(1440, 11, 40), (1440, 20, 7)],
+        &[(0, 480, 69), (1440, 480, 69)],
+    );
+
+    assert_eq!(
+        common::human_output(&["inspect", take.to_str().expect("a path"), "--bars", "2:2"]),
+        "\
+no programs stated
+
+channel 0  CC11 (expression controller)  40
+channel 0  CC20                          7
+
+bar 2 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s1440:n0
+"
+    );
 }
