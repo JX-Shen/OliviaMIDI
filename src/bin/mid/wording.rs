@@ -236,7 +236,7 @@ pub fn controller(
 /// is on a `StatedProgram` row: this row describes an event somebody can go and
 /// change, and it is what a reader copies a `set_controller` address out of.
 /// A Controller as MIDI's shorthand and, where its table names one, that name:
-/// `CC64 (damper pedal)`.
+/// `CC64 (damper pedal on/off (sustain))`.
 ///
 /// The `CC` prefix is the attribution. A name here depends on nothing but MIDI —
 /// the way `pitch 66` is `F#4` — so unlike `GM violin` it needs no label saying
@@ -245,9 +245,60 @@ pub fn controller(
 /// a bare number says that faithfully.
 pub fn controller_number(controller: u8) -> String {
     match battuta::spec_name(controller) {
-        Some(name) => format!("CC{controller} ({name})"),
+        Some(name) => format!("CC{controller} ({})", trimmed(name)),
         None => format!("CC{controller}"),
     }
+}
+
+/// The specification's name with the two clauses a table cell has no use for
+/// taken out, and nothing else touched.
+///
+/// Deleting some of a quotation is not the same as replacing a word of it, and
+/// only these two are deleted:
+///
+/// - a cross reference to another document — `sound controller 6 (default: decay
+///   time - see mma rp-021)` loses ` - see mma rp-021`. It points at a paper the
+///   reader does not have and says nothing about the control.
+/// - a historical alias — `channel volume (formerly main volume)` loses the
+///   whole parenthesis and `lsb for control 7 (channel volume, formerly main
+///   volume)` loses only the clause, because the rest of that parenthesis is the
+///   name. What a control used to be called is not what it is.
+///
+/// What is deliberately *kept* is everything that says what the control does:
+/// `on/off`, which is how the specification says a control is a switch, and
+/// `default: brightness`, which is the whole of why CC74 is used as brightness.
+/// Trimming those would leave a name that had stopped being informative rather
+/// than one that had stopped being long.
+///
+/// This is `mid`'s decision, not `battuta`'s: the library hands over the
+/// quotation whole and a consumer with room for all of it may print all of it
+/// (ADR-0005).
+fn trimmed(name: &str) -> String {
+    let mut name = name.to_string();
+    // The cross reference runs to the end of whatever clause holds it.
+    if let Some(start) = name.find(" - see ") {
+        let end = name[start..]
+            .find(')')
+            .map(|offset| start + offset)
+            .unwrap_or(name.len());
+        name.replace_range(start..end, "");
+    }
+    // The alias, as a whole parenthesis where it is the whole of one and as a
+    // clause where it is not.
+    if let Some(start) = name.find(", formerly ") {
+        let end = name[start..]
+            .find(')')
+            .map(|offset| start + offset)
+            .unwrap_or(name.len());
+        name.replace_range(start..end, "");
+    } else if let Some(start) = name.find(" (formerly ") {
+        let end = name[start..]
+            .find(')')
+            .map(|offset| start + offset + 1)
+            .unwrap_or(name.len());
+        name.replace_range(start..end, "");
+    }
+    name
 }
 
 pub fn stated_controller(lines: Option<BarLines>, stated: &StatedController) -> Vec<String> {

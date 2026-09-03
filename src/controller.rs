@@ -213,39 +213,47 @@ impl Take {
     }
 }
 
-/// What MIDI's own table calls a Controller, in lower case.
+/// What MIDI's own table calls a Controller, in lower case and in its own words.
 ///
-/// `None` where the specification defines no name — the numbers it leaves
-/// undefined, and everything from {FIRST_CHANNEL_MODE} up, which is not a
-/// Controller at all. *Undefined* is not a name; it is the table saying nothing,
-/// and a caller printing nothing is printing that faithfully. A number a vendor
-/// uses for its own purposes is exactly this case, and a reader seeing no
-/// parenthesis has learned something true: whatever the value means here was
-/// decided outside MIDI.
+/// The quotation, stored whole so that it can be checked a line at a time
+/// against the MMA's Control Change list. How much of it is worth a table cell
+/// is the consumer's decision, and `mid` trims two kinds of clause it has no use
+/// for; the library hands over what the document says (ADR-0005).
 ///
-/// Quoted rather than improved on. CC64 is *damper pedal* in the specification
-/// and *sustain pedal* to every pianist, and the friendlier word would stop this
-/// being a quotation. The same rule keeps `modulation wheel` over *mod wheel*.
+/// `None` where the specification defines no name: the numbers it leaves
+/// undefined, the LSB rows whose own control is undefined, and everything from
+/// `FIRST_CHANNEL_MODE` up, which is not a Controller at all. *Undefined* is not
+/// a name — it is the table saying nothing — and a caller printing nothing is
+/// printing that faithfully. A number a vendor uses for its own purposes is
+/// exactly this case, and a reader seeing no name has learned something true:
+/// whatever the value means here was decided outside MIDI.
 ///
-/// Unlike a GM name this needs no label of its own where it is printed: which
-/// control a number means depends on nothing but MIDI, the way pitch 66 is F#4
-/// in every Take, so the `CC` prefix a consumer already writes is the whole of
-/// the attribution. What it does *not* say is what the value will sound like,
-/// which is the Rig's and is never claimed here.
+/// Quoted rather than improved on. CC64 is *damper pedal on/off (sustain)* in
+/// the specification and *sustain pedal* to every pianist, and the friendlier
+/// word would stop this being a quotation and start it being this tool's opinion
+/// of what the control is for. The same rule keeps `modulation wheel or lever`
+/// whole.
 ///
-/// A wrong string here names the wrong control and would read as a plausible
-/// answer, which is `gm_name`'s hazard with a shorter table: check it against
-/// the MMA's own Control Change list rather than against another tool's.
+/// Unlike a GM name this needs no label where it is printed: which control a
+/// number means depends on nothing but MIDI, the way pitch 66 is F#4 in every
+/// Take, so the `CC` a consumer already writes is the whole of the attribution.
+/// What it does *not* say is what the value will sound like, which is the Rig's
+/// and is never claimed here.
+///
+/// A wrong string names the wrong control and would read as a plausible answer,
+/// which is `gm_name`'s hazard over a shorter table. Checked against
+/// <https://midi.org/midi-1-0-control-change-messages>; check any change the
+/// same way, and against the document rather than against another tool.
 pub fn spec_name(controller: u8) -> Option<&'static str> {
     const NAMES: [Option<&str>; 120] = [
         Some("bank select"),
-        Some("modulation wheel"),
+        Some("modulation wheel or lever"),
         Some("breath controller"),
         None,
         Some("foot controller"),
         Some("portamento time"),
         Some("data entry msb"),
-        Some("channel volume"),
+        Some("channel volume (formerly main volume)"),
         Some("balance"),
         None,
         Some("pan"),
@@ -270,28 +278,26 @@ pub fn spec_name(controller: u8) -> Option<&'static str> {
         None,
         None,
         None,
-        Some("bank select lsb"),
-        Some("modulation wheel lsb"),
-        Some("breath controller lsb"),
+        Some("lsb for control 0 (bank select)"),
+        Some("lsb for control 1 (modulation wheel or lever)"),
+        Some("lsb for control 2 (breath controller)"),
         None,
-        Some("foot controller lsb"),
-        Some("portamento time lsb"),
+        Some("lsb for control 4 (foot controller)"),
+        Some("lsb for control 5 (portamento time)"),
+        Some("lsb for control 6 (data entry)"),
+        Some("lsb for control 7 (channel volume, formerly main volume)"),
+        Some("lsb for control 8 (balance)"),
         None,
-        Some("channel volume lsb"),
-        Some("balance lsb"),
-        None,
-        Some("pan lsb"),
-        Some("expression controller lsb"),
-        Some("effect control 1 lsb"),
-        Some("effect control 2 lsb"),
-        None,
-        None,
-        Some("general purpose controller 1 lsb"),
-        Some("general purpose controller 2 lsb"),
-        Some("general purpose controller 3 lsb"),
-        Some("general purpose controller 4 lsb"),
+        Some("lsb for control 10 (pan)"),
+        Some("lsb for control 11 (expression controller)"),
+        Some("lsb for control 12 (effect control 1)"),
+        Some("lsb for control 13 (effect control 2)"),
         None,
         None,
+        Some("lsb for control 16 (general purpose controller 1)"),
+        Some("lsb for control 17 (general purpose controller 2)"),
+        Some("lsb for control 18 (general purpose controller 3)"),
+        Some("lsb for control 19 (general purpose controller 4)"),
         None,
         None,
         None,
@@ -302,22 +308,24 @@ pub fn spec_name(controller: u8) -> Option<&'static str> {
         None,
         None,
         None,
-        Some("damper pedal"),
+        None,
+        None,
+        Some("damper pedal on/off (sustain)"),
         Some("portamento on/off"),
-        Some("sostenuto"),
-        Some("soft pedal"),
+        Some("sostenuto on/off"),
+        Some("soft pedal on/off"),
         Some("legato footswitch"),
         Some("hold 2"),
-        Some("sound controller 1"),
-        Some("sound controller 2"),
-        Some("sound controller 3"),
-        Some("sound controller 4"),
-        Some("sound controller 5"),
-        Some("sound controller 6"),
-        Some("sound controller 7"),
-        Some("sound controller 8"),
-        Some("sound controller 9"),
-        Some("sound controller 10"),
+        Some("sound controller 1 (default: sound variation)"),
+        Some("sound controller 2 (default: timbre/harmonic intens.)"),
+        Some("sound controller 3 (default: release time)"),
+        Some("sound controller 4 (default: attack time)"),
+        Some("sound controller 5 (default: brightness)"),
+        Some("sound controller 6 (default: decay time - see mma rp-021)"),
+        Some("sound controller 7 (default: vibrato rate - see mma rp-021)"),
+        Some("sound controller 8 (default: vibrato depth - see mma rp-021)"),
+        Some("sound controller 9 (default: vibrato delay - see mma rp-021)"),
+        Some("sound controller 10 (default undefined - see mma rp-021)"),
         Some("general purpose controller 5"),
         Some("general purpose controller 6"),
         Some("general purpose controller 7"),
@@ -329,17 +337,17 @@ pub fn spec_name(controller: u8) -> Option<&'static str> {
         Some("high resolution velocity prefix"),
         None,
         None,
-        Some("effects 1 depth"),
-        Some("effects 2 depth"),
-        Some("effects 3 depth"),
-        Some("effects 4 depth"),
-        Some("effects 5 depth"),
-        Some("data increment"),
-        Some("data decrement"),
-        Some("non-registered parameter number lsb"),
-        Some("non-registered parameter number msb"),
-        Some("registered parameter number lsb"),
-        Some("registered parameter number msb"),
+        Some("effects 1 depth (default: reverb send level - see mma rp-023)"),
+        Some("effects 2 depth (formerly tremolo depth)"),
+        Some("effects 3 depth (default: chorus send level - see mma rp-023)"),
+        Some("effects 4 depth (formerly celeste [detune] depth)"),
+        Some("effects 5 depth (formerly phaser depth)"),
+        Some("data increment (data entry +1)"),
+        Some("data decrement (data entry -1)"),
+        Some("non-registered parameter number (nrpn) - lsb"),
+        Some("non-registered parameter number (nrpn) - msb"),
+        Some("registered parameter number (rpn) - lsb"),
+        Some("registered parameter number (rpn) - msb"),
         None,
         None,
         None,

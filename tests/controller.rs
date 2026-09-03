@@ -209,10 +209,10 @@ fn says_unstated_for_a_controller_the_passage_names_and_nothing_set() {
         "\
 no programs stated
 
-channel 0  CC64 (damper pedal)  unstated  peak 127 at bar 3 beat 2
+channel 0  CC64 (damper pedal on/off (sustain))  unstated  peak 127 at bar 3 beat 2
 
-bar 3 beat 2  track 1  channel 0  CC64 (damper pedal)  127
-bar 4 beat 1  track 1  channel 0  CC64 (damper pedal)  0
+bar 3 beat 2  track 1  channel 0  CC64 (damper pedal on/off (sustain))  127
+bar 4 beat 1  track 1  channel 0  CC64 (damper pedal on/off (sustain))  0
 
 bar 3 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s2880:n0
 bar 4 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s4320:n0
@@ -370,8 +370,8 @@ fn never_mentions_a_channel_mode_message() {
         "\
 no programs stated
 
-channel 0  CC11 (expression controller)  100
-channel 1  CC64 (damper pedal)           0
+channel 0  CC11 (expression controller)          100
+channel 1  CC64 (damper pedal on/off (sustain))  0
 
 bar 4 beat 1  track 1  D5  velocity 70  duration 1440  t1:c0:p74:s4320:n0
 bar 4 beat 1  track 2  F4  velocity 60  duration 480   t2:c1:p65:s4320:n0
@@ -623,6 +623,9 @@ fn applied(
 /// parenthesis at all. `undefined` is not a name — it is the table saying
 /// nothing — and the honest way to print that is to print nothing, as an
 /// unnamed Program prints `unstated` rather than 0.
+///
+/// Every name here was read against the MMA's own Control Change list rather
+/// than against another tool's table.
 #[test]
 fn names_a_controller_the_way_midis_own_table_does() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -641,6 +644,59 @@ no programs stated
 
 channel 0  CC11 (expression controller)  40
 channel 0  CC20                          7
+
+bar 2 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s1440:n0
+"
+    );
+}
+
+/// The two clauses a name loses on the way to a table cell, and everything it
+/// keeps.
+///
+/// Deleting some of a quotation is not replacing a word of it, and only two
+/// kinds of clause are deleted — a cross reference to a paper the reader does
+/// not have, and what a control used to be called. Each of the five rows here is
+/// one case of that rule, read against the MMA's own list:
+///
+/// - CC7 is *channel volume (formerly main volume)*: the alias is the whole
+///   parenthesis, so the whole parenthesis goes
+/// - CC20 the specification leaves undefined, so there is no name to print
+/// - CC39 is *lsb for control 7 (channel volume, formerly main volume)*: here
+///   the alias is a clause inside a parenthesis whose rest *is* the name, so only
+///   the clause goes
+/// - CC74 is *sound controller 5 (default: brightness)* and keeps every word.
+///   `default: brightness` is the whole of why CC74 is used as brightness, and a
+///   trim that took it would leave a name that had stopped being informative
+///   rather than one that had stopped being long
+/// - CC75 adds *– see mma rp-021*, which points at a document the reader does
+///   not have and says nothing about the control
+#[test]
+fn trims_a_cross_reference_and_an_alias_and_nothing_else() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_with_controllers(
+        &dir.path().join("trims.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[
+            (1440, 7, 90),
+            (1440, 20, 7),
+            (1440, 39, 3),
+            (1440, 74, 64),
+            (1440, 75, 20),
+        ],
+        &[(0, 480, 69), (1440, 480, 69)],
+    );
+
+    assert_eq!(
+        common::human_output(&["inspect", take.to_str().expect("a path"), "--bars", "2:2"]),
+        "\
+no programs stated
+
+channel 0  CC7 (channel volume)                             90
+channel 0  CC20                                             7
+channel 0  CC39 (lsb for control 7 (channel volume))        3
+channel 0  CC74 (sound controller 5 (default: brightness))  64
+channel 0  CC75 (sound controller 6 (default: decay time))  20
 
 bar 2 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s1440:n0
 "

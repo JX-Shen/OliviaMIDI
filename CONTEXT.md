@@ -300,10 +300,13 @@ value is in force and where the highest one falls, both read straight out of the
 file. See #13.
 
 Its **spec name** is what `mid` may print beside the number — `CC64 (damper
-pedal)`. Quoted from MIDI's own table and never improved on: *sustain pedal* is
-what a pianist calls CC64 and *damper pedal* is what the specification calls it,
-and a gloss that reached for the friendlier word would have stopped being a
-quotation and started being this tool's opinion of what the control is for. The
+pedal on/off (sustain))`. Quoted from MIDI's own table and never improved on:
+*sustain pedal* is what a pianist calls CC64 and *damper pedal on/off (sustain)*
+is what the specification calls it, and a gloss that reached for the friendlier
+word would have stopped being a quotation and started being this tool's opinion
+of what the control is for. Some of a quotation may be dropped where a table
+cell cannot hold it — a cross reference to another document, or what a control
+used to be called — but no word of it is ever exchanged for a better one. The
 `CC` prefix is where the attribution sits, which is why the name needs no `GM`
 style label of its own — unlike a GM name, it does not depend on which bank is
 loaded. The convention that a value of 64 or more means a switch is *on* comes
