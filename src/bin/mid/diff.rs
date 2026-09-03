@@ -98,6 +98,19 @@ pub fn run(args: Args) -> battuta::Result<()> {
             crate::wording::program_difference(difference),
         ]);
     }
+    // Controller data next, and above the notes for the reason the orchestration
+    // is: what the expression is doing reframes every note row under it. One row
+    // per stretch the two Takes disagree over, never one per event — the whole
+    // of #13's difficulty, settled by comparing what is in force (ADR-0007).
+    for difference in &diff.controllers {
+        rows.push(vec![
+            "controller".to_string(),
+            crate::wording::controller_span(before_lines, difference),
+            crate::wording::channel(difference.channel),
+            format!("CC{}", difference.controller),
+            crate::wording::controller_difference(before_lines, after_lines, difference),
+        ]);
+    }
     for note in &diff.added {
         rows.push(described("added", after_lines, note));
     }

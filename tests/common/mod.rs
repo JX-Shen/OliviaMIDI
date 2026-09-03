@@ -179,6 +179,20 @@ pub fn programs(json: &str) -> (Vec<serde_json::Value>, Vec<serde_json::Value>) 
     (array("programs"), array("stated_programs"))
 }
 
+/// What `inspect --json` says each channel holds for a Controller, and where the
+/// passage states another: the `controllers` and `stated_controllers` of the
+/// payload.
+pub fn controllers(json: &str) -> (Vec<serde_json::Value>, Vec<serde_json::Value>) {
+    let listing = listing(json);
+    let array = |key: &str| {
+        listing[key]
+            .as_array()
+            .unwrap_or_else(|| panic!("the payload has {key}"))
+            .clone()
+    };
+    (array("controllers"), array("stated_controllers"))
+}
+
 fn listing(json: &str) -> serde_json::Value {
     serde_json::from_str(json).expect("inspect --json is JSON")
 }
@@ -535,6 +549,19 @@ pub fn build_take_past_the_tick_range(path: &Path) -> PathBuf {
 /// lines line up with each other — and a `contains` on one line of it cannot
 /// see any of that.
 pub fn human_output(args: &[&str]) -> String {
+    stdout(args)
+}
+
+/// The stdout of a `mid ... --json` run that must succeed.
+///
+/// The same run as `human_output`, under the name that says which of the two
+/// surfaces is under test: one is a layout a person reads, the other a payload
+/// an agent parses, and a test should say which it is asserting.
+pub fn json_output(args: &[&str]) -> String {
+    stdout(args)
+}
+
+fn stdout(args: &[&str]) -> String {
     let output = mid().args(args).output().expect("mid runs");
     assert!(
         output.status.success(),

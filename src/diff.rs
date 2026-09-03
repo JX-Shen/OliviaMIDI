@@ -1,3 +1,4 @@
+use crate::controller::StatedController;
 use crate::error::{Error, Result};
 use crate::note::{Note, NoteId};
 use crate::program::StatedProgram;
@@ -28,6 +29,47 @@ pub struct Diff {
     /// difference: which Program is selected is in the file, and what it sounds
     /// like is not compared here at all.
     pub programs: Vec<ProgramDifference>,
+
+    /// Where the two Takes hold different values for a Controller. Never a Rig
+    /// difference either, and never a list of events: what is compared is what
+    /// is in force (ADR-0007).
+    pub controllers: Vec<ControllerDifference>,
+}
+
+/// One Controller, one stretch of the Piece, and what each Take holds for it
+/// there.
+///
+/// A span rather than a row per event, which is the whole of why forty
+/// differences become one. `from` is the Tick the two Takes stop agreeing about
+/// what is in force and `until` the Tick they agree again — `None` where they
+/// never do, which is a different statement from agreeing at the last Tick
+/// either of them happens to hold.
+///
+/// Nothing here claims that a stretch of events in one Take *is* a stretch in
+/// the other, moved. That claim would need a parameter under ADR-0004; the two
+/// sides are read separately and this only says where they differ.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ControllerDifference {
+    pub channel: u8,
+    pub controller: u8,
+    pub from: u32,
+    pub until: Option<u32>,
+    pub before: ControllerSide,
+    pub after: ControllerSide,
+}
+
+/// What one Take holds for one Controller across a span: at its start, at its
+/// end, and the highest anywhere in it.
+///
+/// Every field is optional together, because a Take may hold nothing at all for
+/// this Controller across the span — the case a Take stating 0 must never be
+/// confused with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ControllerSide {
+    pub at_start: Option<u8>,
+    pub at_end: Option<u8>,
+    pub peak: Option<u8>,
+    pub peak_at: Option<u32>,
 }
 
 /// One channel, one moment, and the two Programs the Takes have it on there.
@@ -82,7 +124,8 @@ pub enum Change {
 impl Diff {
     /// Whether the two Takes say the same thing about the Piece.
     ///
-    /// The orchestration counts. A Take whose horn part was a violin part has
+    /// The orchestration and the controller data count. A Take whose horn part
+    /// was a violin part has
     /// changed, in the file and to the ear, and a diff answering "no differences"
     /// to it would be failing at the one job `CHARTER.md` gives it — being the
     /// surface a human checks the agent on.
@@ -94,6 +137,7 @@ impl Diff {
             && self.removed.is_empty()
             && self.changed.is_empty()
             && self.programs.is_empty()
+            && self.controllers.is_empty()
     }
 }
 
@@ -236,6 +280,7 @@ pub fn diff(before: &Take, after: &Take, tolerance: Option<u32>) -> Result<Diff>
         removed,
         changed,
         programs: program_differences(before, after)?,
+        controllers: controller_differences(before, after)?,
     })
 }
 
@@ -301,6 +346,156 @@ fn program_differences(before: &Take, after: &Take) -> Result<Vec<ProgramDiffere
         }
     }
     Ok(differences)
+}
+
+/// Where the two Takes hold different values for a Controller.
+///
+/// Compared at every Tick either Take says anything about that Controller, plus
+/// Tick 0, because a Take that opens holding a value and one that holds nothing
+/// differ from the first note. A run of moments that disagree collapses into the
+/// one span that states it, which is what turns a crescendo's forty events into
+/// a row.
+///
+/// A span closes at the first moment the two agree again, and `until` is that
+/// Tick — the moment they are back together, not the last moment they were
+/// apart, so that reading `from` and `until` as a half-open stretch is reading
+/// it correctly. A span that never closes carries `None`.
+fn controller_differences(before: &Take, after: &Take) -> Result<Vec<ControllerDifference>> {
+    let before_stated = before.stated_controllers()?;
+    let after_stated = after.stated_controllers()?;
+
+    let mut pairs: Vec<(u8, u8)> = before_stated
+        .iter()
+        .chain(after_stated.iter())
+        .map(|stated| (stated.channel, stated.controller))
+        .collect();
+    pairs.sort_unstable();
+    pairs.dedup();
+
+    let mut differences = Vec::new();
+    for (channel, controller) in pairs {
+        let mut moments: Vec<u32> = std::iter::once(0)
+            .chain(
+                before_stated
+                    .iter()
+                    .chain(after_stated.iter())
+                    .filter(|stated| stated.channel == channel && stated.controller == controller)
+                    .map(|stated| stated.tick),
+            )
+            .collect();
+        moments.sort_unstable();
+        moments.dedup();
+
+        let mut open: Option<u32> = None;
+        for &at in &moments {
+            let differs = held(&before_stated, channel, controller, at)
+                != held(&after_stated, channel, controller, at);
+            match (open, differs) {
+                (None, true) => open = Some(at),
+                (Some(from), false) => {
+                    differences.push(span(
+                        &before_stated,
+                        &after_stated,
+                        channel,
+                        controller,
+                        from,
+                        Some(at),
+                        &moments,
+                    ));
+                    open = None;
+                }
+                _ => {}
+            }
+        }
+        if let Some(from) = open {
+            differences.push(span(
+                &before_stated,
+                &after_stated,
+                channel,
+                controller,
+                from,
+                None,
+                &moments,
+            ));
+        }
+    }
+    Ok(differences)
+}
+
+/// One span, with each Take's reading of it.
+fn span(
+    before_stated: &[StatedController],
+    after_stated: &[StatedController],
+    channel: u8,
+    controller: u8,
+    from: u32,
+    until: Option<u32>,
+    moments: &[u32],
+) -> ControllerDifference {
+    ControllerDifference {
+        channel,
+        controller,
+        from,
+        until,
+        before: side(before_stated, channel, controller, from, until, moments),
+        after: side(after_stated, channel, controller, from, until, moments),
+    }
+}
+
+/// What one Take holds for one Controller across a span.
+///
+/// The peak considers the value in force at `from` as well as everything stated
+/// inside the span: that value is in force during the span like any other, and a
+/// span the Take says nothing new in still holds something. Strictly greater, so
+/// a value reached twice is reported at the first of the two.
+fn side(
+    stated: &[StatedController],
+    channel: u8,
+    controller: u8,
+    from: u32,
+    until: Option<u32>,
+    moments: &[u32],
+) -> ControllerSide {
+    let at_start = held(stated, channel, controller, from);
+    let last = moments
+        .iter()
+        .copied()
+        .rfind(|&at| until.map(|until| at < until).unwrap_or(true))
+        .unwrap_or(from);
+
+    let mut peak = at_start;
+    let mut peak_at = at_start.map(|_| from);
+    for inside in stated
+        .iter()
+        .filter(|stated| stated.channel == channel && stated.controller == controller)
+        .filter(|stated| {
+            from < stated.tick && until.map(|until| stated.tick < until).unwrap_or(true)
+        })
+    {
+        if peak.map(|peak| inside.value > peak).unwrap_or(true) {
+            peak = Some(inside.value);
+            peak_at = Some(inside.tick);
+        }
+    }
+
+    ControllerSide {
+        at_start,
+        at_end: held(stated, channel, controller, last),
+        peak,
+        peak_at,
+    }
+}
+
+/// The value in force for a Controller on a channel at a Tick: the last thing
+/// said at or before it, in the order `stated_controllers` fixes.
+fn held(stated: &[StatedController], channel: u8, controller: u8, at: u32) -> Option<u8> {
+    stated
+        .iter()
+        .filter(|stated| {
+            stated.channel == channel && stated.controller == controller && stated.tick <= at
+        })
+        .map(|stated| stated.value)
+        .next_back()
 }
 
 /// The Program in force on a channel at a Tick: the last thing said at or before

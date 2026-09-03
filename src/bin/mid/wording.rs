@@ -18,7 +18,8 @@
 //! what this does.
 
 use battuta::{
-    BarLines, Controller, Note, Program, ProgramDifference, StatedController, StatedProgram,
+    BarLines, Controller, ControllerDifference, ControllerSide, Note, Program, ProgramDifference,
+    StatedController, StatedProgram,
 };
 
 /// Where a Tick is: musically if the Take says enough to tell, and in Ticks
@@ -242,6 +243,51 @@ pub fn stated_controller(lines: Option<BarLines>, stated: &StatedController) -> 
         format!("CC{}", stated.controller),
         stated.value.to_string(),
     ]
+}
+
+/// The stretch a controller difference covers: `bar 6 beat 1 until bar 7 beat
+/// 1`.
+///
+/// `until` names the Tick the two Takes agree again, so the stretch reads as
+/// half-open — up to that Bar and Beat, not through it. A span that never closes
+/// says so in words rather than borrowing the last Tick either Take happens to
+/// hold, which would read as a moment the two came back together.
+pub fn controller_span(lines: Option<BarLines>, difference: &ControllerDifference) -> String {
+    match difference.until {
+        None => format!("{} onwards", at(lines, difference.from)),
+        Some(until) => format!("{} until {}", at(lines, difference.from), at(lines, until)),
+    }
+}
+
+/// What the two Takes hold for a Controller across the span: `70 -> 100`.
+///
+/// Each side is what it holds where the span begins, which is the fact a
+/// listener starting there hears. Where a side reaches something higher inside
+/// the span it says so — `70 (peak 85 at bar 6 beat 2) -> 100` — and where it
+/// does not, the clause is left off rather than restating the number beside it.
+///
+/// `unstated` on either side, in the same shape as the numbers, for the reason
+/// `program_difference` prints it: a blank would read as nothing having been
+/// said rather than as the Take saying nothing.
+pub fn controller_difference(
+    before_lines: Option<BarLines>,
+    after_lines: Option<BarLines>,
+    difference: &ControllerDifference,
+) -> String {
+    let side = |lines, side: &ControllerSide| match side.at_start {
+        None => "unstated".to_string(),
+        Some(value) => match (side.peak, side.peak_at) {
+            (Some(peak), Some(peak_at)) if peak > value => {
+                format!("{value} (peak {peak} at {})", at(lines, peak_at))
+            }
+            _ => value.to_string(),
+        },
+    };
+    format!(
+        "{} -> {}",
+        side(before_lines, &difference.before),
+        side(after_lines, &difference.after)
+    )
 }
 
 /// What one channel is on: the state a passage begins in.

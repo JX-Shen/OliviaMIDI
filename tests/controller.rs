@@ -219,3 +219,107 @@ bar 4 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s4320:n0
 "
     );
 }
+
+/// What an agent is handed: the state and every event, and no gloss on either.
+///
+/// The state carries `null` rather than 0 where the Take set nothing, which is
+/// the payload's version of `unstated` — an agent deciding whether to write a
+/// `set_controller` needs the two apart for the reason a human reading the
+/// terminal does.
+///
+/// Asserted whole, so that a spec name arriving in the payload later would fail
+/// here. A name is a gloss for somebody reading a terminal, and an agent is
+/// entitled to one spelling of a fact — the same cut #7 made for pitch names.
+#[test]
+fn hands_an_agent_the_state_and_every_event() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_with_controllers(
+        &dir.path().join("pedal.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(3360, 64, 127), (4320, 64, 0)],
+        &[
+            (0, 480, 69),
+            (1440, 480, 69),
+            (2880, 480, 69),
+            (4320, 480, 69),
+        ],
+    );
+
+    let json = common::json_output(&[
+        "inspect",
+        take.to_str().expect("a path"),
+        "--bars",
+        "3:4",
+        "--json",
+    ]);
+    let (controllers, stated) = common::controllers(&json);
+
+    assert_eq!(
+        controllers,
+        vec![serde_json::json!({
+            "channel": 0,
+            "controller": 64,
+            "value": null,
+            "peak": 127,
+            "peak_at": 3360,
+        })]
+    );
+    assert_eq!(
+        stated,
+        vec![
+            serde_json::json!({
+                "track": 1,
+                "channel": 0,
+                "controller": 64,
+                "tick": 3360,
+                "value": 127,
+            }),
+            serde_json::json!({
+                "track": 1,
+                "channel": 0,
+                "controller": 64,
+                "tick": 4320,
+                "value": 0,
+            }),
+        ]
+    );
+}
+
+/// The difference #13 was written to make sayable: the expression now reaches
+/// 100 by Bar 6 where it used to reach it by Bar 7.
+///
+/// One row, not forty. It is a span over what is *in force* — from the Tick the
+/// two Takes stop agreeing to the Tick they agree again — and every number in it
+/// is read out of one file or the other. Nothing here decides that these forty
+/// events and those forty events were the same crescendo; that claim would need
+/// a parameter under ADR-0004, and it is not needed to say the sentence
+/// (ADR-0007).
+#[test]
+fn reports_a_controller_difference_as_a_span_over_what_is_in_force() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let notes = &[(5760, 480, 69), (7200, 480, 69), (8640, 480, 69)];
+    let before = common::build_take_with_controllers(
+        &dir.path().join("before.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(5760, 11, 40), (7200, 11, 70), (8640, 11, 100)],
+        notes,
+    );
+    let after = common::build_take_with_controllers(
+        &dir.path().join("after.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(5760, 11, 40), (7200, 11, 100), (8640, 11, 100)],
+        notes,
+    );
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path"),
+        ]),
+        "controller  bar 6 beat 1 until bar 7 beat 1  channel 0  CC11  70 -> 100\n"
+    );
+}

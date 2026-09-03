@@ -23,7 +23,7 @@ mod track;
 
 pub use bars::{BarLines, BarRange, Position, TickSpan};
 pub use controller::{Controller, Controllers, StatedController};
-pub use diff::{Change, Diff, NoteChange, ProgramDifference};
+pub use diff::{Change, ControllerDifference, ControllerSide, Diff, NoteChange, ProgramDifference};
 pub use edit::{apply, Edit, EditSet};
 pub use error::{Error, Result};
 pub use note::{pitch_name, Note, NoteId, PitchName};

@@ -53,13 +53,20 @@ pub struct Args {
 /// Program belongs to a channel, not to a note, so there is nowhere in an array
 /// of notes to put one that would not be a lie about what holds it.
 ///
-/// No General MIDI name here, for the reason #7 kept pitch names out of the
-/// payload: a name is a gloss for a human reading a terminal, and an agent is
-/// entitled to one spelling of a fact. The number is the fact.
+/// No General MIDI name here, and no Controller spec name either, for the reason
+/// #7 kept pitch names out of the payload: a name is a gloss for a human reading
+/// a terminal, and an agent is entitled to one spelling of a fact. The number is
+/// the fact.
+///
+/// A Controller's state carries `null` where the Take set nothing, which is what
+/// `unstated` is on the terminal. An agent deciding whether to write a
+/// `set_controller` needs 0 and nothing apart for the reason a human does.
 #[derive(serde::Serialize)]
 struct Listing {
     programs: Vec<battuta::Program>,
     stated_programs: Vec<battuta::StatedProgram>,
+    controllers: Vec<battuta::Controller>,
+    stated_controllers: Vec<battuta::StatedController>,
     notes: Vec<battuta::Note>,
 }
 
@@ -75,6 +82,8 @@ pub fn run(args: Args) -> battuta::Result<()> {
             crate::json(&Listing {
                 programs: programs.programs,
                 stated_programs: programs.stated,
+                controllers: controllers.controllers,
+                stated_controllers: controllers.stated,
                 notes,
             })
         );
