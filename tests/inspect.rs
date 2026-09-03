@@ -350,6 +350,8 @@ fn lists_a_passage_by_bar_beat_and_note_name() {
     assert_eq!(
         common::human_output(&["inspect", FIXTURE, "--bars", "5:6"]),
         "\
+no programs stated
+
 bar 5 beat 1  track 1  F#4  velocity 50  duration 955   t1:c0:p66:s5760:n0
 bar 5 beat 1  track 2  A2   velocity 45  duration 475   t2:c1:p45:s5760:n0
 bar 5 beat 2  track 2  A3   velocity 38  duration 955   t2:c1:p57:s6240:n0
@@ -379,6 +381,8 @@ fn falls_back_to_ticks_when_the_bars_cannot_be_derived() {
     assert_eq!(
         common::human_output(&["inspect", take.to_str().expect("a path")]),
         "\
+no programs stated
+
 tick 0    track 1  C4  velocity 64  duration 240  t1:c0:p60:s0:n0
 tick 960  track 1  D4  velocity 64  duration 240  t1:c0:p62:s960:n0
 "
@@ -399,7 +403,7 @@ fn places_a_note_that_does_not_land_on_a_beat() {
     );
     assert_eq!(
         common::human_output(&["inspect", take.to_str().expect("a path")]),
-        "bar 1 beat 1+240  track 1  F#4  velocity 64  duration 240  t1:c0:p66:s240:n0\n"
+        "no programs stated\n\nbar 1 beat 1+240  track 1  F#4  velocity 64  duration 240  t1:c0:p66:s240:n0\n"
     );
 }
 
@@ -418,6 +422,8 @@ fn names_middle_c_and_both_ends_of_the_pitch_range() {
     assert_eq!(
         common::human_output(&["inspect", take.to_str().expect("a path")]),
         "\
+no programs stated
+
 bar 1 beat 1  track 1  C-1  velocity 64  duration 240  t1:c0:p0:s0:n0
 bar 1 beat 2  track 1  C4   velocity 64  duration 240  t1:c0:p60:s480:n0
 bar 1 beat 3  track 1  G9   velocity 64  duration 240  t1:c0:p127:s960:n0
@@ -440,6 +446,8 @@ fn widens_a_column_to_its_widest_value() {
     assert_eq!(
         common::human_output(&["inspect", take.to_str().expect("a path")]),
         "\
+no programs stated
+
 bar 1 beat 1   track 1  C4   velocity 64  duration 240   t1:c0:p60:s0:n0
 bar 2 beat 1   track 1  C#4  velocity 64  duration 1920  t1:c0:p61:s1920:n0
 bar 25 beat 1  track 1  G9   velocity 64  duration 96    t1:c0:p127:s46080:n0

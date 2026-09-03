@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
 use crate::note::{Note, NoteId};
+use crate::program::StatedProgram;
 use crate::take::Take;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -22,6 +23,31 @@ pub struct Diff {
     pub added: Vec<Note>,
     pub removed: Vec<Note>,
     pub changed: Vec<NoteChange>,
+
+    /// Where the two Takes put a channel on different Programs. Never a Rig
+    /// difference: which Program is selected is in the file, and what it sounds
+    /// like is not compared here at all.
+    pub programs: Vec<ProgramDifference>,
+}
+
+/// One channel, one moment, and the two Programs the Takes have it on there.
+///
+/// A state rather than an event, which is the whole of why this is readable. The
+/// events are program change messages, and comparing those would report that a
+/// byte moved between tracks or that an export re-stated the same Program at
+/// every Bar. What a reader wants to know is that this part is on a horn now and
+/// was on a violin before, and that is a question about what is *in force*.
+///
+/// `at` is the Tick from which the two disagree, and either side may be `None`:
+/// a Take that states no Program for a channel and one that states program 0 are
+/// two different Pieces, and this is the one place that difference is visible
+/// rather than audible-by-accident.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ProgramDifference {
+    pub channel: u8,
+    pub at: u32,
+    pub before: Option<u8>,
+    pub after: Option<u8>,
 }
 
 /// One note of the before Take and the note of the after Take it was matched
@@ -54,8 +80,20 @@ pub enum Change {
 }
 
 impl Diff {
+    /// Whether the two Takes say the same thing about the Piece.
+    ///
+    /// The orchestration counts. A Take whose horn part was a violin part has
+    /// changed, in the file and to the ear, and a diff answering "no differences"
+    /// to it would be failing at the one job `CHARTER.md` gives it — being the
+    /// surface a human checks the agent on.
+    ///
+    /// `tolerance_ticks` is still not a difference; it is what the matching was
+    /// done with. See its own field.
     pub fn is_empty(&self) -> bool {
-        self.added.is_empty() && self.removed.is_empty() && self.changed.is_empty()
+        self.added.is_empty()
+            && self.removed.is_empty()
+            && self.changed.is_empty()
+            && self.programs.is_empty()
     }
 }
 
@@ -197,7 +235,82 @@ pub fn diff(before: &Take, after: &Take, tolerance: Option<u32>) -> Result<Diff>
         added,
         removed,
         changed,
+        programs: program_differences(before, after)?,
     })
+}
+
+/// Where the two Takes have a channel on different Programs.
+///
+/// Compared at every Tick either Take says anything on that channel, plus Tick
+/// 0, because a Take that opens with a Program and one that opens with none
+/// differ from the first note. Consecutive moments agreeing on the same
+/// disagreement collapse into the one row that states it: a Take that switches
+/// to program 60 at Bar 3 while the other never does disagrees from Bar 3
+/// onwards, and saying so once is saying it.
+///
+/// A channel neither Take ever states a Program for cannot differ and is not
+/// considered. Two Takes that state the same Program at different Ticks *do*
+/// differ, and the row falls at the earlier of the two — which is the Tick from
+/// which they are on different instruments.
+fn program_differences(before: &Take, after: &Take) -> Result<Vec<ProgramDifference>> {
+    let before_stated = before.stated_programs()?;
+    let after_stated = after.stated_programs()?;
+
+    let mut channels: Vec<u8> = before_stated
+        .iter()
+        .chain(after_stated.iter())
+        .map(|stated| stated.channel)
+        .collect();
+    channels.sort_unstable();
+    channels.dedup();
+
+    let mut differences = Vec::new();
+    for channel in channels {
+        let mut moments: Vec<u32> = std::iter::once(0)
+            .chain(
+                before_stated
+                    .iter()
+                    .chain(after_stated.iter())
+                    .filter(|stated| stated.channel == channel)
+                    .map(|stated| stated.tick),
+            )
+            .collect();
+        moments.sort_unstable();
+        moments.dedup();
+
+        let mut said: Option<(Option<u8>, Option<u8>)> = None;
+        for at in moments {
+            let pair = (
+                in_force(&before_stated, channel, at),
+                in_force(&after_stated, channel, at),
+            );
+            if pair.0 == pair.1 {
+                said = None;
+                continue;
+            }
+            if said == Some(pair) {
+                continue;
+            }
+            said = Some(pair);
+            differences.push(ProgramDifference {
+                channel,
+                at,
+                before: pair.0,
+                after: pair.1,
+            });
+        }
+    }
+    Ok(differences)
+}
+
+/// The Program in force on a channel at a Tick: the last thing said at or before
+/// it, in the order `stated_programs` fixes.
+fn in_force(stated: &[StatedProgram], channel: u8, at: u32) -> Option<u8> {
+    stated
+        .iter()
+        .filter(|stated| stated.channel == channel && stated.tick <= at)
+        .map(|stated| stated.program)
+        .next_back()
 }
 
 /// Everything that differs between two matched notes, in the fixed order

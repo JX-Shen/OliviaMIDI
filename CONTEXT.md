@@ -23,7 +23,8 @@ _Avoid_: version, revision, draft; 版本、稿
 
 **Edit**:
 One mechanical change to a Take: add, delete, move, transpose or resize a note,
-change a velocity, change a CC. Never carries musical intent — no "make it sadder".
+change a velocity, change which Program a channel is on, change a CC. Never
+carries musical intent — no "make it sadder".
 An **Edit Set** is a batch of them, applied together (`edits.json`).
 _中文_: 改动
 _Avoid_: patch, mutation, operation; 补丁
@@ -46,6 +47,21 @@ one note down two semitones is not a modulation, and would still not be one if
 every note in the Take were moved with it. 变调 is vaguer again: in ordinary
 Chinese use it is whatever the button on a karaoke machine does, which is
 sometimes this and sometimes a change of speed.
+
+**Orchestration**:
+Which instrument plays which part of the Piece. In the file, and so the Piece —
+`CHARTER.md` puts it plainly: orchestration is composition. What each instrument
+*sounds* like is the Rig, and the two are never re-filed into one another.
+_中文_: 配器
+_Avoid_: arrangement, instrumentation; 编曲、配置
+
+Not `instrumentation`, although in theory that is the narrower and more accurate
+word — instrumentation is which instruments, orchestration is what is done with
+them. `CHARTER.md` has said Orchestration since before this file existed, and a
+glossary that renamed the charter's term would leave the project with two words
+for one boundary. 编曲 is avoided because in ordinary Chinese use it covers the
+whole arrangement, groove and production included, most of which is not in the
+file at all.
 
 ## Hearing it
 
@@ -207,3 +223,57 @@ How hard a note is struck, as carried by the MIDI note event. Part of the Piece,
 not of the Rig.
 _中文_: 力度
 _Avoid_: volume, loudness, dynamics; 音量、强弱
+
+**Channel**:
+One of the sixteen paths a MIDI file addresses a synthesiser through, counted
+from 0 as the file counts them. What a **Program** is held by, and part of what
+names a note — but not what a musician calls a part. That is the track.
+_中文_: 通道
+_Avoid_: port, bus; 声道、频道、声部
+
+声道 is the audio one, left and right, which is downstream of everything this
+project calls the Piece and belongs to the **Rig** if it belongs anywhere. 频道
+is a television station. 声部 is already the track: a channel is not a part, and
+the two come apart in both directions — three tracks may write one channel, and
+one track may write three.
+
+A channel is not printed on a note's line, and is printed on a Program's. The
+rule behind both is one rule: say what is needed to point at the thing. Two notes
+differing only in channel do not collide, so a note is pointed at without it; a
+Program has no subject but the channel, so `program 40` on its own points at
+nothing.
+
+**Program**:
+Which of a bank's instruments a channel is set to play, as the MIDI program
+change event carries it: 0 to 127. Part of the Piece, not of the Rig — *which*
+instrument is selected is in the file; what that selection sounds like is not.
+
+Held by the channel, not by the track: a synthesiser's program is channel state,
+so that is what `mid play` actually hands one. A Take that states no program is
+described as stating none, never as being on program 0 — the two are
+indistinguishable by ear on a General MIDI bank and are different Pieces.
+
+Its **GM name** (GM 名) is what `mid` may print beside the number — `program 40
+(GM violin)` — and the label is not decoration. A pitch name is a claim about the
+file's own semantics; a program name is a claim about *which bank is loaded*, so
+an unlabelled `violin` would be a Rig fact printed by a command that reports only
+the Piece. The number is what the Piece says. See #12.
+_中文_: 乐器号
+_Avoid_: patch, instrument, voice, timbre; 音色、音色库、程序
+_Avoid for the name_: program name, instrument name; 音色名
+
+音色 is the first word on **Rig**'s avoid list and cannot be borrowed back here,
+which is not a collision but this project's central line seen from one side: 音色
+is what a sound is like, and a program number is which instrument the file asks
+for. 号 is a mark written in the file, the same reason **Time signature** is 拍号
+rather than 节拍.
+
+Not `instrument`. MIDI carries an `InstrumentName` meta event — a piece of text a
+track calls itself, which a passage inherits — so the word already names
+something else in the same file. `patch` is reserved for the Rig by
+`CHARTER.md`, where a patch is a sound preset. 程序 is the literal translation
+and is a software word with no musical sense at all.
+
+The name is `GM name` rather than `program name` for the same reason: MIDI's
+`ProgramName` meta event is a different thing, and the gloss has to say whose
+convention it is.

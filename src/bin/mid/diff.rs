@@ -18,6 +18,14 @@ use std::path::PathBuf;
 /// pitch and start Tick are part of what names it. So the tolerance is stated
 /// on every diff — on stderr, and in the payload under `--json`.
 ///
+/// Which Program each channel is on is compared too, and reported as a state
+/// rather than as an event: `program bar 3 beat 1 channel 1 unstated -> 60 (GM
+/// french horn)` says this part is on a horn from Bar 3 where it was on nothing
+/// the file named. A Take that states no Program and one that states program 0
+/// are different Pieces here, although they sound identical on a General MIDI
+/// bank. Which Program is selected is in the file and so is the Piece; what it
+/// sounds like is the Rig, and is not compared.
+///
 /// A matched note reports everything about it that differs, in the fixed order
 /// pitch, start, duration, velocity — a note that was both moved and softened
 /// reports both. `--json` gives both of its identities, because a note that
@@ -77,6 +85,19 @@ pub fn run(args: Args) -> battuta::Result<()> {
     let after_lines = after.bar_lines();
 
     let mut rows = Vec::new();
+    // Orchestration first. A channel that changed instrument reframes every note
+    // row under it — the same notes on a horn are a different passage — so it is
+    // read before them rather than after.
+    for difference in &diff.programs {
+        rows.push(vec![
+            "program".to_string(),
+            // Placed against the before Take's Bar lines: the Tick is the moment
+            // the two stop agreeing, and it is the Take the reader knows.
+            crate::wording::at(before_lines, difference.at),
+            crate::wording::channel(difference.channel),
+            crate::wording::program_difference(difference),
+        ]);
+    }
     for note in &diff.added {
         rows.push(described("added", after_lines, note));
     }

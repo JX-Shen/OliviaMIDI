@@ -163,6 +163,42 @@ impl<'a> Rewrite<'a> {
         }
     }
 
+    /// The program change this channel is given at exactly this Tick, if the
+    /// track holds one.
+    ///
+    /// Exactly: a `set_program` naming a Tick changes what the Take says *there*
+    /// and inserts a statement when it says nothing there. It does not reach the
+    /// statement before it, which is about an earlier moment, nor the one after,
+    /// which the Take still makes and a later `inspect` still reports.
+    pub(crate) fn program_at(&self, channel: u8, tick: u32) -> Option<usize> {
+        self.slots.iter().position(|slot| {
+            slot.alive
+                && slot.tick == tick
+                && matches!(
+                    slot.kind,
+                    TrackEventKind::Midi {
+                        channel: on,
+                        message: MidiMessage::ProgramChange { .. },
+                    } if on.as_int() == channel
+                )
+        })
+    }
+
+    /// Put a program change on another Program, reporting the one it carried.
+    /// `None`, and nothing changed, if the event is not a program change.
+    pub(crate) fn set_program(&mut self, index: usize, program: u8) -> Option<u8> {
+        let TrackEventKind::Midi {
+            message: MidiMessage::ProgramChange { program: current },
+            ..
+        } = &mut self.slots[index].kind
+        else {
+            return None;
+        };
+        let previous = current.as_int();
+        *current = u7::new(program);
+        Some(previous)
+    }
+
     /// Where an event will end up: its Tick, and its rank among the events
     /// sharing that Tick. The pair the track is finally sorted by, so comparing
     /// two of them answers "which of these comes first" without sorting.
@@ -194,7 +230,7 @@ impl<'a> Rewrite<'a> {
     /// pitch would, placed last, silence the note that strike had just begun: a
     /// synthesiser stops a pitch, not an identity.
     pub(crate) fn place_again(&mut self, index: usize) {
-        let order = if releases_a_note(&self.slots[index].kind) {
+        let order = if goes_before_the_events_at_its_tick(&self.slots[index].kind) {
             self.next_release -= 1;
             self.next_release
         } else {
@@ -271,6 +307,30 @@ pub(crate) fn with_delta_times<'a>(
 
 /// Whether an event ends a note. Both spellings count: a note-on with velocity 0
 /// is a note-off, and the format uses the two interchangeably.
+/// Whether an event has to precede the events already at its Tick.
+///
+/// Two kinds do, for the same kind of reason — what a synthesiser does with the
+/// events of one Tick depends on the order it meets them in:
+///
+/// A release, because a note-off landing exactly on the next strike of the same
+/// pitch would, placed last, silence the note that strike had just begun.
+///
+/// A program change, because a note-on at that Tick has to sound on the Program
+/// the Take now states there. Placed last, the new Program would arrive after
+/// the note it was set for, and the note would sound on the one before it — an
+/// `apply` that succeeded, a file that plays, and the change inaudible in the
+/// one Bar it was asked for.
+fn goes_before_the_events_at_its_tick(kind: &TrackEventKind) -> bool {
+    releases_a_note(kind)
+        || matches!(
+            kind,
+            TrackEventKind::Midi {
+                message: MidiMessage::ProgramChange { .. },
+                ..
+            }
+        )
+}
+
 fn releases_a_note(kind: &TrackEventKind) -> bool {
     match kind {
         TrackEventKind::Midi { message, .. } => match message {

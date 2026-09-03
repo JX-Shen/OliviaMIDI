@@ -58,6 +58,25 @@ pub enum Edit {
         duration: i64,
         velocity: i64,
     },
+    /// Which Program a channel is on from a Tick: the first Edit that names no
+    /// note at all.
+    ///
+    /// It states an address rather than naming an identity, because there may be
+    /// nothing there yet to name — a Take that states no Program for this
+    /// channel is the ordinary case, and it is the one where saying so matters
+    /// most. ADR-0002's content addressing is for notes; this does not go
+    /// through it and is not an exception to it.
+    ///
+    /// The track is stated rather than inferred. Which track carries a channel's
+    /// program change is the author's arrangement of the file, and a tool that
+    /// guessed would move somebody's orchestration onto a track they did not put
+    /// it on.
+    SetProgram {
+        track: i64,
+        channel: i64,
+        tick: i64,
+        program: i64,
+    },
 }
 
 impl EditSet {
@@ -75,12 +94,13 @@ impl EditSet {
 
 /// What one Edit does to the note it named.
 ///
-/// `add_note` is deliberately not here. It names no note and creates one
-/// instead, and keeping the two apart is what lets every match below be
-/// exhaustive: a kind fitting neither shape cannot be routed into the wrong one,
-/// because there is nowhere for it to go until somebody says where. The kind
-/// after these six is already named — `CHARTER.md` lists changing a CC among the
-/// Edits, and a CC Edit names no note either.
+/// `add_note` is deliberately not here, and neither is `set_program`. Neither
+/// names a note — one creates a note, the other states which Program a channel
+/// is on — and keeping them apart is what lets every match below be exhaustive:
+/// a kind fitting neither shape cannot be routed into the wrong one, because
+/// there is nowhere for it to go until somebody says where. The kind after these
+/// is already named too — `CHARTER.md` lists changing a CC among the Edits, and
+/// a CC Edit names no note either.
 enum Change {
     Velocity(i64),
     Transpose(i64),
@@ -99,12 +119,21 @@ struct NewNote {
     velocity: i64,
 }
 
-/// An Edit once it has been looked up against the input Take. Two shapes,
-/// because there are two sorts of Edit: those naming a note, and the one stating
-/// one.
+/// The Program `set_program` states. Wide numbers, for the reason `Edit`'s are.
+struct NewProgram {
+    track: i64,
+    channel: i64,
+    tick: i64,
+    program: i64,
+}
+
+/// An Edit once it has been looked up against the input Take. Three shapes,
+/// because there are three sorts of Edit: those naming a note, the one stating a
+/// note, and the one stating what a channel plays.
 enum Landing {
     Named(Change, Note),
     Stated(NewNote),
+    Orchestrated(NewProgram),
 }
 
 /// Every identity in the Edit Set, resolved against the input Take before any
@@ -154,6 +183,19 @@ fn resolve(notes: &[Note], edits: &[Edit]) -> Result<Vec<Landing>> {
                 duration,
                 velocity,
             })),
+            // Nothing to look up: the address may name a moment the Take says
+            // nothing at, which is the case this kind exists for.
+            Edit::SetProgram {
+                track,
+                channel,
+                tick,
+                program,
+            } => Ok(Landing::Orchestrated(NewProgram {
+                track,
+                channel,
+                tick,
+                program,
+            })),
         })
         .collect()
 }
@@ -190,6 +232,7 @@ pub fn apply(take: &Take, edit_set: &EditSet) -> Result<Take> {
         match landing {
             Landing::Named(change, note) => change_note(&mut tracks[note.track], change, &note)?,
             Landing::Stated(new) => sounding.push(add(&mut tracks, new)?),
+            Landing::Orchestrated(new) => set_program(&mut tracks, new)?,
         }
     }
     stay_distinct(&tracks, &sounding)?;
@@ -418,6 +461,55 @@ fn add(tracks: &mut [Rewrite], new: NewNote) -> Result<NoteSlots> {
             }),
         ),
     })
+}
+
+/// The one kind that changes the orchestration rather than a note.
+///
+/// What it means is a state: from this Tick, this channel is on this Program. So
+/// it changes the statement the Take makes at that Tick when there is one, and
+/// inserts one when there is not — a Take that states no Program for a channel
+/// is the ordinary case and must not need a different Edit.
+///
+/// What it deliberately does not do is reach a *later* statement. "From this
+/// Tick" is true until the Take says otherwise, and the Take may say otherwise
+/// two Bars later; silently deleting that would be an Edit changing something it
+/// was not asked about, and an Edit stays mechanical. What the passage is
+/// actually on afterwards is what `inspect` reports and `diff` compares, which
+/// is where a reader finds out.
+fn set_program(tracks: &mut [Rewrite], new: NewProgram) -> Result<()> {
+    let index = usize::try_from(new.track)
+        .ok()
+        .filter(|index| *index < tracks.len())
+        .ok_or(Error::NoSuchTrack {
+            track: new.track,
+            tracks: tracks.len(),
+        })?;
+    let channel = midi_value(new.channel, 15).ok_or(Error::ChannelOutOfRange(new.channel))?;
+    let program = midi_value(new.program, 127).ok_or(Error::ProgramOutOfRange(new.program))?;
+    let tick = u32::try_from(new.tick).map_err(|_| Error::ProgramTickOutOfRange(new.tick))?;
+
+    let track = &mut tracks[index];
+    match track.program_at(channel, tick) {
+        Some(stated) => {
+            // `program_at` found a program change, so the setter cannot decline
+            // this one. Its `Option` is honesty about being handed any index at
+            // all, not a case that arises here.
+            let replaced = track.set_program(stated, program);
+            debug_assert!(replaced.is_some(), "program_at found a program change");
+        }
+        None => {
+            track.push(
+                tick,
+                TrackEventKind::Midi {
+                    channel: u4::new(channel),
+                    message: MidiMessage::ProgramChange {
+                        program: u7::new(program),
+                    },
+                },
+            );
+        }
+    }
+    Ok(())
 }
 
 /// A number the format can hold in one of its restricted integers.

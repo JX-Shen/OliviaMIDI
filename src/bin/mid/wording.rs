@@ -17,7 +17,7 @@
 //! the seat its implementation will want. `wording` is ADR-0005's own word for
 //! what this does.
 
-use battuta::{BarLines, Note};
+use battuta::{BarLines, Note, Program, ProgramDifference, StatedProgram};
 
 /// Where a Tick is: musically if the Take says enough to tell, and in Ticks
 /// otherwise.
@@ -66,9 +66,16 @@ pub fn pitch(pitch: u8) -> String {
 /// the way the identity spells it: `E4 n1` is the note `inspect` lists as
 /// `t1:c0:p64:s960:n1`.
 ///
-/// The channel is never here. It is a fact a human reading music does not use —
-/// the part is the track — and two notes differing only in channel do not
-/// collide, so nothing becomes ambiguous by leaving it out.
+/// The channel is never on a note's line. It is a fact a human reading music
+/// does not use — the part is the track — and two notes differing only in
+/// channel do not collide, so nothing becomes ambiguous by leaving it out.
+///
+/// That argument is about notes and does not reach a Program, which is held by
+/// the channel and has no other subject: `program 40` without a channel is a
+/// sentence missing the thing it is about, and the track cannot stand in, since
+/// three tracks may write one channel and one track may write three. So
+/// `program` below names the channel and this does not, and the two are the same
+/// rule — say what is needed to point at the thing — rather than two.
 pub fn names(lines: Option<BarLines>, note: &Note, among: usize) -> Vec<String> {
     let mut called = pitch(note.pitch);
     if among > 1 {
@@ -128,4 +135,90 @@ pub fn table(rows: &[Vec<String>]) {
         }
         println!("{line}");
     }
+}
+
+/// Which channel, as the format counts them.
+///
+/// Counted from zero, because that is the number in the file and the number in
+/// every identity `inspect` prints. General Midi's documentation counts the same
+/// channels from one, so its percussion channel is 10 there and 9 here; where
+/// that matters it is said in words rather than by renumbering, since a number
+/// that disagreed with the identity beside it would be worse than a number a
+/// reader has to shift.
+pub fn channel(channel: u8) -> String {
+    format!("channel {channel}")
+}
+
+/// Which Program, with what General Midi calls it.
+///
+/// The label is load-bearing. A pitch name is a claim about the file's own
+/// semantics — pitch 66 is F#4 in every Take — but a program name is a claim
+/// about *which bank is loaded*, and the bank is the Rig. An unlabelled `violin`
+/// would be a Rig fact printed by a command that reports only the Piece, which
+/// is the confusion `CHARTER.md` opens by refusing. `GM violin` says whose word
+/// it is; `program 40` is what the Piece actually says.
+///
+/// No name on the drum channel, where a Program selects a kit rather than an
+/// instrument: program 40 there is not a violin, and General Midi's melodic list
+/// is not a list of what it is. The number stands alone rather than being
+/// glossed wrongly.
+///
+/// `None` is a Take that states no Program for this channel, which is never
+/// printed as program 0 — see #12.
+pub fn program(on_channel: u8, program: Option<u8>) -> String {
+    match program {
+        None => "unstated".to_string(),
+        Some(program) => format!("program {}", numbered(on_channel, program)),
+    }
+}
+
+/// A Program as a number and, where there is one to have, its General Midi
+/// name: `40 (GM violin)`.
+///
+/// Without the word `program` in front, for the rows that have already said it.
+fn numbered(on_channel: u8, program: u8) -> String {
+    match battuta::gm_name(program) {
+        Some(name) if on_channel != battuta::GM_PERCUSSION_CHANNEL => {
+            format!("{program} (GM {name})")
+        }
+        _ => program.to_string(),
+    }
+}
+
+/// The two Programs a channel is on in two Takes: `unstated -> 60 (GM french
+/// horn)`.
+///
+/// Both sides in the same shape, including `unstated`, because that side is a
+/// difference like any other and a blank there would read as nothing having been
+/// said rather than as the Take saying nothing.
+pub fn program_difference(difference: &ProgramDifference) -> String {
+    let side = |program: Option<u8>| match program {
+        None => "unstated".to_string(),
+        Some(program) => numbered(difference.channel, program),
+    };
+    format!("{} -> {}", side(difference.before), side(difference.after))
+}
+
+/// What one channel is on: the state a passage begins in.
+pub fn programs(state: &Program) -> Vec<String> {
+    vec![
+        channel(state.channel),
+        program(state.channel, state.program),
+    ]
+}
+
+/// One place the Take states a Program, as an event: where it happens, which
+/// track says it, and what it says.
+///
+/// The track is here where it is absent from the state above, and for the reason
+/// the state has no use for it: this row describes an event somebody can go and
+/// change, and `set_program` names the track it lands in. The row is what a
+/// reader copies that argument out of.
+pub fn stated_program(lines: Option<BarLines>, stated: &StatedProgram) -> Vec<String> {
+    vec![
+        at(lines, stated.tick),
+        format!("track {}", stated.track),
+        channel(stated.channel),
+        program(stated.channel, Some(stated.program)),
+    ]
 }

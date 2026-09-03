@@ -196,6 +196,8 @@ line:
 
 ```
 $ mid inspect fixtures/olivia.mid --bars 7:8
+no programs stated
+
 bar 7 beat 1  track 1  E4   velocity 50  duration 955   t1:c0:p64:s8640:n0
 bar 7 beat 1  track 2  D2   velocity 45  duration 475   t2:c1:p38:s8640:n0
 bar 7 beat 2  track 2  F#3  velocity 38  duration 955   t2:c1:p54:s9120:n0
@@ -218,19 +220,44 @@ doubled voice — not even the pitch separates them, and the row says which
 occurrence: `E4 n1`. That appears only at an address where something actually
 collides.
 
-The number is never replaced: `p64` is still in the identity, and `--json` is
-untouched, in the Take's own order. Naming a pitch chooses two things the file
+The number is never replaced: `p64` is still in the identity, and `--json` still
+carries the number and not the name, in the Take's own order. Naming a pitch chooses two things the file
 does not state, and [#7](https://github.com/JX-Shen/OliviaMIDI/issues/7) records
 which two and why neither is a flag.
 
-Two things inside a Take are still unspoken for. A program change and a
-controller are both in the file, and so both are the Piece by the one rule
-above — but `mid` carries them without ever mentioning them: `play` respects
-them, `apply` does not disturb a byte of them, and `inspect`, `diff` and the
-Edit vocabulary are silent. Preserved, invisible, untouchable. That is
-[V0.1.1](https://github.com/JX-Shen/OliviaMIDI/issues/11), and the reason it
-matters is that the invisible middle term is where you fix a badly shaped
+That first line is the orchestration, and until 0.1.1 it was not there. A
+program change is in the file, so by the one rule above it is the Piece —
+**orchestration is composition** — and `mid` used to carry one without ever
+mentioning it: `play` respected it, `apply` did not disturb a byte of it, and
+`inspect`, `diff` and the Edit vocabulary were silent. Preserved, invisible,
+untouchable, and the invisible middle term is where you fix a badly shaped
 phrase by rewriting a good line.
+
+So a listing now opens with what each channel is on, including a Program the
+Take set many bars before the passage began, and says where the passage switches:
+
+```
+$ mid inspect fixtures/orchestrated.mid --bars 2:4
+channel 0  program 40 (GM violin)
+channel 1  unstated
+channel 2  unstated
+
+bar 3 beat 1  track 2  channel 1  program 60 (GM french horn)
+```
+
+`unstated` is not program 0. General MIDI's default makes those two sound
+identical and they are different Pieces, so the file's silence is reported as
+silence — everywhere, including `--json`, where it is `null`. The name in
+brackets is General MIDI's and says so, because *which* instrument a program
+number selects is in the file while what it *sounds* like is the Rig. `mid diff`
+reports a switch as a state — `program bar 3 beat 1 channel 1 unstated -> 60 (GM
+french horn)` — and `set_program` is the Edit that changes it.
+
+One thing inside a Take is still unspoken for: controller data.
+[V0.1.1](https://github.com/JX-Shen/OliviaMIDI/issues/11) is not finished until
+that is visible too, and it is the harder half — a controller is musically a
+curve, so the work is a `diff` that can say *the expression reaches 100 by bar 6
+where it used to reach it by bar 7* rather than list forty differences.
 
 Not all of it is good yet, and that is the right order — nothing gets to be
 elegant before the loop closes.

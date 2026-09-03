@@ -21,6 +21,20 @@ pub const FIXTURE: &str = "fixtures/olivia.mid";
 /// own builder. See `tests/stacked.rs`, which states its contents.
 pub const STACKED: &str = "fixtures/stacked.mid";
 
+/// The Take built to carry an orchestration. Never written to by any test.
+///
+/// Neither `FIXTURE` nor `STACKED` states a Program at all — both are the case
+/// #12's sixth criterion is about, which makes them useless for the other six.
+/// This one is four Bars of 3/4 at 480 PPQ, three voice tracks, and states:
+///
+/// - channel 0, Tick 0, program 40 — in force before the first note
+/// - channel 1, Tick 2880 (Bar 3 Beat 1), program 60 — a switch part way in
+/// - channel 2, nothing at all — a channel with notes and no Program
+///
+/// Each channel has one note per Bar, so every Bar range holds all three.
+/// See `tests/program.rs`, which states its contents where it uses them.
+pub const ORCHESTRATED: &str = "fixtures/orchestrated.mid";
+
 pub fn mid() -> assert_cmd::Command {
     let mut command = assert_cmd::Command::cargo_bin("mid").expect("mid builds");
     // Nothing in this suite may be steered by whatever Rig the machine happens
@@ -47,6 +61,32 @@ pub fn event_stream(path: &Path) -> String {
     let bytes = std::fs::read(path).expect("Take is readable");
     let smf = midly::Smf::parse(&bytes).expect("Take parses");
     format!("{:?}\n{:#?}", smf.header, smf.tracks)
+}
+
+/// Every program change a Take states, as (track, tick, channel, program), in
+/// the order the file lists them.
+///
+/// Read straight from the file, so that a test asking whether `apply` left the
+/// orchestration alone is not asking the same code that reports it. `mid inspect`
+/// answers the state; this answers the events.
+pub fn stated_programs(path: &Path) -> Vec<(usize, u32, u8, u8)> {
+    let bytes = std::fs::read(path).expect("Take is readable");
+    let smf = midly::Smf::parse(&bytes).expect("Take parses");
+    let mut stated = Vec::new();
+    for (index, track) in smf.tracks.iter().enumerate() {
+        let mut tick = 0u32;
+        for event in track {
+            tick += event.delta.as_int();
+            if let midly::TrackEventKind::Midi {
+                channel,
+                message: midly::MidiMessage::ProgramChange { program },
+            } = event.kind
+            {
+                stated.push((index, tick, channel.as_int(), program.as_int()));
+            }
+        }
+    }
+    stated
 }
 
 /// The program changes a Take states, as (tick, program). Read straight from
@@ -114,7 +154,32 @@ pub fn note_ids(json: &str) -> Vec<String> {
         .collect()
 }
 
+/// The notes out of an `inspect --json` payload.
+///
+/// The payload is an object as of 0.1.1 — a Program belongs to a channel and
+/// not to a note, so there was nowhere in a bare array of notes to put one.
+/// `programs` reaches the other half.
 pub fn notes(json: &str) -> Vec<serde_json::Value> {
+    listing(json)["notes"]
+        .as_array()
+        .expect("the payload has notes")
+        .clone()
+}
+
+/// What `inspect --json` says each channel is on, and where the passage states
+/// another: the `programs` and `stated_programs` of the payload.
+pub fn programs(json: &str) -> (Vec<serde_json::Value>, Vec<serde_json::Value>) {
+    let listing = listing(json);
+    let array = |key: &str| {
+        listing[key]
+            .as_array()
+            .unwrap_or_else(|| panic!("the payload has {key}"))
+            .clone()
+    };
+    (array("programs"), array("stated_programs"))
+}
+
+fn listing(json: &str) -> serde_json::Value {
     serde_json::from_str(json).expect("inspect --json is JSON")
 }
 

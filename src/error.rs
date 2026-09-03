@@ -174,9 +174,7 @@ pub enum Error {
         second: u32,
     },
 
-    #[error(
-        "no note can be added to track {track}; the Take has {tracks} tracks, numbered from 0"
-    )]
+    #[error("track {track} is not in the Take; it has {tracks} tracks, numbered from 0")]
     NoSuchTrack { track: i64, tracks: usize },
 
     #[error("channel {0} is out of range; a MIDI channel is 0-15")]
@@ -187,6 +185,12 @@ pub enum Error {
 
     #[error("a note cannot start at tick {0}; the first Tick of a Take is 0")]
     StartOutOfRange(i64),
+
+    #[error("program {0} is out of range; a MIDI program is 0-127")]
+    ProgramOutOfRange(i64),
+
+    #[error("a Program cannot be stated at tick {0}; the first Tick of a Take is 0")]
+    ProgramTickOutOfRange(i64),
 
     #[error(
         "a note cannot last {0} ticks; a note lasts at least 1 tick, and has to end at a Tick the \
