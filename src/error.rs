@@ -193,6 +193,27 @@ pub enum Error {
     ProgramTickOutOfRange(i64),
 
     #[error(
+        "controller {0} is out of range; a Controller is 0-119; 120-127 are channel mode messages"
+    )]
+    ControllerOutOfRange(i64),
+
+    #[error("controller value {0} is out of range; a MIDI controller value is 0-127")]
+    ControllerValueOutOfRange(i64),
+
+    #[error("a Controller cannot be stated at tick {0}; the first Tick of a Take is 0")]
+    ControllerTickOutOfRange(i64),
+
+    #[error(
+        "no Controller is stated on track {track} channel {channel} controller {controller} at tick {tick}"
+    )]
+    UnknownController {
+        track: i64,
+        channel: i64,
+        controller: i64,
+        tick: i64,
+    },
+
+    #[error(
         "a note cannot last {0} ticks; a note lasts at least 1 tick, and has to end at a Tick the \
          Take can hold"
     )]

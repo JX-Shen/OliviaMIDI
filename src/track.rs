@@ -199,6 +199,42 @@ impl<'a> Rewrite<'a> {
         Some(previous)
     }
 
+    /// Where a Controller is stated on a channel at a Tick, or `None`.
+    ///
+    /// The *last* such event rather than the first, which is where this parts
+    /// company with `program_at`. Two control changes at one address are both
+    /// carried (ADR-0003 — an Edit Set naming neither may not fold them), and
+    /// the one in force is the one written last, so that is the one an Edit
+    /// naming the address means.
+    pub(crate) fn controller_at(&self, channel: u8, controller: u8, tick: u32) -> Option<usize> {
+        self.slots.iter().rposition(|slot| {
+            slot.alive
+                && slot.tick == tick
+                && matches!(
+                    slot.kind,
+                    TrackEventKind::Midi {
+                        channel: on,
+                        message: MidiMessage::Controller { controller: number, .. },
+                    } if on.as_int() == channel && number.as_int() == controller
+                )
+        })
+    }
+
+    /// Put a control change on another value, reporting the one it carried.
+    /// `None`, and nothing changed, if the event is not a control change.
+    pub(crate) fn set_controller(&mut self, index: usize, value: u8) -> Option<u8> {
+        let TrackEventKind::Midi {
+            message: MidiMessage::Controller { value: current, .. },
+            ..
+        } = &mut self.slots[index].kind
+        else {
+            return None;
+        };
+        let previous = current.as_int();
+        *current = u7::new(value);
+        Some(previous)
+    }
+
     /// Where an event will end up: its Tick, and its rank among the events
     /// sharing that Tick. The pair the track is finally sorted by, so comparing
     /// two of them answers "which of these comes first" without sorting.

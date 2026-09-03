@@ -405,3 +405,186 @@ fn an_empty_edit_set_keeps_every_control_change() {
         common::event_stream(&out)
     );
 }
+
+/// `set_controller` states an address rather than naming an identity, so it
+/// works whether or not the Take says anything there yet.
+///
+/// The first Edit lands on an address that holds 40 and changes it; the second
+/// lands where the Take says nothing and creates the statement. A Take holding
+/// nothing for a Controller is the ordinary case and must not need a different
+/// Edit — the reason `set_program` is shaped this way, and why neither goes
+/// through ADR-0002's content addressing.
+///
+/// The track is stated, never inferred. Which track carries a channel's control
+/// changes is the author's arrangement of the file, and a tool that guessed
+/// would move somebody's expression onto a track they did not put it on.
+#[test]
+fn set_controller_states_an_address_that_need_not_exist_yet() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_with_controllers(
+        &dir.path().join("crescendo.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(1440, 11, 40)],
+        &[
+            (0, 480, 69),
+            (1440, 480, 69),
+            (2880, 480, 69),
+            (4320, 480, 69),
+        ],
+    );
+    let edits = common::edit_set(
+        dir.path(),
+        "expression",
+        r#"{ "kind": "set_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440, "value": 90 },
+           { "kind": "set_controller", "track": 1, "channel": 0, "controller": 11, "tick": 2880, "value": 20 }"#,
+    );
+    let out = dir.path().join("take-02.mid");
+
+    common::mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    let json = common::json_output(&[
+        "inspect",
+        out.to_str().expect("a path"),
+        "--bars",
+        "1:4",
+        "--json",
+    ]);
+    let (_, stated) = common::controllers(&json);
+    assert_eq!(
+        stated,
+        vec![
+            serde_json::json!({
+                "track": 1, "channel": 0, "controller": 11, "tick": 1440, "value": 90,
+            }),
+            serde_json::json!({
+                "track": 1, "channel": 0, "controller": 11, "tick": 2880, "value": 20,
+            }),
+        ]
+    );
+}
+
+/// `delete_controller` takes away one statement and leaves the rest.
+///
+/// Written after the implementation rather than before it: this kind and
+/// `move_controller` below share one function and one branch of `Landing` with
+/// `set_controller`, so they landed in its cycle. Said plainly here because the
+/// loop is red first, and these two were not.
+#[test]
+fn delete_controller_takes_away_one_statement() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let out = applied(
+        &dir,
+        &[(1440, 11, 40), (2880, 11, 100)],
+        r#"{ "kind": "delete_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440 }"#,
+    );
+
+    let json = common::json_output(&["inspect", out.to_str().expect("a path"), "--bars", "1:4", "--json"]);
+    let (_, stated) = common::controllers(&json);
+    assert_eq!(
+        stated,
+        vec![serde_json::json!({
+            "track": 1, "channel": 0, "controller": 11, "tick": 2880, "value": 100,
+        })]
+    );
+}
+
+/// `move_controller` carries a statement to another Tick, and overwrites
+/// whatever was there.
+///
+/// The 100 at Bar 3 moves back a Bar onto the 40 at Bar 2, and one value is
+/// left. One address holds one value, and reading effects as ordered makes the
+/// move the thing that happened last.
+///
+/// This is the kind that keeps "the brass swells too early" expressible. A
+/// crescendo moved is thirty of these, which is what an Edit Set is for; saying
+/// it as thirty deletions and thirty statements would leave the Edit Set unable
+/// to say even that a move was asked for.
+#[test]
+fn move_controller_carries_a_statement_and_overwrites_the_destination() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let out = applied(
+        &dir,
+        &[(1440, 11, 40), (2880, 11, 100)],
+        r#"{ "kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 2880, "delta_ticks": -1440 }"#,
+    );
+
+    let json = common::json_output(&["inspect", out.to_str().expect("a path"), "--bars", "1:4", "--json"]);
+    let (_, stated) = common::controllers(&json);
+    assert_eq!(
+        stated,
+        vec![serde_json::json!({
+            "track": 1, "channel": 0, "controller": 11, "tick": 1440, "value": 100,
+        })]
+    );
+}
+
+/// An address holding nothing is an Edit Set written against a different Take,
+/// and is refused rather than quietly doing nothing.
+///
+/// `set_controller` states an address and so needs none to exist; these two
+/// *name* one. The distinction is the same one that lets `set_program` work on a
+/// Take that states no Program while `delete_note` refuses an identity it cannot
+/// find.
+#[test]
+fn refuses_to_move_a_controller_no_take_states() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_with_controllers(
+        &dir.path().join("crescendo.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(1440, 11, 40)],
+        &[(0, 480, 69), (1440, 480, 69)],
+    );
+    let edits = common::edit_set(
+        dir.path(),
+        "nowhere",
+        r#"{ "kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 2000, "delta_ticks": 480 }"#,
+    );
+
+    common::mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("-o")
+        .arg(dir.path().join("take-02.mid"))
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "no Controller is stated on track 1 channel 0 controller 11 at tick 2000",
+        ));
+}
+
+/// Build a Take stating `controllers`, apply `edits` to it, and hand back the
+/// Take that came out.
+fn applied(
+    dir: &tempfile::TempDir,
+    controllers: &[common::StatedController],
+    edits: &str,
+) -> std::path::PathBuf {
+    let take = common::build_take_with_controllers(
+        &dir.path().join("in.mid"),
+        480,
+        &[(0, 3, 4)],
+        controllers,
+        &[(0, 480, 69), (1440, 480, 69), (2880, 480, 69), (4320, 480, 69)],
+    );
+    let edits = common::edit_set(dir.path(), "edits", edits);
+    let out = dir.path().join("take-02.mid");
+    common::mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+    out
+}
