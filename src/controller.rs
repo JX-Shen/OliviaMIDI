@@ -67,6 +67,22 @@ pub struct Controllers {
     pub stated: Vec<StatedController>,
 }
 
+/// The lowest control change number that is not a Controller.
+///
+/// 120 to 127 are MIDI's channel mode messages — All Sound Off, All Notes Off,
+/// Reset All Controllers and their neighbours. They ride on the control change
+/// event type and are instructions rather than settings: they happen and are
+/// over, leaving nothing in force. Every reading this crate makes of channel
+/// state presupposes a value that holds until changed, so for these there is
+/// nothing to report rather than something dangerous to report.
+///
+/// The boundary is drawn by what those readings require and lands where MIDI's
+/// own table breaks only because the specification's authors made the same
+/// distinction. A Take's mode messages are carried untouched (ADR-0003) and
+/// named by nothing; the hole is deliberate, and `fixtures/expressive.mid` pins
+/// it. See ADR-0007 and #13.
+pub const FIRST_CHANNEL_MODE: u8 = 120;
+
 impl Take {
     /// Every place the Take states a Controller, earliest Tick first, ties
     /// broken by track order.
@@ -87,6 +103,9 @@ impl Take {
                     message: MidiMessage::Controller { controller, value },
                 } = event.kind
                 {
+                    if controller.as_int() >= FIRST_CHANNEL_MODE {
+                        continue;
+                    }
                     stated.push(StatedController {
                         track,
                         channel: channel.as_int(),

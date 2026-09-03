@@ -22,7 +22,7 @@ mod temporary;
 mod track;
 
 pub use bars::{BarLines, BarRange, Position, TickSpan};
-pub use controller::{Controller, Controllers, StatedController};
+pub use controller::{Controller, Controllers, StatedController, FIRST_CHANNEL_MODE};
 pub use diff::{Change, ControllerDifference, ControllerSide, Diff, NoteChange, ProgramDifference};
 pub use edit::{apply, Edit, EditSet};
 pub use error::{Error, Result};

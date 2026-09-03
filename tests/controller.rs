@@ -323,3 +323,85 @@ fn reports_a_controller_difference_as_a_span_over_what_is_in_force() {
         "controller  bar 6 beat 1 until bar 7 beat 1  channel 0  CC11  70 -> 100\n"
     );
 }
+
+/// Two values at one address: the last one written is what is in force, and
+/// nothing folds the other away.
+///
+/// `EXPRESSIVE` states CC11 twice at Tick 1440 — 30, then 40 — and 40 is what
+/// the channel holds. Which of the two that is is a fact about the order they
+/// are written in the file rather than about our own builder, which is why this
+/// one case needs a committed fixture; `stacked.mid` is here for the same reason
+/// with two note-ons.
+///
+/// The peak in the same assertion is the wobble surviving: the curve reads 76,
+/// 80, 78, 84, 90, 88, 96 through Bar 2 and the highest of them is 96, not the
+/// end of the first stretch that happened to be rising.
+#[test]
+fn holds_the_last_of_two_values_written_at_one_address() {
+    let json = common::json_output(&["inspect", common::EXPRESSIVE, "--bars", "2:2", "--json"]);
+    let (controllers, _) = common::controllers(&json);
+
+    assert!(
+        controllers.contains(&serde_json::json!({
+            "channel": 0,
+            "controller": 11,
+            "value": 40,
+            "peak": 96,
+            "peak_at": 2760,
+        })),
+        "the state does not hold the second of the two values: {controllers:#?}"
+    );
+}
+
+/// A channel mode message is not a Controller, and no command mentions one.
+///
+/// `EXPRESSIVE` states CC123 — All Notes Off — inside Bar 4, so this passage
+/// contains it and the silence is the rule at work rather than a Bar range
+/// excluding it. Nothing is in force after an instruction happens, and every
+/// reading this tool makes of channel state presupposes something in force, so
+/// there is nothing here for it to say (ADR-0007).
+///
+/// The hole is deliberate and this is what keeps it deliberate: an untested hole
+/// is one somebody eventually closes by accident.
+#[test]
+fn never_mentions_a_channel_mode_message() {
+    assert_eq!(
+        common::human_output(&["inspect", common::EXPRESSIVE, "--bars", "4:4"]),
+        "\
+no programs stated
+
+channel 0  CC11  100
+channel 1  CC64  0
+
+bar 4 beat 1  track 1  D5  velocity 70  duration 1440  t1:c0:p74:s4320:n0
+bar 4 beat 1  track 2  F4  velocity 60  duration 480   t2:c1:p65:s4320:n0
+bar 4 beat 1  track 3  G2  velocity 55  duration 1440  t3:c2:p43:s4320:n0
+"
+    );
+}
+
+/// An Edit Set naming no Controller leaves every control change where it was —
+/// the duplicate address and the mode message included.
+///
+/// The property rather than a snapshot: what has to hold is that the two Takes
+/// *agree* at the event level (ADR-0003). A tool that quietly folded the two
+/// values at Tick 1440 into one, or dropped the CC123 it has nothing to say
+/// about, would pass every audition and have changed the Piece.
+#[test]
+fn an_empty_edit_set_keeps_every_control_change() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let out = dir.path().join("take-02.mid");
+
+    common::mid()
+        .args(["apply", common::EXPRESSIVE])
+        .arg(common::empty_edit_set(dir.path()))
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    assert_eq!(
+        common::event_stream(std::path::Path::new(common::EXPRESSIVE)),
+        common::event_stream(&out)
+    );
+}

@@ -35,6 +35,33 @@ pub const STACKED: &str = "fixtures/stacked.mid";
 /// See `tests/program.rs`, which states its contents where it uses them.
 pub const ORCHESTRATED: &str = "fixtures/orchestrated.mid";
 
+/// The Take built to carry expression. Never written to by any test.
+///
+/// No other fixture states one control change, so nothing in the suite could
+/// reach #13 at all. Four Bars of 3/4 at 480 PPQ, four tracks, and it states:
+///
+/// - track 1, channel 0 — a CC11 crescendo through Bar 2, Ticks 1440 to 2880,
+///   rising 40 to 100 and wobbling twice on the way (78 after 80, 88 after 90),
+///   because a curve recorded from a fader is not monotone and nothing in the
+///   pipeline may assume one is
+/// - track 1, channel 0 — *two* CC11 events at Tick 1440, 30 then 40. Which of
+///   two values at one address is in force is a fact about the order they are
+///   written in this file, which is why it is a committed fixture and not a
+///   built one: `stacked.mid` is here for the same reason, over two note-ons.
+/// - track 2, channel 1 — CC64 down at Tick 0, up at 1440, down at 2880, up at
+///   4320: four events, every one of them a reversal, which is what a switch
+///   looks like under a reading built for a curve
+/// - track 2, channel 1 — CC123 All Notes Off at Tick 5040, inside Bar 4 and
+///   past this channel's last note-off. A channel mode message is not a
+///   Controller (ADR-0007) and no command may mention it; the hole is
+///   deliberate, and this is what stops it being closed by accident
+/// - track 3, channel 2 — notes and not one Controller, so that "this channel
+///   says nothing" is reachable, as `orchestrated.mid` leaves channel 2 without
+///   a Program
+///
+/// See `tests/controller.rs`, which states its contents where it uses them.
+pub const EXPRESSIVE: &str = "fixtures/expressive.mid";
+
 pub fn mid() -> assert_cmd::Command {
     let mut command = assert_cmd::Command::cargo_bin("mid").expect("mid builds");
     // Nothing in this suite may be steered by whatever Rig the machine happens
