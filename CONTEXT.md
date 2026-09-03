@@ -277,3 +277,48 @@ and is a software word with no musical sense at all.
 The name is `GM name` rather than `program name` for the same reason: MIDI's
 `ProgramName` meta event is a different thing, and the gloss has to say whose
 convention it is.
+
+**Controller**:
+One of the numbered controls a channel carries, as the MIDI control change event
+holds it: a number naming the control, and a value 0 to 127 it is set to which
+stays in force until something changes it. Part of the Piece, not of the Rig —
+the expression a phrase is shaped with is in the file; what that shaping
+*sounds* like is not. Held by the channel, as a Program is.
+
+Not every control change message is one. Numbers 120 to 127 are channel mode
+messages — All Notes Off and its neighbours — which ride on the same event type
+and are instructions rather than settings: they happen and are over, and leave
+no value in force to be reported, and reporting what is in force is the whole of
+what this tool does with channel state (ADR-0007). A Take's own are preserved
+untouched and named by nothing this tool prints, which is a hole left
+deliberately — see #13.
+
+Musically it is a curve — one crescendo is dozens of events — but the curve is
+not a thing the file holds, and so is not a thing this project names. Nothing
+here segments a stretch of events into a gesture: what a reader is told is which
+value is in force and where the highest one falls, both read straight out of the
+file. See #13.
+
+Its **spec name** is what `mid` may print beside the number — `CC64 (damper
+pedal)`. Quoted from MIDI's own table and never improved on: *sustain pedal* is
+what a pianist calls CC64 and *damper pedal* is what the specification calls it,
+and a gloss that reached for the friendlier word would have stopped being a
+quotation and started being this tool's opinion of what the control is for. The
+`CC` prefix is where the attribution sits, which is why the name needs no `GM`
+style label of its own — unlike a GM name, it does not depend on which bank is
+loaded. The convention that a value of 64 or more means a switch is *on* comes
+from that same table, and is a gloss rather than a reading the library makes.
+_中文_: 控制器 (the name: 规范名)
+_Avoid_: CC message, control change, automation, envelope; 控制信号、自动化、包络
+
+自动化 and 包络 both belong to a DAW rather than to a MIDI file: an automation
+lane is a thing an editor draws and an envelope is a thing a synthesiser has,
+and neither is what a control change event is. 控制信号 is the transport reading
+— a signal is what travels down a cable — where what is in the file is a written
+value.
+
+Not paired into 14-bit values. MIDI's fine controllers are a second event on a
+second Controller number, and many exports write only the coarse one; combining
+them is an inference about what an export meant, and a Take that round-trips at
+the event level (ADR-0003) has no room to make it. Two Controllers stated are
+two Controllers reported.

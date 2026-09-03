@@ -366,6 +366,39 @@ pub fn build_take_with_programs(
     build_take_setting(path, ppq, stated, &setting, notes)
 }
 
+/// A Controller a built Take states on its voice track: (tick, controller,
+/// value).
+pub type StatedController = (u32, u8, u8);
+
+/// The same, with control changes on the voice track — the value a passage
+/// beginning part way through the Take has to inherit to be described as it
+/// sounds (ADR-0007).
+pub fn build_take_with_controllers(
+    path: &Path,
+    ppq: u16,
+    stated: &[StatedTimeSignature],
+    controllers: &[StatedController],
+    notes: &[NoteSpec],
+) -> PathBuf {
+    use midly::num::{u4, u7};
+    let setting: Vec<(u32, midly::TrackEventKind<'static>)> = controllers
+        .iter()
+        .map(|&(tick, controller, value)| {
+            (
+                tick,
+                midly::TrackEventKind::Midi {
+                    channel: u4::new(0),
+                    message: midly::MidiMessage::Controller {
+                        controller: u7::new(controller),
+                        value: u7::new(value),
+                    },
+                },
+            )
+        })
+        .collect();
+    build_take_setting(path, ppq, stated, &setting, notes)
+}
+
 /// The same again, with whatever events a test names on the voice track.
 ///
 /// #4's carry/leave-behind rule is one statement about a dozen event

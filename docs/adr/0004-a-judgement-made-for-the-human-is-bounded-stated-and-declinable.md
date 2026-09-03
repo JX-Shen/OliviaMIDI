@@ -69,10 +69,21 @@ the payload must not be able to drop the attribution with it.
 
 ## Consequences
 
-Any future inference inherits all three properties at once, and the first
-candidate is already filed: summarising a controller curve (#13) is an inference
-about what a run of CC events *is*, and it will have a parameter, a disclosure
-and an exact reading, or it will not ship.
+Any future inference inherits all three properties at once.
+
+**The first candidate filed here turned out not to be one, and this paragraph
+is the amendment.** It read that summarising a controller curve (#13) was an
+inference about what a run of CC events *is*, and would have a parameter, a
+disclosure and an exact reading or would not ship. The prediction was wrong, and
+not because a parameter-free way of summarising a curve was found: it was wrong
+to assume that anything needed summarising. ADR-0007 is why: what a channel holds is
+reported as state, and which value is in force and where the highest one falls
+are both read straight out of the file. Segmenting events into a gesture, or
+asserting that two curves are one curve moved, would be inferences and would
+land back here — #13 is where that was tested and rejected. Nothing about the
+three properties is weakened. What is corrected is the habit of deciding in
+advance which side of the line a feature falls on, before anyone has seen the
+data it has to survive.
 
 Every diff prints a line on stderr whether or not `--json` was asked for. An
 agent driving `mid` therefore has to expect that line, which is a cost paid on

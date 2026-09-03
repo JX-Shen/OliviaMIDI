@@ -9,6 +9,7 @@
 //! The `mid` binary is one consumer of this library, not the program itself.
 
 pub mod bars;
+pub mod controller;
 pub mod diff;
 pub mod edit;
 mod error;
@@ -21,6 +22,7 @@ mod temporary;
 mod track;
 
 pub use bars::{BarLines, BarRange, Position, TickSpan};
+pub use controller::{Controller, Controllers, StatedController};
 pub use diff::{Change, Diff, NoteChange, ProgramDifference};
 pub use edit::{apply, Edit, EditSet};
 pub use error::{Error, Result};

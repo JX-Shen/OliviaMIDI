@@ -22,6 +22,7 @@ why no file here supersedes another.
 | [0004](./0004-a-judgement-made-for-the-human-is-bounded-stated-and-declinable.md) | A judgement made for the human is bounded, stated and declinable | Anything `mid` infers rather than reads has a parameter the human sets, is reported with the value it used, and can be switched off |
 | [0005](./0005-the-library-decides-the-fact-the-consumer-decides-the-wording.md) | The library decides the fact, the consumer decides the wording | `battuta` owns what is so, when it is told, and that it is told; `mid` owns the English and the stream |
 | [0006](./0006-a-library-takes-no-process-global-resource-without-consent.md) | A library takes no process-global resource without consent | Signals, environment, working directory: nothing that belongs to the process is touched until the process asks by name |
+| [0007](./0007-channel-state-is-reported-as-what-is-in-force.md) | Channel state is reported as what is in force, never as the events that set it | What a channel holds is the answer; the events that put it there are clerical history. Why a curve is not summarised into a shape, and why anything with nothing in force falls outside every command |
 
 ## How they hang together
 
@@ -31,6 +32,12 @@ boundary being defended for a consumer that does not exist yet.
 `0002` is the other root. `0004` exists because content addressing deliberately
 cannot say *this is the same note, moved*, and `0003` is what content addressing
 needs from the writer.
+
+`0007` is `0004` read from the other side, and it is why `0004` carries an
+amendment: the claim `0004` could not make about a note is one `0007` never has
+to make about a channel, so nothing it reports needs a parameter at all. It
+leans on `0003` for the same thing `0002` does — a writer that returns what it
+was given, so that the events nothing named come back untouched.
 
 *Refuse rather than answer plausibly* in `CHARTER.md` is argued from more often
 than any file here, and it is not here because it changes no code on its own:

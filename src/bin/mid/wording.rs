@@ -17,7 +17,9 @@
 //! the seat its implementation will want. `wording` is ADR-0005's own word for
 //! what this does.
 
-use battuta::{BarLines, Note, Program, ProgramDifference, StatedProgram};
+use battuta::{
+    BarLines, Controller, Note, Program, ProgramDifference, StatedController, StatedProgram,
+};
 
 /// Where a Tick is: musically if the Take says enough to tell, and in Ticks
 /// otherwise.
@@ -197,6 +199,49 @@ pub fn program_difference(difference: &ProgramDifference) -> String {
         Some(program) => numbered(difference.channel, program),
     };
     format!("{} -> {}", side(difference.before), side(difference.after))
+}
+
+/// What one channel holds for one Controller: the state a passage begins in.
+///
+/// `CC11` rather than `controller 11`: `CC` is MIDI's own shorthand, and it is
+/// where the attribution for any name printed beside it sits.
+/// Where the passage's highest value falls is passed in rather than read off
+/// `held`, because whether it is worth a cell is the consumer's call: a passage
+/// that states nothing for this Controller has a peak equal to the value beside
+/// it, and printing it would be saying one fact twice.
+pub fn controller(
+    lines: Option<BarLines>,
+    held: &Controller,
+    peak: Option<(u8, u32)>,
+) -> Vec<String> {
+    let mut row = vec![
+        channel(held.channel),
+        format!("CC{}", held.controller),
+        match held.value {
+            None => "unstated".to_string(),
+            Some(value) => value.to_string(),
+        },
+    ];
+    if let Some((peak, tick)) = peak {
+        row.push(format!("peak {peak} at {}", at(lines, tick)));
+    }
+    row
+}
+
+/// One place the passage states a Controller, as an event: where it happens,
+/// which track says it, and what it says.
+///
+/// The track is here where it is absent from the state above, for the reason it
+/// is on a `StatedProgram` row: this row describes an event somebody can go and
+/// change, and it is what a reader copies a `set_controller` address out of.
+pub fn stated_controller(lines: Option<BarLines>, stated: &StatedController) -> Vec<String> {
+    vec![
+        at(lines, stated.tick),
+        format!("track {}", stated.track),
+        channel(stated.channel),
+        format!("CC{}", stated.controller),
+        stated.value.to_string(),
+    ]
 }
 
 /// What one channel is on: the state a passage begins in.

@@ -67,6 +67,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
     let take = battuta::Take::read(&args.take)?;
     let notes = take.notes_in(args.bars)?;
     let programs = take.programs_in(args.bars)?;
+    let controllers = take.controllers_in(args.bars)?;
 
     if args.json {
         println!(
@@ -98,7 +99,12 @@ pub fn run(args: Args) -> battuta::Result<()> {
     //
     // A passage holding no channels at all has nothing to say nothing about, and
     // `no notes` below is the whole of the answer.
-    if !programs.programs.is_empty() || !programs.stated.is_empty() {
+    // Both blocks speak, or neither does. A passage with no channels at all has
+    // nothing to say nothing about — `no notes` below is the whole of the answer
+    // — and a Controller line there would be answering about channels the
+    // Program block had just declined to mention.
+    let has_channels = !programs.programs.is_empty() || !programs.stated.is_empty();
+    if has_channels {
         if programs.stated.is_empty()
             && programs
                 .programs
@@ -120,6 +126,53 @@ pub fn run(args: Args) -> battuta::Result<()> {
                 .stated
                 .iter()
                 .map(|stated| crate::wording::stated_program(lines, stated))
+                .collect();
+            crate::wording::table(&rows);
+        }
+        println!();
+    }
+
+    // What each channel holds for a Controller, under the Programs and above the
+    // notes: it is channel state like a Program, and it reframes the notes the
+    // same way — the same line played with the expression already at 100 is a
+    // different passage. Its own table, for the reason the two above are two.
+    // A passage holding nothing gets one line saying so rather than a row per
+    // channel: a channel holds one Program and `unstated` beside it is a fact
+    // about that channel, where a channel says nothing about a hundred and
+    // twenty Controllers and printing that many non-statements informs nobody.
+    // It is still said, because a reader told nothing cannot tell a Take with no
+    // expression shaping from a tool that does not look — the invisibility #11
+    // is about.
+    if has_channels {
+        if controllers.controllers.is_empty() {
+            println!("no controllers stated");
+        } else {
+            let rows: Vec<Vec<String>> = controllers
+                .controllers
+                .iter()
+                .map(|held| {
+                    // The peak earns a cell only where the passage states
+                    // something for this Controller. Where it states nothing the
+                    // peak is the value already beside it, at the passage's own
+                    // first Tick, and the cell would be one fact printed twice.
+                    let stated = controllers.stated.iter().any(|stated| {
+                        stated.channel == held.channel && stated.controller == held.controller
+                    });
+                    crate::wording::controller(
+                        lines,
+                        held,
+                        stated.then_some((held.peak, held.peak_at)),
+                    )
+                })
+                .collect();
+            crate::wording::table(&rows);
+        }
+        if !controllers.stated.is_empty() {
+            println!();
+            let rows: Vec<Vec<String>> = controllers
+                .stated
+                .iter()
+                .map(|stated| crate::wording::stated_controller(lines, stated))
                 .collect();
             crate::wording::table(&rows);
         }

@@ -30,6 +30,8 @@ channel 0  program 40 (GM violin)
 channel 1  unstated
 channel 2  unstated
 
+no controllers stated
+
 bar 1 beat 1  track 1  A4  velocity 70  duration 480  t1:c0:p69:s0:n0
 bar 1 beat 1  track 2  D3  velocity 60  duration 480  t2:c1:p50:s0:n0
 bar 1 beat 1  track 3  D2  velocity 55  duration 480  t3:c2:p38:s0:n0
