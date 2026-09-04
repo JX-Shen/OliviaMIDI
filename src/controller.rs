@@ -115,7 +115,7 @@ impl Take {
         Ok(self
             .controller_events()?
             .into_iter()
-            .map(|held| held.stated)
+            .map(|event| event.stated)
             .collect())
     }
 
@@ -125,7 +125,7 @@ impl Take {
     /// that walks it.
     pub(crate) fn controller_events(&self) -> Result<Vec<ControllerEvent>> {
         let smf = self.smf()?;
-        let mut held = Vec::new();
+        let mut found = Vec::new();
 
         for (track, events) in smf.tracks.iter().enumerate() {
             let mut tick = 0u32;
@@ -139,7 +139,7 @@ impl Take {
                     if controller.as_int() >= FIRST_CHANNEL_MODE {
                         continue;
                     }
-                    held.push(ControllerEvent {
+                    found.push(ControllerEvent {
                         stated: StatedController {
                             track,
                             channel: channel.as_int(),
@@ -158,8 +158,8 @@ impl Take {
         // is the one in force, as it is for the synthesiser. Within one track it
         // keeps file order, so the last statement at an address is still the last
         // one after this.
-        held.sort_by_key(|held| held.stated.tick);
-        Ok(held)
+        found.sort_by_key(|found| found.stated.tick);
+        Ok(found)
     }
 
     /// The Controllers of a passage: what each channel holds when it begins, and

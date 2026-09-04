@@ -251,13 +251,13 @@ fn resolve(
         stated
             .iter()
             .rev()
-            .find(|held| {
-                i64::try_from(held.stated.track) == Ok(track)
-                    && i64::from(held.stated.channel) == channel
-                    && i64::from(held.stated.controller) == controller
-                    && i64::from(held.stated.tick) == tick
+            .find(|event| {
+                i64::try_from(event.stated.track) == Ok(track)
+                    && i64::from(event.stated.channel) == channel
+                    && i64::from(event.stated.controller) == controller
+                    && i64::from(event.stated.tick) == tick
             })
-            .map(|held| Landing::NamedController(change, *held))
+            .map(|event| Landing::NamedController(change, *event))
             .ok_or(Error::UnknownController {
                 track,
                 channel,
@@ -387,7 +387,9 @@ pub fn apply(take: &Take, edit_set: &EditSet) -> Result<Take> {
             Landing::Stated(new) => sounding.push(add(&mut tracks, new)?),
             Landing::Orchestrated(new) => set_program(&mut tracks, new)?,
             Landing::Controlled(new) => state_controller(&mut tracks, new)?,
-            Landing::NamedController(change, held) => change_controller(&mut tracks, change, held)?,
+            Landing::NamedController(change, named) => {
+                change_controller(&mut tracks, change, named)?
+            }
         }
     }
     stay_distinct(&tracks, &sounding)?;
@@ -730,16 +732,16 @@ fn state_controller(tracks: &mut [Rewrite], new: NewController) -> Result<()> {
 fn change_controller(
     tracks: &mut [Rewrite],
     change: ControllerChange,
-    held: crate::controller::ControllerEvent,
+    named: crate::controller::ControllerEvent,
 ) -> Result<()> {
-    let stated = held.stated;
+    let stated = named.stated;
     let track = &mut tracks[stated.track];
     // Resolved against the input Take, so an event an earlier Edit in this same
     // Set already removed still resolved and now has nowhere to land. Refused
     // rather than quietly skipped, as a deleted note is. The address is named as
     // the Edit Set wrote it, not as the event now stands: an earlier Edit may
     // have moved it, and a Tick nobody wrote is no help in finding the Edit.
-    if !track.holds(held.event) {
+    if !track.holds(named.event) {
         return Err(Error::ControllerAlreadyDeleted {
             track: stated.track,
             channel: stated.channel,
@@ -749,9 +751,9 @@ fn change_controller(
     }
 
     match change {
-        ControllerChange::Delete => track.remove(held.event),
+        ControllerChange::Delete => track.remove(named.event),
         ControllerChange::Move(delta_ticks) => {
-            let from = i64::from(track.tick(held.event));
+            let from = i64::from(track.tick(named.event));
             let moved = from
                 .checked_add(delta_ticks)
                 .and_then(|tick| u32::try_from(tick).ok())
@@ -761,12 +763,12 @@ fn change_controller(
             // under it. Found before the mover is placed, or it would find the
             // mover itself.
             if let Some(occupied) = track.controller_at(stated.channel, stated.controller, moved) {
-                if occupied != held.event {
+                if occupied != named.event {
                     track.remove(occupied);
                 }
             }
-            track.set_tick(held.event, moved);
-            track.place_again(held.event);
+            track.set_tick(named.event, moved);
+            track.place_again(named.event);
         }
     }
     Ok(())
