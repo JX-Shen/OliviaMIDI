@@ -62,6 +62,26 @@ pub const ORCHESTRATED: &str = "fixtures/orchestrated.mid";
 /// See `tests/controller.rs`, which states its contents where it uses them.
 pub const EXPRESSIVE: &str = "fixtures/expressive.mid";
 
+/// The Take built to state a Program twice at one address. Never written to by
+/// any test.
+///
+/// `EXPRESSIVE` states two values for one Controller at one address, and that
+/// case has a Program-shaped twin nothing else in the suite can reach: a Take
+/// that names a Program twice at one Tick on one channel. The one in force is
+/// the one written last, so an Edit naming that address means the *second* of
+/// them, and reaching the first leaves the channel exactly where it was.
+///
+/// Committed rather than built, for `STACKED`'s reason: which of two statements
+/// at one address is in force is a fact about the order they are written in
+/// this file, not about our own builder. Four Bars of 3/4 at 480 PPQ, one voice
+/// track, one note per Bar, and:
+///
+/// - track 1, channel 0, Tick 0, program 40 — written first, so overridden
+/// - track 1, channel 0, Tick 0, program 60 — written second, so in force
+///
+/// See `tests/program.rs`, which states its contents where it uses them.
+pub const RESTATED: &str = "fixtures/restated.mid";
+
 pub fn mid() -> assert_cmd::Command {
     let mut command = assert_cmd::Command::cargo_bin("mid").expect("mid builds");
     // Nothing in this suite may be steered by whatever Rig the machine happens

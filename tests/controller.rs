@@ -702,3 +702,263 @@ bar 2 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s1440:n0
 "
     );
 }
+
+/// A Controller stated at a Tick reaches the synthesiser before the notes there.
+///
+/// Audible rather than arithmetic, and the same claim a program change already
+/// makes: a note-on at that Tick has to sound under the value the Take now holds
+/// there. Placed after it, the value arrives after the note it was set for, the
+/// note sounds under the old one, and the Edit is inaudible in exactly the Bar
+/// it was asked for — an `apply` that succeeded, a file that plays, and
+/// `inspect` reporting a state the passage does not begin in.
+#[test]
+fn an_inserted_control_change_precedes_the_notes_at_its_tick() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_with_controllers(
+        &dir.path().join("plain.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[],
+        &[(0, 480, 69), (1440, 480, 69)],
+    );
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "state-it",
+        r#"{"kind": "set_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440, "value": 100}"#,
+    );
+
+    common::mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        events_of_track(&output, 1),
+        vec![
+            (0, "strikes"),
+            (480, "releases"),
+            (1440, "controller"),
+            (1440, "strikes"),
+            (1920, "releases"),
+        ]
+    );
+}
+
+/// A Controller moved onto a Tick reaches the synthesiser before the notes
+/// there, as a stated one does.
+///
+/// The two Edits arrive at the same address by different routes, and a reader
+/// who was told the value is in force from that Tick has no way to tell which
+/// route was taken. Only one of the two may be audible there.
+#[test]
+fn a_moved_control_change_precedes_the_notes_at_its_tick() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_with_controllers(
+        &dir.path().join("early.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(960, 11, 100)],
+        &[(0, 480, 69), (1440, 480, 69)],
+    );
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "move-it",
+        r#"{"kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 960, "delta_ticks": 480}"#,
+    );
+
+    common::mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        events_of_track(&output, 1),
+        vec![
+            (0, "strikes"),
+            (480, "releases"),
+            (1440, "controller"),
+            (1440, "strikes"),
+            (1920, "releases"),
+        ]
+    );
+}
+
+/// Two Controllers stated at one Tick reach the synthesiser in the order the
+/// Edit Set asked for.
+///
+/// An Edit Set is ordered, and for some Controllers the order *is* the meaning:
+/// a Data Entry following the RPN it belongs to is a different message from the
+/// two the other way round. This is not a claim about which state goes first
+/// against the notes — it is the guard on the mechanism that answers that
+/// question, because a fix that placed state events by counting downwards would
+/// hand back every such pair reversed.
+#[test]
+fn controllers_stated_at_one_tick_keep_the_order_the_edit_set_asked_for() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_with_controllers(
+        &dir.path().join("pair.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[],
+        &[(0, 480, 69), (1440, 480, 69)],
+    );
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "both",
+        r#"{"kind": "set_controller", "track": 1, "channel": 0, "controller": 101, "tick": 1440, "value": 0},
+           {"kind": "set_controller", "track": 1, "channel": 0, "controller": 100, "tick": 1440, "value": 0},
+           {"kind": "set_controller", "track": 1, "channel": 0, "controller": 6,   "tick": 1440, "value": 2}"#,
+    );
+
+    common::mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        controllers_at(&output, 1, 1440),
+        vec![(101, 0), (100, 0), (6, 2)],
+        "the Edit Set's order was not the order the file states them in"
+    );
+}
+
+/// A named Controller Edit means the event it resolved against, for the whole
+/// Edit Set.
+///
+/// Targets are fixed while effects are ordered, and a Controller Edit is not
+/// exempt because it names an address rather than an identity. `EXPRESSIVE`
+/// states CC11 twice at Tick 1440 — 30, then 40 — so 40 is the one in force and
+/// the one both of these Edits mean. The first carries it clear of the address;
+/// the second has to carry the *same* event further, not turn round and find the
+/// 30 the first one left behind.
+///
+/// A move counts from where its event now is, as `move_note` does: a second
+/// Edit on a moved target is asking for a further distance, not restating an
+/// address that no longer holds anything.
+#[test]
+fn a_named_controller_edit_keeps_the_event_it_resolved_against() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "twice",
+        r#"{"kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440, "delta_ticks": 30},
+           {"kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440, "delta_ticks": 30}"#,
+    );
+
+    common::mid()
+        .args(["apply", common::EXPRESSIVE])
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        stated_controller(&output, 1, 0, 11, 1440),
+        vec![30],
+        "the Edit Set did not name the 30, and it was moved anyway"
+    );
+    assert_eq!(
+        stated_controller(&output, 1, 0, 11, 1500),
+        vec![40],
+        "the event both Edits named did not arrive where the second one asked"
+    );
+}
+
+/// One track's events in file order, as (tick, what it does) — enough to see
+/// which of two events sharing a Tick the synthesiser meets first.
+fn events_of_track(path: &std::path::Path, track: usize) -> Vec<(u32, &'static str)> {
+    let bytes = std::fs::read(path).expect("Take is readable");
+    let smf = midly::Smf::parse(&bytes).expect("Take parses");
+    let mut found = Vec::new();
+    let mut tick = 0u32;
+    for event in &smf.tracks[track] {
+        tick += event.delta.as_int();
+        let midly::TrackEventKind::Midi { message, .. } = event.kind else {
+            continue;
+        };
+        found.push((
+            tick,
+            match message {
+                midly::MidiMessage::Controller { .. } => "controller",
+                midly::MidiMessage::NoteOn { vel, .. } if vel.as_int() > 0 => "strikes",
+                midly::MidiMessage::NoteOff { .. } | midly::MidiMessage::NoteOn { .. } => {
+                    "releases"
+                }
+                _ => continue,
+            },
+        ));
+    }
+    found
+}
+
+/// The control changes one track states at one Tick, as (controller, value), in
+/// the order the file lists them.
+fn controllers_at(path: &std::path::Path, track: usize, at: u32) -> Vec<(u8, u8)> {
+    let bytes = std::fs::read(path).expect("Take is readable");
+    let smf = midly::Smf::parse(&bytes).expect("Take parses");
+    let mut found = Vec::new();
+    let mut tick = 0u32;
+    for event in &smf.tracks[track] {
+        tick += event.delta.as_int();
+        if let midly::TrackEventKind::Midi {
+            message: midly::MidiMessage::Controller { controller, value },
+            ..
+        } = event.kind
+        {
+            if tick == at {
+                found.push((controller.as_int(), value.as_int()));
+            }
+        }
+    }
+    found
+}
+
+/// The values one track states for one Controller of one channel at one Tick,
+/// in file order. Plural because a Take may state two at one address, and which
+/// of them an Edit moved is the whole question.
+fn stated_controller(
+    path: &std::path::Path,
+    track: usize,
+    channel: u8,
+    controller: u8,
+    at: u32,
+) -> Vec<u8> {
+    let bytes = std::fs::read(path).expect("Take is readable");
+    let smf = midly::Smf::parse(&bytes).expect("Take parses");
+    let mut found = Vec::new();
+    let mut tick = 0u32;
+    for event in &smf.tracks[track] {
+        tick += event.delta.as_int();
+        if let midly::TrackEventKind::Midi {
+            channel: on,
+            message:
+                midly::MidiMessage::Controller {
+                    controller: number,
+                    value,
+                },
+        } = event.kind
+        {
+            if tick == at && on.as_int() == channel && number.as_int() == controller {
+                found.push(value.as_int());
+            }
+        }
+    }
+    found
+}

@@ -13,7 +13,7 @@
 
 mod common;
 
-use common::{FIXTURE, ORCHESTRATED};
+use common::{FIXTURE, ORCHESTRATED, RESTATED};
 
 /// What each channel of the passage is on, above the notes and before them: the
 /// state reframes every note under it, because the same notes on a horn are a
@@ -549,6 +549,47 @@ fn refuses_a_tick_before_the_take_begins() {
         .stderr(predicates::str::contains(
             "a Program cannot be stated at tick -1; the first Tick of a Take is 0",
         ));
+}
+
+/// `set_program` changes the Program the channel is actually on.
+///
+/// Where a Take states a Program twice at one address the second is the one in
+/// force — that is what `inspect` reports and what a synthesiser plays. So that
+/// is the statement this Edit means. Reaching the first one instead leaves the
+/// second overriding it: `apply` succeeds, the file is valid, `diff` finds
+/// nothing, and the channel is on exactly the Program it was on before.
+///
+/// The earlier statement stays where it is. An Edit Set that did not name it may
+/// not fold it away (ADR-0003), so the output holds two program changes here
+/// too — 40 and then 42, not one.
+#[test]
+fn set_program_changes_the_program_in_force_at_a_duplicate_address() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let output = dir.path().join("out.mid");
+    let edits = dir.path().join("edits.json");
+    common::write(
+        &edits,
+        r#"{"edits": [{"kind": "set_program", "track": 1, "channel": 0, "tick": 0, "program": 42}]}"#,
+    );
+
+    common::mid()
+        .args(["apply", RESTATED])
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        common::stated_programs(&output),
+        vec![(1, 0, 0, 40), (1, 0, 0, 42)],
+        "the statement in force was not the one changed"
+    );
+    assert!(
+        common::human_output(&["inspect", output.to_str().expect("a path")])
+            .starts_with("channel 0  program 42"),
+        "the channel is not on the Program the Edit asked for"
+    );
 }
 
 /// One track's events in file order, as (tick, what it does) — enough to see
