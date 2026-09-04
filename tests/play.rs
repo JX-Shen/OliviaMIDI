@@ -536,6 +536,43 @@ fn the_passage_inherits_the_program_change_that_precedes_it() {
     );
 }
 
+/// A passage inherits the Program a `set_program` actually put in force.
+///
+/// The last leg of #19, and the one the milestone is named for: what `inspect`
+/// reports has to be what a synthesiser meets. `RESTATED` states a Program twice
+/// at one address, so the passage carries both statements — in file order, with
+/// the edited one last, because that is the one in force and folding the other
+/// away would be an Edit touching what nothing named (ADR-0003).
+#[test]
+fn the_passage_inherits_the_program_a_set_program_put_in_force() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = dir.path().join("edited.mid");
+    let edits = dir.path().join("edits.json");
+    common::write(
+        &edits,
+        r#"{"edits": [{"kind": "set_program", "track": 1, "channel": 0, "tick": 0, "program": 42}]}"#,
+    );
+    mid()
+        .args(["apply", common::RESTATED])
+        .arg(&edits)
+        .arg("--output")
+        .arg(&take)
+        .assert()
+        .success();
+
+    let played = play(
+        dir.path(),
+        &[take.to_str().expect("path is UTF-8"), "--bars", "2:2"],
+    );
+    assert!(played.output.status.success());
+
+    assert_eq!(
+        common::program_changes(&played.handed),
+        vec![(0, 40), (0, 42)],
+        "the passage does not end on the Program the Edit put in force"
+    );
+}
+
 /// #4's taxonomy, both sides of it, in one pass.
 ///
 /// A passage inherits the state the Take had already set by the time it began,

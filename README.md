@@ -268,9 +268,10 @@ being silent about any of it.
 ### Known to be wrong in 0.1.1
 
 Being able to change a thing is not the same as being able to trust the change.
-Three defects in that new capability are fixed in
-[0.1.2](https://github.com/JX-Shen/OliviaMIDI/issues/16), and until it ships
-they are live on `main` and in the published 0.1.1:
+Three defects in that new capability are in the published 0.1.1, each of them a
+case where `mid` reports a state it did not produce.
+[0.1.2](https://github.com/JX-Shen/OliviaMIDI/issues/16) is fixing them, and the
+list says where each one has got to:
 
 - A `delete_controller` or `move_controller` finds its target again after
   earlier Edits have already run, so where a Take states one Controller twice at
@@ -280,12 +281,10 @@ they are live on `main` and in the published 0.1.1:
   already there, so the notes of that Tick still sound under the value the
   channel held before — while `inspect` reports the new one as in force
   ([#20](https://github.com/JX-Shen/OliviaMIDI/issues/20)).
-- `set_program` changes the *first* statement at a duplicate address rather than
-  the one actually in force, so the command succeeds, `diff` reports no
-  difference, and the channel is on the Program it was already on
+- ~~`set_program` changes the *first* statement at a duplicate address rather
+  than the one actually in force, so the command succeeds, `diff` reports no
+  difference, and the channel is on the Program it was already on.~~ Fixed
   ([#19](https://github.com/JX-Shen/OliviaMIDI/issues/19)).
-
-Each is the same failure: `mid` reported a state it had not actually produced.
 
 Not all of it is good yet, and that is the right order — nothing gets to be
 elegant before the loop closes.

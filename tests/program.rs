@@ -551,6 +551,25 @@ fn refuses_a_tick_before_the_take_begins() {
         ));
 }
 
+/// Two Programs stated at one address: the second is the one in force.
+///
+/// The reading side of #19, pinned before the editing side is asked to agree
+/// with it. A Take may state a Program twice at one address, and the statement
+/// written last is what a synthesiser acts on — so it is what ADR-0007 requires
+/// be reported.
+#[test]
+fn a_duplicate_address_reports_the_program_stated_last() {
+    assert_eq!(
+        common::stated_programs(std::path::Path::new(RESTATED)),
+        vec![(1, 0, 0, 40), (1, 0, 0, 60)],
+        "the fixture no longer states two Programs at one address"
+    );
+    assert!(
+        common::human_output(&["inspect", RESTATED]).starts_with("channel 0  program 60"),
+        "the channel is not reported on the Program stated last"
+    );
+}
+
 /// `set_program` changes the Program the channel is actually on.
 ///
 /// Where a Take states a Program twice at one address the second is the one in
@@ -589,6 +608,60 @@ fn set_program_changes_the_program_in_force_at_a_duplicate_address() {
         common::human_output(&["inspect", output.to_str().expect("a path")])
             .starts_with("channel 0  program 42"),
         "the channel is not on the Program the Edit asked for"
+    );
+}
+
+/// `diff` reports the change a `set_program` makes at a duplicate address.
+///
+/// `diff` compares state, so it reports a difference here exactly when the Edit
+/// reached the statement in force. That makes it the check on the other two: an
+/// Edit that changed an already-overridden statement leaves the state alone, and
+/// `diff` says nothing about two files that differ. See #19.
+#[test]
+fn diff_sees_a_set_program_at_a_duplicate_address() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let output = dir.path().join("out.mid");
+    let edits = dir.path().join("edits.json");
+    common::write(
+        &edits,
+        r#"{"edits": [{"kind": "set_program", "track": 1, "channel": 0, "tick": 0, "program": 42}]}"#,
+    );
+
+    common::mid()
+        .args(["apply", RESTATED])
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        common::human_output(&["diff", RESTATED, output.to_str().expect("a path")]),
+        "program  bar 1 beat 1  channel 0  60 (GM french horn) -> 42 (GM cello)\n"
+    );
+}
+
+/// An Edit Set that asks for nothing leaves both statements where they are.
+///
+/// ADR-0003 at a duplicate address: an Edit Set naming neither statement may not
+/// fold them into one, however redundant the first of them looks. What arrived
+/// is what leaves.
+#[test]
+fn an_empty_edit_set_keeps_both_statements_at_a_duplicate_address() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let output = dir.path().join("out.mid");
+
+    common::mid()
+        .args(["apply", RESTATED])
+        .arg(common::empty_edit_set(dir.path()))
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        common::event_stream(&output),
+        common::event_stream(std::path::Path::new(RESTATED))
     );
 }
 

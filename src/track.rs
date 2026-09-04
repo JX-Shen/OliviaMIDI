@@ -170,8 +170,21 @@ impl<'a> Rewrite<'a> {
     /// and inserts a statement when it says nothing there. It does not reach the
     /// statement before it, which is about an earlier moment, nor the one after,
     /// which the Take still makes and a later `inspect` still reports.
+    ///
+    /// The *last* such event rather than the first, as `controller_at` finds the
+    /// last control change. Two program changes at one address are both carried
+    /// (ADR-0003 — an Edit Set naming neither may not fold them), and the one in
+    /// force is the one written last, which is what `inspect` reports and what a
+    /// synthesiser plays. See #19.
+    ///
+    /// Last by slot index, which is last in the finished track only while the
+    /// two agree. They do: an original keeps `order` equal to its index, and a
+    /// program change is only ever pushed where the track holds none, so the
+    /// pushed one has both the highest index and its own Tick to itself. An Edit
+    /// that re-placed an existing program change would break that, and would
+    /// have to make this ask about `order` instead.
     pub(crate) fn program_at(&self, channel: u8, tick: u32) -> Option<usize> {
-        self.slots.iter().position(|slot| {
+        self.slots.iter().rposition(|slot| {
             slot.alive
                 && slot.tick == tick
                 && matches!(
@@ -201,11 +214,11 @@ impl<'a> Rewrite<'a> {
 
     /// Where a Controller is stated on a channel at a Tick, or `None`.
     ///
-    /// The *last* such event rather than the first, which is where this parts
-    /// company with `program_at`. Two control changes at one address are both
-    /// carried (ADR-0003 — an Edit Set naming neither may not fold them), and
-    /// the one in force is the one written last, so that is the one an Edit
-    /// naming the address means.
+    /// The *last* such event rather than the first, as `program_at` finds the
+    /// last program change. Two control changes at one address are both carried
+    /// (ADR-0003 — an Edit Set naming neither may not fold them), and the one in
+    /// force is the one written last, so that is the one an Edit naming the
+    /// address means.
     pub(crate) fn controller_at(&self, channel: u8, controller: u8, tick: u32) -> Option<usize> {
         self.slots.iter().rposition(|slot| {
             slot.alive
