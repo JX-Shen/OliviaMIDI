@@ -54,14 +54,22 @@ use std::path::PathBuf;
 /// at one Tick — CC number 0-119, value 0-127. Controllers 120-127 are channel
 /// mode messages rather than Controllers, and no Edit reaches them.
 ///
-/// `set_controller` states an address, as `set_program` does: one address holds
-/// one value, so it changes the statement at that Tick and creates one where the
-/// Take makes none. `delete_controller` and `move_controller` *name* what is
-/// there instead — there has to be something to take away or carry, and an
-/// address holding nothing is an Edit Set written against a different Take. A
-/// move landing on an address that already holds a value overwrites it. There is
-/// no Edit that names a stretch: a curve is dozens of these, and that is what an
-/// Edit Set is for.
+/// `set_controller` states an address, as `set_program` does: it changes what the
+/// channel holds at that Tick and creates a statement where the Take makes none.
+/// `delete_controller` and `move_controller` *name* what is there instead —
+/// there has to be something to take away or carry, and an address holding
+/// nothing is an Edit Set written against a different Take. A move landing on an
+/// address that already holds a value takes over from it. There is no Edit that
+/// names a stretch: a curve is dozens of these, and that is what an Edit Set is
+/// for.
+///
+/// Where a Take states one Controller twice at one address, the statement
+/// written last is the one in force and so the one all three kinds mean. The
+/// other is left exactly where it is: an Edit Set that did not name it may not
+/// fold it away. A named Edit then means that event for the rest of the Edit
+/// Set, so a second one asking to move it counts from wherever the first left
+/// it, and one naming an event an earlier Edit deleted fails rather than turning
+/// to the statement beside it.
 ///
 /// A program change lands before the events already at its Tick, where a note
 /// lands after them. A note-on at that Tick has to sound on the Program the Take

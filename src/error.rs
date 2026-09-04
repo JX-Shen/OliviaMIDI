@@ -226,6 +226,20 @@ pub enum Error {
     NoteAlreadyDeleted(String),
 
     #[error(
+        "an earlier Edit in this Edit Set deleted the Controller on track {track} channel \
+         {channel} controller {controller} at tick {tick}, so this one has nothing to change. \
+         Every target is resolved against the input Take, so a deleted Controller still answers \
+         to the address it was stated at — and this Edit means that event, not the other \
+         statement there."
+    )]
+    ControllerAlreadyDeleted {
+        track: usize,
+        channel: u8,
+        controller: u8,
+        tick: u32,
+    },
+
+    #[error(
         "moving {id} by {delta_ticks} ticks lands it at {landed}, which is not a Tick; the first \
          Tick of a Take is 0"
     )]

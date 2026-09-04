@@ -119,9 +119,17 @@ pub enum Edit {
     /// deletions and thirty statements would leave the Edit Set unable to say
     /// even that much.
     ///
-    /// Landing on an address that already holds a value overwrites it. One
-    /// address holds one value, and reading effects as ordered makes this move
-    /// the thing that happened last.
+    /// Landing on an address that already holds a value overwrites it: reading
+    /// effects as ordered makes this move the thing that happened last, so what
+    /// it carries is what the channel holds there afterwards. Where the
+    /// destination states one Controller twice, the statement in force is the one
+    /// overwritten and the other stays — it was named by nothing (ADR-0003), so
+    /// the address is left holding two events and one value, as it arrived.
+    ///
+    /// It names, so it means the event it resolved against for the whole Edit
+    /// Set. A second `move_controller` on that event asks for a further distance
+    /// from wherever the first one left it, as a second `move_note` does. See
+    /// #18.
     MoveController {
         track: i64,
         channel: i64,
@@ -171,19 +179,18 @@ struct NewNote {
     velocity: i64,
 }
 
-/// The Controller an Edit names or states, and what to do with it. Wide numbers,
-/// for the reason `Edit`'s are.
+/// The Controller `set_controller` states. Wide numbers, for the reason `Edit`'s
+/// are.
 struct NewController {
     track: i64,
     channel: i64,
     controller: i64,
     tick: i64,
-    change: ControllerChange,
+    value: i64,
 }
 
-/// What one Controller Edit does to the address it named.
+/// What one named Controller Edit does to the event it named.
 enum ControllerChange {
-    Set(i64),
     Delete,
     Move(i64),
 }
@@ -198,12 +205,19 @@ struct NewProgram {
 
 /// An Edit once it has been looked up against the input Take. One shape per sort
 /// of Edit: those naming a note, the one stating a note, the one stating which
-/// Program a channel is on, and those reaching what it holds for a Controller.
+/// Program a channel is on, the one stating what it holds for a Controller, and
+/// those naming a Controller it already holds.
+///
+/// The last two are the same split as the first two. An Edit that states an
+/// address carries the address, because there may be nothing there to name; an
+/// Edit that names carries what it found, because finding it again later would
+/// be finding something else.
 enum Landing {
     Named(Change, Note),
     Stated(NewNote),
     Orchestrated(NewProgram),
     Controlled(NewController),
+    NamedController(ControllerChange, crate::controller::ControllerEvent),
 }
 
 /// Every identity in the Edit Set, resolved against the input Take before any
@@ -218,38 +232,40 @@ enum Landing {
 /// here too, against the input Take and for the same reason.
 fn resolve(
     notes: &[Note],
-    stated: &[crate::controller::StatedController],
+    stated: &[crate::controller::ControllerEvent],
     edits: &[Edit],
 ) -> Result<Vec<Landing>> {
-    // A Controller address is checked against the *input* Take, before any
+    // A named Controller Edit is looked up in the *input* Take, before any
     // effect lands, for the reason an identity is: targets are fixed while
     // effects are ordered. So a `move_controller` naming an address an earlier
     // `set_controller` in the same Edit Set created is refused — that address
     // held nothing in the Take this Edit Set was written against.
-    let addressed = |track: i64, channel: i64, controller: i64, tick: i64, change| {
-        let found = stated.iter().any(|held| {
-            i64::try_from(held.track) == Ok(track)
-                && i64::from(held.channel) == channel
-                && i64::from(held.controller) == controller
-                && i64::from(held.tick) == tick
-        });
-        if !found {
-            return Err(Error::UnknownController {
+    //
+    // The *last* statement at the address, because that is the one in force and
+    // so the one an Edit naming the address means. What is carried away from
+    // here is the event, not the address: a second Edit naming the same address
+    // means the same event, wherever an earlier Edit has since put it, and the
+    // other statement at that address was named by nothing and stays put
+    // (ADR-0003). See #18.
+    let named = |track: i64, channel: i64, controller: i64, tick: i64, change| {
+        stated
+            .iter()
+            .rev()
+            .find(|held| {
+                i64::try_from(held.stated.track) == Ok(track)
+                    && i64::from(held.stated.channel) == channel
+                    && i64::from(held.stated.controller) == controller
+                    && i64::from(held.stated.tick) == tick
+            })
+            .map(|held| Landing::NamedController(change, *held))
+            .ok_or(Error::UnknownController {
                 track,
                 channel,
                 controller,
                 tick,
-            });
-        }
-        Ok(Landing::Controlled(NewController {
-            track,
-            channel,
-            controller,
-            tick,
-            change,
-        }))
+            })
     };
-    let named = |id: &NoteId, change| {
+    let note = |id: &NoteId, change| {
         notes
             .iter()
             .find(|note| &note.id == id)
@@ -260,17 +276,17 @@ fn resolve(
     edits
         .iter()
         .map(|edit| match *edit {
-            Edit::SetVelocity { ref id, velocity } => named(id, Change::Velocity(velocity)),
-            Edit::TransposeNote { ref id, semitones } => named(id, Change::Transpose(semitones)),
+            Edit::SetVelocity { ref id, velocity } => note(id, Change::Velocity(velocity)),
+            Edit::TransposeNote { ref id, semitones } => note(id, Change::Transpose(semitones)),
             Edit::MoveNote {
                 ref id,
                 delta_ticks,
-            } => named(id, Change::Move(delta_ticks)),
+            } => note(id, Change::Move(delta_ticks)),
             Edit::ResizeNote {
                 ref id,
                 delta_ticks,
-            } => named(id, Change::Resize(delta_ticks)),
-            Edit::DeleteNote { ref id } => named(id, Change::Delete),
+            } => note(id, Change::Resize(delta_ticks)),
+            Edit::DeleteNote { ref id } => note(id, Change::Delete),
             Edit::AddNote {
                 track,
                 channel,
@@ -312,21 +328,21 @@ fn resolve(
                 channel,
                 controller,
                 tick,
-                change: ControllerChange::Set(value),
+                value,
             })),
             Edit::DeleteController {
                 track,
                 channel,
                 controller,
                 tick,
-            } => addressed(track, channel, controller, tick, ControllerChange::Delete),
+            } => named(track, channel, controller, tick, ControllerChange::Delete),
             Edit::MoveController {
                 track,
                 channel,
                 controller,
                 tick,
                 delta_ticks,
-            } => addressed(
+            } => named(
                 track,
                 channel,
                 controller,
@@ -344,7 +360,7 @@ fn resolve(
 /// in advance.
 pub fn apply(take: &Take, edit_set: &EditSet) -> Result<Take> {
     let notes = take.notes()?;
-    let resolved = resolve(&notes, &take.stated_controllers()?, &edit_set.edits)?;
+    let resolved = resolve(&notes, &take.controller_events()?, &edit_set.edits)?;
 
     let mut smf = take.smf()?;
     // Every track is opened before the first Edit lands, and every Edit reaches
@@ -370,7 +386,8 @@ pub fn apply(take: &Take, edit_set: &EditSet) -> Result<Take> {
             Landing::Named(change, note) => change_note(&mut tracks[note.track], change, &note)?,
             Landing::Stated(new) => sounding.push(add(&mut tracks, new)?),
             Landing::Orchestrated(new) => set_program(&mut tracks, new)?,
-            Landing::Controlled(new) => change_controller(&mut tracks, new)?,
+            Landing::Controlled(new) => state_controller(&mut tracks, new)?,
+            Landing::NamedController(change, held) => change_controller(&mut tracks, change, held)?,
         }
     }
     stay_distinct(&tracks, &sounding)?;
@@ -650,22 +667,18 @@ fn set_program(tracks: &mut [Rewrite], new: NewProgram) -> Result<()> {
     Ok(())
 }
 
-/// The three kinds that change what a channel holds for a Controller.
+/// The kind that states what a channel holds for a Controller.
 ///
-/// One address holds one value, which is what makes each of these one event's
-/// worth of work: `set` changes the statement at that Tick or creates it,
-/// `delete` takes it away, and `move` carries it to another Tick and overwrites
-/// whatever was there. Where a Take states two values at one address, the one
-/// written last is the one in force and so the one these mean; the other is left
-/// exactly where it is, because an Edit Set that did not name it may not fold it
-/// away (ADR-0003).
+/// It changes the statement in force at that Tick when there is one and creates
+/// it when there is not (ADR-0003 for what happens to a second statement there;
+/// see `Edit::MoveController`).
 ///
-/// None of them reaches a *later* statement, for the reason `set_program` does
-/// not: "from this Tick" is true until the Take says otherwise, and silently
-/// deleting what it says two Bars later would be an Edit changing something it
-/// was not asked about. What the passage actually holds afterwards is what
-/// `inspect` reports and `diff` compares.
-fn change_controller(tracks: &mut [Rewrite], new: NewController) -> Result<()> {
+/// It does not reach a *later* statement, for the reason `set_program` does not:
+/// "from this Tick" is true until the Take says otherwise, and silently deleting
+/// what it says two Bars later would be an Edit changing something it was not
+/// asked about. What the passage actually holds afterwards is what `inspect`
+/// reports and `diff` compares.
+fn state_controller(tracks: &mut [Rewrite], new: NewController) -> Result<()> {
     let index = usize::try_from(new.track)
         .ok()
         .filter(|index| *index < tracks.len())
@@ -677,68 +690,83 @@ fn change_controller(tracks: &mut [Rewrite], new: NewController) -> Result<()> {
     let controller = midi_value(new.controller, FIRST_CHANNEL_MODE - 1)
         .ok_or(Error::ControllerOutOfRange(new.controller))?;
     let tick = u32::try_from(new.tick).map_err(|_| Error::ControllerTickOutOfRange(new.tick))?;
-    let unknown = || Error::UnknownController {
-        track: new.track,
-        channel: new.channel,
-        controller: new.controller,
-        tick: new.tick,
-    };
+    let value = midi_value(new.value, 127).ok_or(Error::ControllerValueOutOfRange(new.value))?;
 
     let track = &mut tracks[index];
-    match new.change {
-        ControllerChange::Set(value) => {
-            let value = midi_value(value, 127).ok_or(Error::ControllerValueOutOfRange(value))?;
-            match track.controller_at(channel, controller, tick) {
-                Some(held) => {
-                    // `controller_at` found a control change, so the setter
-                    // cannot decline it. Its `Option` is honesty about being
-                    // handed any index at all.
-                    let replaced = track.set_controller(held, value);
-                    debug_assert!(replaced.is_some(), "controller_at found a control change");
-                }
-                None => {
-                    track.push(
-                        tick,
-                        TrackEventKind::Midi {
-                            channel: u4::new(channel),
-                            message: MidiMessage::Controller {
-                                controller: u7::new(controller),
-                                value: u7::new(value),
-                            },
-                        },
-                    );
-                }
-            }
+    match track.controller_at(channel, controller, tick) {
+        Some(held) => {
+            // `controller_at` found a control change, so the setter cannot
+            // decline it. Its `Option` is honesty about being handed any index
+            // at all.
+            let replaced = track.set_controller(held, value);
+            debug_assert!(replaced.is_some(), "controller_at found a control change");
         }
-        // Resolved against the input Take, so an address an earlier Edit in this
-        // same Set already emptied still resolved and now has nowhere to land.
-        // Refused rather than quietly skipped, as a deleted note is.
-        ControllerChange::Delete => {
-            let held = track
-                .controller_at(channel, controller, tick)
-                .ok_or_else(unknown)?;
-            track.remove(held);
+        None => {
+            track.push(
+                tick,
+                TrackEventKind::Midi {
+                    channel: u4::new(channel),
+                    message: MidiMessage::Controller {
+                        controller: u7::new(controller),
+                        value: u7::new(value),
+                    },
+                },
+            );
         }
+    }
+    Ok(())
+}
+
+/// The kinds that reach a Controller the channel already holds.
+///
+/// Neither asks the track where its statement is. It was resolved to an event of
+/// the input Take and that is the event it means; asking the address again would
+/// find whichever statement is in force after the Edits that have already run,
+/// and at an address stating one Controller twice those are different events.
+/// See #18.
+///
+/// A move counts from where its event now is, as `move_note` does, so a second
+/// Edit on a target an earlier one carried off asks for a further distance.
+fn change_controller(
+    tracks: &mut [Rewrite],
+    change: ControllerChange,
+    held: crate::controller::ControllerEvent,
+) -> Result<()> {
+    let stated = held.stated;
+    let track = &mut tracks[stated.track];
+    // Resolved against the input Take, so an event an earlier Edit in this same
+    // Set already removed still resolved and now has nowhere to land. Refused
+    // rather than quietly skipped, as a deleted note is. The address is named as
+    // the Edit Set wrote it, not as the event now stands: an earlier Edit may
+    // have moved it, and a Tick nobody wrote is no help in finding the Edit.
+    if !track.holds(held.event) {
+        return Err(Error::ControllerAlreadyDeleted {
+            track: stated.track,
+            channel: stated.channel,
+            controller: stated.controller,
+            tick: stated.tick,
+        });
+    }
+
+    match change {
+        ControllerChange::Delete => track.remove(held.event),
         ControllerChange::Move(delta_ticks) => {
-            let held = track
-                .controller_at(channel, controller, tick)
-                .ok_or_else(unknown)?;
-            let moved = i64::from(tick)
+            let from = i64::from(track.tick(held.event));
+            let moved = from
                 .checked_add(delta_ticks)
                 .and_then(|tick| u32::try_from(tick).ok())
-                .ok_or(Error::ControllerTickOutOfRange(
-                    i64::from(tick) + delta_ticks,
-                ))?;
-            // The destination first, so that a move onto an occupied address
-            // leaves one value there rather than two. Found before the mover is
-            // placed, or it would find the mover itself.
-            if let Some(occupied) = track.controller_at(channel, controller, moved) {
-                if occupied != held {
+                .ok_or(Error::ControllerTickOutOfRange(from + delta_ticks))?;
+            // The destination first, so that a move onto an address already
+            // holding this Controller leaves the mover in force rather than
+            // under it. Found before the mover is placed, or it would find the
+            // mover itself.
+            if let Some(occupied) = track.controller_at(stated.channel, stated.controller, moved) {
+                if occupied != held.event {
                     track.remove(occupied);
                 }
             }
-            track.set_tick(held, moved);
-            track.place_again(held);
+            track.set_tick(held.event, moved);
+            track.place_again(held.event);
         }
     }
     Ok(())

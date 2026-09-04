@@ -273,10 +273,11 @@ case where `mid` reports a state it did not produce.
 [0.1.2](https://github.com/JX-Shen/OliviaMIDI/issues/16) is fixing them, and the
 list says where each one has got to:
 
-- A `delete_controller` or `move_controller` finds its target again after
+- ~~A `delete_controller` or `move_controller` finds its target again after
   earlier Edits have already run, so where a Take states one Controller twice at
   one address, a second Edit can turn round and act on the event the first one
-  left behind ([#18](https://github.com/JX-Shen/OliviaMIDI/issues/18)).
+  left behind.~~ Fixed
+  ([#18](https://github.com/JX-Shen/OliviaMIDI/issues/18)).
 - A control change stated or moved onto a Tick is written *after* the note-ons
   already there, so the notes of that Tick still sound under the value the
   channel held before — while `inspect` reports the new one as in force

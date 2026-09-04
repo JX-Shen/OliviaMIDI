@@ -83,6 +83,27 @@ pub struct Controllers {
 /// it. See ADR-0007 and #13.
 pub const FIRST_CHANNEL_MODE: u8 = 120;
 
+/// One place a Take states a Controller, and which event of its track says so.
+///
+/// The event index is what lets a named Controller Edit keep the statement it
+/// resolved against for a whole Edit Set. An address cannot: where a Take states
+/// one Controller twice at one address, asking the address again after an
+/// earlier Edit has run gives back whichever statement is in force *now*, which
+/// is the wrong one the moment an Edit has moved or removed the right one. See
+/// #18. `Note` carries its two event indices for the same reason.
+///
+/// Crate-private, and a pairing rather than a field on `StatedController`: an
+/// index into one track's event list means something for the length of one
+/// `apply` and has no business in what the library hands a consumer.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ControllerEvent {
+    pub(crate) stated: StatedController,
+    /// Counting every event of the track, meta events included — the numbering
+    /// `Rewrite` opens a track into, and the one `Note` records a strike and a
+    /// release by.
+    pub(crate) event: usize,
+}
+
 impl Take {
     /// Every place the Take states a Controller, earliest Tick first, ties
     /// broken by track order.
@@ -91,12 +112,24 @@ impl Take {
     /// obliges an export to put a channel's control changes on the track whose
     /// notes play through it.
     pub fn stated_controllers(&self) -> Result<Vec<StatedController>> {
+        Ok(self
+            .controller_events()?
+            .into_iter()
+            .map(|held| held.stated)
+            .collect())
+    }
+
+    /// The same, each with the event that states it.
+    ///
+    /// The two readings walk one list the same way, which is why this is the one
+    /// that walks it.
+    pub(crate) fn controller_events(&self) -> Result<Vec<ControllerEvent>> {
         let smf = self.smf()?;
-        let mut stated = Vec::new();
+        let mut held = Vec::new();
 
         for (track, events) in smf.tracks.iter().enumerate() {
             let mut tick = 0u32;
-            for event in events {
+            for (index, event) in events.iter().enumerate() {
                 tick += event.delta.as_int();
                 if let TrackEventKind::Midi {
                     channel,
@@ -106,12 +139,15 @@ impl Take {
                     if controller.as_int() >= FIRST_CHANNEL_MODE {
                         continue;
                     }
-                    stated.push(StatedController {
-                        track,
-                        channel: channel.as_int(),
-                        controller: controller.as_int(),
-                        tick,
-                        value: value.as_int(),
+                    held.push(ControllerEvent {
+                        stated: StatedController {
+                            track,
+                            channel: channel.as_int(),
+                            controller: controller.as_int(),
+                            tick,
+                            value: value.as_int(),
+                        },
+                        event: index,
                     });
                 }
             }
@@ -119,9 +155,11 @@ impl Take {
 
         // Stable, so events sharing a Tick keep track order among themselves —
         // and where two tracks state one Controller at one Tick, the later track
-        // is the one in force, as it is for the synthesiser.
-        stated.sort_by_key(|stated| stated.tick);
-        Ok(stated)
+        // is the one in force, as it is for the synthesiser. Within one track it
+        // keeps file order, so the last statement at an address is still the last
+        // one after this.
+        held.sort_by_key(|held| held.stated.tick);
+        Ok(held)
     }
 
     /// The Controllers of a passage: what each channel holds when it begins, and

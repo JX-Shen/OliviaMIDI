@@ -881,6 +881,209 @@ fn a_named_controller_edit_keeps_the_event_it_resolved_against() {
     );
 }
 
+/// A named Controller Edit still means its event after an earlier Edit moved it.
+///
+/// The second half of targets-fixed: the first Edit carries the 40 clear of the
+/// address, and the delete has to follow it rather than take the 30 left behind.
+/// Taking the 30 would be an Edit reaching an event the Edit Set never named,
+/// which ADR-0003 forbids — and it would leave the one that *was* named sitting
+/// where the Edit Set had just said to remove it from.
+#[test]
+fn a_delete_follows_the_event_an_earlier_move_carried_off() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "move-then-delete",
+        r#"{"kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440, "delta_ticks": 30},
+           {"kind": "delete_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440}"#,
+    );
+
+    common::mid()
+        .args(["apply", common::EXPRESSIVE])
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        stated_controller(&output, 1, 0, 11, 1440),
+        vec![30],
+        "the Edit Set named neither the 30 nor the address it sits at"
+    );
+    assert_eq!(
+        stated_controller(&output, 1, 0, 11, 1470),
+        Vec::<u8>::new(),
+        "the event both Edits named survived the delete"
+    );
+}
+
+/// A named Controller Edit whose event an earlier Edit deleted fails the whole
+/// Edit Set.
+///
+/// The same refusal `change_note` makes for a note an earlier Edit removed. The
+/// target resolved — it was in the input Take — and now has nowhere for an
+/// effect to land, which is a different thing from never having existed and is
+/// refused rather than quietly skipped. Turning instead to the other statement
+/// at the address would be the failure this ticket is about, wearing a success
+/// exit code.
+#[test]
+fn a_move_whose_event_an_earlier_edit_deleted_fails_the_edit_set() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "delete-then-move",
+        r#"{"kind": "delete_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440},
+           {"kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440, "delta_ticks": 30}"#,
+    );
+
+    common::mid()
+        .args(["apply", common::EXPRESSIVE])
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .failure();
+
+    assert!(
+        !output.exists(),
+        "an Edit Set that failed left a Take behind"
+    );
+}
+
+/// A `set_controller` and a later `move_controller` at one address reach the
+/// same event.
+///
+/// `set_controller` states an address and changes what is in force there; a
+/// `move_controller` naming that address means the same statement, now carrying
+/// the value the first Edit gave it. Effects are ordered, so the move carries
+/// 90 and not the 40 the Take arrived with.
+#[test]
+fn a_move_carries_the_value_an_earlier_set_gave_its_event() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "set-then-move",
+        r#"{"kind": "set_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440, "value": 90},
+           {"kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440, "delta_ticks": 30}"#,
+    );
+
+    common::mid()
+        .args(["apply", common::EXPRESSIVE])
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(stated_controller(&output, 1, 0, 11, 1440), vec![30]);
+    assert_eq!(stated_controller(&output, 1, 0, 11, 1470), vec![90]);
+}
+
+/// A named Controller Edit cannot reach an address an earlier `set_controller`
+/// created.
+///
+/// Targets are fixed against the *input* Take, so the address this move names
+/// held nothing in the Take the Edit Set was written against — exactly as an
+/// Edit cannot name a note an earlier `add_note` created. The refusal is the
+/// same one a Take stating nothing there gets, because from the resolver's side
+/// it is the same fact.
+#[test]
+fn a_move_cannot_name_an_address_an_earlier_set_created() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "set-new-then-move",
+        r#"{"kind": "set_controller", "track": 1, "channel": 0, "controller": 11, "tick": 5000, "value": 50},
+           {"kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 5000, "delta_ticks": 100}"#,
+    );
+
+    common::mid()
+        .args(["apply", common::EXPRESSIVE])
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "no Controller is stated on track 1 channel 0 controller 11 at tick 5000",
+        ));
+    assert!(!output.exists());
+}
+
+/// A move onto an address states one value there and leaves the other statement.
+///
+/// The Edit Set named neither of the two the Take states at Tick 1440, so
+/// neither may be folded away for being redundant (ADR-0003) — but the mover has
+/// to end up in force there, because reading effects as ordered makes it the
+/// thing that happened last. Both hold: the statement that *was* in force gives
+/// way to the mover, and the one under it stays exactly where it was.
+#[test]
+fn a_move_onto_a_duplicate_address_gives_way_only_to_the_statement_in_force() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "onto-1440",
+        r#"{"kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1560, "delta_ticks": -120}"#,
+    );
+
+    common::mid()
+        .args(["apply", common::EXPRESSIVE])
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        stated_controller(&output, 1, 0, 11, 1440),
+        vec![30, 48],
+        "the 40 was in force and gave way; the 30 was named by nothing and stays"
+    );
+    assert_eq!(
+        stated_controller(&output, 1, 0, 11, 1560),
+        Vec::<u8>::new(),
+        "the mover was left behind at the address it came from"
+    );
+}
+
+/// The refusal names the address the Edit Set wrote, not where the event stands.
+///
+/// An earlier Edit may have carried the target somewhere else before the one
+/// that fails. Naming the Tick it has reached would hand back a number appearing
+/// nowhere in the Edit Set, and the reader's job is to find the Edit that is
+/// wrong.
+#[test]
+fn a_refused_controller_edit_names_the_address_the_edit_set_wrote() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let edits = common::edit_set(
+        dir.path(),
+        "move-delete-move",
+        r#"{"kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440, "delta_ticks": 30},
+           {"kind": "delete_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440},
+           {"kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440, "delta_ticks": 30}"#,
+    );
+
+    common::mid()
+        .args(["apply", common::EXPRESSIVE])
+        .arg(&edits)
+        .arg("--output")
+        .arg(dir.path().join("out.mid"))
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains(
+            "deleted the Controller on track 1 channel 0 controller 11 at tick 1440",
+        ))
+        .stderr(predicates::function::function(|stderr: &str| {
+            !stderr.contains("1470")
+        }));
+}
+
 /// One track's events in file order, as (tick, what it does) — enough to see
 /// which of two events sharing a Tick the synthesiser meets first.
 fn events_of_track(path: &std::path::Path, track: usize) -> Vec<(u32, &'static str)> {
