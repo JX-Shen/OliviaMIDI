@@ -3,7 +3,16 @@ use std::path::PathBuf;
 /// Everything `battuta` can fail at. One variant per condition a caller could
 /// reasonably want to tell apart — the messages are the product surface, so
 /// they say what to do next rather than only what went wrong.
+///
+/// Open by construction, and it says so. `CHARTER.md` requires a refusal to name
+/// what was wrong rather than fail vaguely, so every word the vocabulary gains
+/// arrives with its own refusals: an Edit kind, an event kind the tool learns to
+/// read, a Rig it learns to resolve. A closed enum would promise a list this
+/// crate cannot stop adding to, and would break an exhaustive match inside a
+/// version range Cargo calls compatible — which is a smaller version of the
+/// project stating what it does not do. See #23.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
     #[error("cannot read {path}: {source}")]
     Read {
