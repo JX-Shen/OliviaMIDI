@@ -253,11 +253,39 @@ number selects is in the file while what it *sounds* like is the Rig. `mid diff`
 reports a switch as a state — `program bar 3 beat 1 channel 1 unstated -> 60 (GM
 french horn)` — and `set_program` is the Edit that changes it.
 
-One thing inside a Take is still unspoken for: controller data.
-[V0.1.1](https://github.com/JX-Shen/OliviaMIDI/issues/11) is not finished until
-that is visible too, and it is the harder half — a controller is musically a
-curve, so the work is a `diff` that can say *the expression reaches 100 by bar 6
-where it used to reach it by bar 7* rather than list forty differences.
+Controller data came with it, the harder half of the same silence. A channel's
+expression, its sustain pedal, its brightness are all in the file and all were
+invisible; now `inspect` opens on what each channel holds, `diff` reports a
+change of state rather than forty rows of events, and the Edits that reach a
+Controller are in `mid apply --help` with the rest. A curve is dozens of Edits,
+deliberately: there is no Edit that names a stretch, because a selector would be
+a query language and that is one step from the composition DSL the charter
+forbids by name.
+
+That is the whole of what is inside a Take, and 0.1.1 is where `mid` stopped
+being silent about any of it.
+
+### Known to be wrong in 0.1.1
+
+Being able to change a thing is not the same as being able to trust the change.
+Three defects in that new capability are fixed in
+[0.1.2](https://github.com/JX-Shen/OliviaMIDI/issues/16), and until it ships
+they are live on `main` and in the published 0.1.1:
+
+- A `delete_controller` or `move_controller` finds its target again after
+  earlier Edits have already run, so where a Take states one Controller twice at
+  one address, a second Edit can turn round and act on the event the first one
+  left behind ([#18](https://github.com/JX-Shen/OliviaMIDI/issues/18)).
+- A control change stated or moved onto a Tick is written *after* the note-ons
+  already there, so the notes of that Tick still sound under the value the
+  channel held before — while `inspect` reports the new one as in force
+  ([#20](https://github.com/JX-Shen/OliviaMIDI/issues/20)).
+- `set_program` changes the *first* statement at a duplicate address rather than
+  the one actually in force, so the command succeeds, `diff` reports no
+  difference, and the channel is on the Program it was already on
+  ([#19](https://github.com/JX-Shen/OliviaMIDI/issues/19)).
+
+Each is the same failure: `mid` reported a state it had not actually produced.
 
 Not all of it is good yet, and that is the right order — nothing gets to be
 elegant before the loop closes.
@@ -362,7 +390,7 @@ the domain-modelling discipline that produced the glossary, and the habit of
 recording decisions as ADRs are all his; `docs/agents/` holds that repository's
 own operating documents, kept close to their original form. What is this
 project's own is not the method but the follow-through — a charter written before
-the first line of code, six principles the code answers to, and every judgement
+the first line of code, a set of principles the code answers to, and every judgement
 under them closed with the options it rejected.
 
 Also to [`midly`](https://github.com/negamartin/midly) and

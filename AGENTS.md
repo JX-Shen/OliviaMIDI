@@ -112,21 +112,32 @@ already settled?" without opening six files.
 
 - `mid help` and `mid <command> --help` are the CLI contract. There is no
   separate command reference to keep in sync with the binary.
+- **`mid apply --help` is the Edit Set contract, and it is the only exhaustive
+  list of the Edit kinds.** Run it before writing an `edits.json`. Do not infer
+  the schema from this file, from `README.md`, from an issue body, or from
+  memory: every one of those is a copy, and this repository has already shipped
+  a release where the copies disagreed with the binary. No prose outside the
+  help may enumerate the kinds or count them — a number is the cheapest fact to
+  write down and the first one to go stale.
 - `--json` on `info`, `inspect` and `diff` gives structured output. Prefer it
   over parsing human output.
-- Edits are mechanical only, and six kinds exist: move, transpose, resize, add
-  and delete a note, and change a velocity. Musical intent is the agent's job to
-  hold and the core's job to never encode. Do not add an Edit like `make_sadder`.
-- **Changing a CC is a legitimate Edit and is not one of the six.** So is
-  changing a program. Both are in the file and therefore the Piece, both are
-  carried faithfully by `apply` and `play`, and neither is reported by `inspect`
-  or `diff` or reachable by any Edit — see #11. An Edit Set naming one will fail
-  to parse; do not write one, and do not work around the gap by editing notes
-  instead, which is the substitution #11 exists to prevent.
+- Edits are mechanical only. Musical intent is the agent's job to hold and the
+  core's job to never encode. Do not add an Edit like `make_sadder`.
+- **Notes, Programs and Controllers are all the Piece.** Each is in the file, so
+  each is reported by `inspect`, compared by `diff`, and reachable by an Edit.
+  Do not work around a gap by editing notes to stand in for expression or
+  orchestration — that substitution is the one #11 exists to prevent.
 - `mid apply` never writes in place. Always produce a new Take.
 - `mid play` states which Rig it used, on stderr and in `--json`. If a Rig is
   not configured it fails rather than guessing; do not work around this by
   picking a soundfont.
+
+**Known to be wrong on `main` right now.** Three defects in the Program and
+Controller Edits that 0.1.1 shipped, each of them a case where `mid` reports a
+state it did not produce: #18, #19 and #20, under #16. `tests/controller.rs` and
+`tests/program.rs` hold the failing tests. Do not work around them, and do not
+treat their failing tests as a broken suite. Delete this paragraph, and the
+README's, when the last of them is green.
 
 ## Git conventions
 

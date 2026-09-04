@@ -146,13 +146,13 @@ impl EditSet {
 
 /// What one Edit does to the note it named.
 ///
-/// `add_note` is deliberately not here, and neither is `set_program`. Neither
-/// names a note — one creates a note, the other states which Program a channel
-/// is on — and keeping them apart is what lets every match below be exhaustive:
-/// a kind fitting neither shape cannot be routed into the wrong one, because
-/// there is nowhere for it to go until somebody says where. The kind after these
-/// is already named too — `CHARTER.md` lists changing a CC among the Edits, and
-/// a CC Edit names no note either.
+/// Only the kinds that name a note are here. `add_note` is deliberately not,
+/// and neither is anything that states what a channel is on — those create a
+/// note or address a channel, and keeping them apart is what lets every match
+/// below be exhaustive: a kind fitting neither shape cannot be routed into the
+/// wrong one, because there is nowhere for it to go until somebody says where.
+/// That is what happened when the Program and Controller kinds arrived: each
+/// needed its own shape, and neither could be squeezed into this one.
 enum Change {
     Velocity(i64),
     Transpose(i64),
@@ -196,9 +196,9 @@ struct NewProgram {
     program: i64,
 }
 
-/// An Edit once it has been looked up against the input Take. Three shapes,
-/// because there are three sorts of Edit: those naming a note, the one stating a
-/// note, and the one stating what a channel plays.
+/// An Edit once it has been looked up against the input Take. One shape per sort
+/// of Edit: those naming a note, the one stating a note, the one stating which
+/// Program a channel is on, and those reaching what it holds for a Controller.
 enum Landing {
     Named(Change, Note),
     Stated(NewNote),
@@ -209,12 +209,13 @@ enum Landing {
 /// Every identity in the Edit Set, resolved against the input Take before any
 /// effect lands (ADR-0002).
 ///
-/// This is the one place the six kinds are told apart. Five name a note and are
-/// paired here with the note they named. `add_note` names none: it is the only
-/// kind that creates an identity, so it states a note rather than naming one,
-/// and it is the only kind with nothing to look up. A consequence falls straight
-/// out — an Edit can never name a note an earlier `add_note` created, because
-/// that note is not in the list being searched.
+/// This is the one place the kinds are told apart. Those naming a note are paired
+/// here with the note they named. `add_note` names none: it is the only kind that
+/// creates an identity, so it states a note rather than naming one, and it has
+/// nothing to look up. A consequence falls straight out — an Edit can never name
+/// a note an earlier `add_note` created, because that note is not in the list
+/// being searched. The Controller kinds that name rather than state are looked up
+/// here too, against the input Take and for the same reason.
 fn resolve(
     notes: &[Note],
     stated: &[crate::controller::StatedController],

@@ -13,7 +13,9 @@ use std::path::PathBuf;
 /// note added by an earlier Edit in the same Edit Set, and an Edit naming a note
 /// an earlier Edit deleted fails rather than quietly doing nothing.
 ///
-/// The Edit Set is JSON. Seven kinds, none of which carries musical intent:
+/// The Edit Set is JSON. These are the kinds, and none of them carries musical
+/// intent. This list is the contract: nothing else describes it, and nothing
+/// else is kept in sync with it.
 ///
 ///     {
 ///       "edits": [
@@ -24,7 +26,13 @@ use std::path::PathBuf;
 ///         { "kind": "delete_note",    "id": "t1:c0:p69:s0:n0" },
 ///         { "kind": "add_note", "track": 1, "channel": 0, "pitch": 69,
 ///                               "start": 5760, "duration": 955, "velocity": 50 },
-///         { "kind": "set_program", "track": 1, "channel": 0, "tick": 0, "program": 40 }
+///         { "kind": "set_program", "track": 1, "channel": 0, "tick": 0, "program": 40 },
+///         { "kind": "set_controller",    "track": 1, "channel": 0, "controller": 11,
+///                                        "tick": 1440, "value": 100 },
+///         { "kind": "delete_controller", "track": 1, "channel": 0, "controller": 11,
+///                                        "tick": 1440 },
+///         { "kind": "move_controller",   "track": 1, "channel": 0, "controller": 11,
+///                                        "tick": 1440, "delta_ticks": 240 }
 ///       ]
 ///     }
 ///
@@ -42,10 +50,29 @@ use std::path::PathBuf;
 /// on. The track is stated rather than inferred, because which track carries a
 /// channel's program change is the author's arrangement of the file.
 ///
+/// The three `*_controller` kinds reach what a channel holds for one Controller
+/// at one Tick — CC number 0-119, value 0-127. Controllers 120-127 are channel
+/// mode messages rather than Controllers, and no Edit reaches them.
+///
+/// `set_controller` states an address, as `set_program` does: one address holds
+/// one value, so it changes the statement at that Tick and creates one where the
+/// Take makes none. `delete_controller` and `move_controller` *name* what is
+/// there instead — there has to be something to take away or carry, and an
+/// address holding nothing is an Edit Set written against a different Take. A
+/// move landing on an address that already holds a value overwrites it. There is
+/// no Edit that names a stretch: a curve is dozens of these, and that is what an
+/// Edit Set is for.
+///
 /// A program change lands before the events already at its Tick, where a note
 /// lands after them. A note-on at that Tick has to sound on the Program the Take
 /// now states there; placed last, the Program would arrive after the note it was
 /// set for.
+///
+/// A control change does not do this yet, and should: one stated or moved onto a
+/// Tick is currently written after the note-ons already there, so the notes of
+/// that Tick still sound under the value the channel held before. Until that is
+/// fixed, place a Controller Edit a Tick or two earlier than the note it is
+/// meant to govern.
 ///
 /// A note an Edit adds, moves or transposes is placed after every event already
 /// at its Tick. So a note landing where another of the same track, channel and
@@ -61,6 +88,11 @@ use std::path::PathBuf;
 ///     a note-off, not a note), a start before Tick 0, or no length at all
 ///   * a `set_program` naming a track the Take does not have, a channel outside
 ///     0-15, a program outside 0-127, or a Tick before 0
+///   * a Controller Edit naming a track the Take does not have, a channel outside
+///     0-15, a controller outside 0-119, a value outside 0-127, or a Tick before 0
+///   * a `delete_controller` or `move_controller` naming an address the input
+///     Take states nothing at — including one an earlier `set_controller` in the
+///     same Edit Set created, because targets are fixed against the input Take
 ///   * an Edit leaving two notes of one track, channel and pitch finishing out
 ///     of the order they began in. MIDI has no way to tell such notes apart, so
 ///     re-reading the Take would give each of them the other's length.
