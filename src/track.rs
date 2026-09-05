@@ -1,8 +1,8 @@
 //! Rewriting one track's event list, once, for a whole Edit Set.
 //!
 //! `apply` began by reaching a single event at a stored address and changing
-//! one byte of it. That works for exactly one kind of Edit. Four of the other
-//! five move events, remove them or insert them — and every one of those
+//! one byte of it. That works for exactly one kind of Edit. Every other kind
+//! moves events, removes them or inserts them — and every one of those
 //! invalidates an address some later Edit is still holding.
 //!
 //! The fix is to stop asking one number to mean three things. In an encoded

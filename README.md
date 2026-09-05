@@ -52,8 +52,9 @@ mid play    song.mid --bars 5:8
 The loop they exist to close: **inspect → change → listen → react.** Listening
 is the arbiter. A change that is theoretically better and sounds worse loses.
 
-Edits are mechanical — move, transpose, resize, add or delete a note, or change
-a velocity. There is no `make_sadder`, and there never will be. Musical intent
+Edits are mechanical — each one names a note, a Program or a Controller and
+changes something you can point at in the file. There is no `make_sadder`, and
+there never will be. Musical intent
 belongs to the agent; execution belongs to the core. Keeping that line sharp is
 what makes an agent's work *auditable*: you can always know exactly what it did
 to your music.
@@ -184,8 +185,8 @@ The first milestone is a single sentence, and it was meant to be uncomfortable:
 > `mid play` → the human hears the result.
 
 That loop now closes. All five commands exist, and are being made good one at a
-time rather than all at once. `apply` understands the whole Edit vocabulary —
-move, transpose, resize, add, delete a note, and change a velocity. `diff` now
+time rather than all at once. `apply` understands the whole Edit vocabulary,
+which `mid apply --help` states and nothing else does. `diff` now
 says a note *moved* rather than that one vanished and another appeared, on the
 evidence of a `--tolerance` it states with every answer.
 
