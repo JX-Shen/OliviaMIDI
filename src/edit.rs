@@ -2,7 +2,7 @@ use crate::controller::FIRST_CHANNEL_MODE;
 use crate::error::{Error, Result};
 use crate::note::{Note, NoteId};
 use crate::take::Take;
-use crate::track::{Placement, Rewrite};
+use crate::track::{ChannelState, Placement, Rewrite, Statement};
 use midly::num::{u4, u7};
 use midly::{MidiMessage, TrackEventKind};
 use serde::Deserialize;
@@ -657,13 +657,18 @@ fn set_program(tracks: &mut [Rewrite], new: NewProgram) -> Result<()> {
     let tick = u32::try_from(new.tick).map_err(|_| Error::ProgramTickOutOfRange(new.tick))?;
 
     let track = &mut tracks[index];
+    let placement = Placement::State(Statement {
+        channel,
+        state: ChannelState::Program,
+    });
     match track.program_at(channel, tick) {
-        Some(stated) => {
+        Some(statement) => {
             // `program_at` found a program change, so the setter cannot decline
             // this one. Its `Option` is honesty about being handed any index at
             // all, not a case that arises here.
-            let replaced = track.set_program(stated, program);
+            let replaced = track.set_program(statement, program);
             debug_assert!(replaced.is_some(), "program_at found a program change");
+            track.place_again(statement, placement);
         }
         None => {
             track.push(
@@ -674,7 +679,7 @@ fn set_program(tracks: &mut [Rewrite], new: NewProgram) -> Result<()> {
                         program: u7::new(program),
                     },
                 },
-                Placement::Program,
+                placement,
             );
         }
     }
@@ -707,6 +712,10 @@ fn state_controller(tracks: &mut [Rewrite], new: NewController) -> Result<()> {
     let value = midi_value(new.value, 127).ok_or(Error::ControllerValueOutOfRange(new.value))?;
 
     let track = &mut tracks[index];
+    let placement = Placement::State(Statement {
+        channel,
+        state: ChannelState::Controller(controller),
+    });
     match track.controller_at(channel, controller, tick) {
         Some(held) => {
             // `controller_at` found a control change, so the setter cannot
@@ -714,6 +723,7 @@ fn state_controller(tracks: &mut [Rewrite], new: NewController) -> Result<()> {
             // at all.
             let replaced = track.set_controller(held, value);
             debug_assert!(replaced.is_some(), "controller_at found a control change");
+            track.place_again(held, placement);
         }
         None => {
             track.push(
@@ -725,7 +735,7 @@ fn state_controller(tracks: &mut [Rewrite], new: NewController) -> Result<()> {
                         value: u7::new(value),
                     },
                 },
-                Placement::Controller,
+                placement,
             );
         }
     }
@@ -781,7 +791,13 @@ fn change_controller(
                 }
             }
             track.set_tick(named.event, moved);
-            track.place_again(named.event, Placement::Controller);
+            track.place_again(
+                named.event,
+                Placement::State(Statement {
+                    channel: stated.channel,
+                    state: ChannelState::Controller(stated.controller),
+                }),
+            );
         }
     }
     Ok(())

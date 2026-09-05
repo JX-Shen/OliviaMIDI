@@ -460,6 +460,70 @@ pub fn build_take_with_controllers(
     build_take_setting(path, ppq, stated, &setting, notes)
 }
 
+/// One event of a voice track, spelled so a test can say where it falls among
+/// the events sharing its Tick.
+///
+/// `build_take_with_programs` and `build_take_with_controllers` append their
+/// notes after whatever they were given, so a Take whose state is written
+/// *behind* a strike cannot be asked for that way. These hand the whole voice
+/// track to `build_take_setting` in the order it is to be written in, which is
+/// stable through that builder's sort.
+pub fn strike(tick: u32, key: u8) -> (u32, midly::TrackEventKind<'static>) {
+    on_channel_zero(
+        tick,
+        midly::MidiMessage::NoteOn {
+            key: midly::num::u7::new(key),
+            vel: midly::num::u7::new(64),
+        },
+    )
+}
+
+pub fn release(tick: u32, key: u8) -> (u32, midly::TrackEventKind<'static>) {
+    on_channel_zero(
+        tick,
+        midly::MidiMessage::NoteOff {
+            key: midly::num::u7::new(key),
+            vel: midly::num::u7::new(0),
+        },
+    )
+}
+
+pub fn control_change(
+    tick: u32,
+    controller: u8,
+    value: u8,
+) -> (u32, midly::TrackEventKind<'static>) {
+    on_channel_zero(
+        tick,
+        midly::MidiMessage::Controller {
+            controller: midly::num::u7::new(controller),
+            value: midly::num::u7::new(value),
+        },
+    )
+}
+
+pub fn program_change(tick: u32, program: u8) -> (u32, midly::TrackEventKind<'static>) {
+    on_channel_zero(
+        tick,
+        midly::MidiMessage::ProgramChange {
+            program: midly::num::u7::new(program),
+        },
+    )
+}
+
+fn on_channel_zero(
+    tick: u32,
+    message: midly::MidiMessage,
+) -> (u32, midly::TrackEventKind<'static>) {
+    (
+        tick,
+        midly::TrackEventKind::Midi {
+            channel: midly::num::u4::new(0),
+            message,
+        },
+    )
+}
+
 /// The same again, with whatever events a test names on the voice track.
 ///
 /// #4's carry/leave-behind rule is one statement about a dozen event

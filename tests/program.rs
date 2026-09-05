@@ -340,6 +340,103 @@ fn an_inserted_program_change_precedes_the_notes_at_its_tick() {
     );
 }
 
+/// An inserted program change lands after the releases at its Tick.
+///
+/// The one place a program change moved under ADR-0008's rule, so it is the
+/// test that would notice #20's narrowing of #12 being undone.
+#[test]
+fn an_inserted_program_change_lands_after_the_releases_at_its_tick() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("turnover.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(0, 1440, 69), (1440, 480, 71)],
+    );
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "switch",
+        r#"{"kind": "set_program", "track": 1, "channel": 0, "tick": 1440, "program": 56}"#,
+    );
+
+    common::mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        events_of_track(&output, 1),
+        vec![
+            (0, "strikes"),
+            (1440, "releases"),
+            (1440, "program"),
+            (1440, "strikes"),
+            (1920, "releases"),
+        ]
+    );
+}
+
+/// A `set_program` finding a statement the Take wrote *behind* the strikes at
+/// its Tick moves it in front of them.
+///
+/// A change is a placement: the Edit named the event, so ADR-0003 permits moving
+/// it. Without this, an Edit Set asking for the same Program at the same Tick is
+/// audible or inaudible depending on how the Take it was written against
+/// happened to order that Tick — a difference no Edit Set can see. See #20.
+#[test]
+fn a_program_carried_in_behind_a_strike_is_re_placed_by_a_set() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_setting(
+        &dir.path().join("behind.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[
+            common::strike(0, 69),
+            common::release(1440, 69),
+            common::strike(1440, 71),
+            common::program_change(1440, 40),
+            common::release(1920, 71),
+        ],
+        &[],
+    );
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "correct-it",
+        r#"{"kind": "set_program", "track": 1, "channel": 0, "tick": 1440, "program": 56}"#,
+    );
+
+    common::mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        common::stated_programs(&output),
+        vec![(1, 1440, 0, 56)],
+        "the statement was changed where it stood, not added beside itself"
+    );
+    assert_eq!(
+        events_of_track(&output, 1),
+        vec![
+            (0, "strikes"),
+            (1440, "releases"),
+            (1440, "program"),
+            (1440, "strikes"),
+            (1920, "releases"),
+        ]
+    );
+}
+
 /// An Edit stating a Program does not reach the statement after it.
 ///
 /// "From this Tick" is true until the Take says otherwise, and the Take may say

@@ -837,6 +837,300 @@ fn controllers_stated_at_one_tick_keep_the_order_the_edit_set_asked_for() {
     );
 }
 
+/// A stated Controller lands after the releases at its Tick and before the
+/// strikes.
+///
+/// The position ADR-0008 gives it, on an ordinary Tick where a phrase turns
+/// over: a note ends, another begins, and the value the Edit asked for is meant
+/// for the one beginning. Landing before the release as well would be harmless
+/// for a fader and wrong for a damper, which is a pianist's `Ped.` catching a
+/// note the Take has just ended.
+#[test]
+fn a_stated_control_change_lands_after_the_releases_at_its_tick() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_with_controllers(
+        &dir.path().join("turnover.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[],
+        &[(0, 1440, 69), (1440, 480, 71)],
+    );
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "damper",
+        r#"{"kind": "set_controller", "track": 1, "channel": 0, "controller": 64, "tick": 1440, "value": 127}"#,
+    );
+
+    common::mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        events_of_track(&output, 1),
+        vec![
+            (0, "strikes"),
+            (1440, "releases"),
+            (1440, "controller"),
+            (1440, "strikes"),
+            (1920, "releases"),
+        ]
+    );
+}
+
+/// A `set_controller` finding a statement the Take wrote *behind* the strikes at
+/// its Tick moves it in front of them.
+///
+/// A change is a placement. The Edit named the event, so ADR-0003 permits
+/// moving it, and leaving it where it sat would keep the defect standing for
+/// every Take that arrived with its state written after the notes it governs —
+/// which no Edit Set can tell from one that arrived with it written before.
+#[test]
+fn a_statement_carried_in_behind_a_strike_is_re_placed_by_a_set() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_setting(
+        &dir.path().join("behind.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[
+            common::strike(0, 69),
+            common::release(1440, 69),
+            common::strike(1440, 71),
+            common::control_change(1440, 11, 30),
+            common::release(1920, 71),
+        ],
+        &[],
+    );
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "correct-it",
+        r#"{"kind": "set_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440, "value": 100}"#,
+    );
+
+    common::mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        stated_controller(&output, 1, 0, 11, 1440),
+        vec![100],
+        "the statement was changed where it stood, not added beside itself"
+    );
+    assert_eq!(
+        events_of_track(&output, 1),
+        vec![
+            (0, "strikes"),
+            (1440, "releases"),
+            (1440, "controller"),
+            (1440, "strikes"),
+            (1920, "releases"),
+        ]
+    );
+}
+
+/// A Controller moved onto a Tick that still states its address lands after that
+/// statement, and is the one in force there.
+///
+/// Clause 1, and the clause that is invisible until a duplicate survives the
+/// move. `move_controller` takes over from the statement in force at its
+/// destination and leaves the other where it is, so a destination stating the
+/// address twice still states it once when the mover arrives. Placed by clause 2
+/// alone, the mover would go in front of the first strike — and in a Take whose
+/// surviving statement is written *behind* that strike, in front of the
+/// survivor too, which would leave the channel holding the value the Edit Set
+/// did not ask for. That is #19 with a new cause.
+#[test]
+fn a_move_onto_a_surviving_duplicate_lands_after_it() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_setting(
+        &dir.path().join("survivor.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[
+            common::strike(0, 69),
+            common::release(480, 69),
+            common::control_change(240, 11, 99),
+            common::strike(960, 71),
+            common::control_change(960, 11, 30),
+            common::control_change(960, 11, 40),
+            common::release(1440, 71),
+        ],
+        &[],
+    );
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "carry-it",
+        r#"{"kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 240, "delta_ticks": 720}"#,
+    );
+
+    common::mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        stated_controller(&output, 1, 0, 11, 960),
+        vec![30, 99],
+        "the 40 was in force and gave way; the mover has to outrank the 30 that \
+         stayed, or the channel holds 30 where the Edit Set asked for 99"
+    );
+}
+
+/// A Tick that strikes nothing on the Controller's own channel takes the state
+/// at its end.
+///
+/// Clause 3, and the clause without which the placement is undefined: `STACKED`
+/// strikes two notes of channel 1 at Tick 960 of track 2 and none of channel 2,
+/// so there is no strike for the state to go in front of. It goes last, where a
+/// synthesiser meets it having met everything else that instant.
+#[test]
+fn a_tick_that_strikes_nothing_on_the_channel_takes_the_state_at_its_end() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "other-channel",
+        r#"{"kind": "set_controller", "track": 2, "channel": 2, "controller": 11, "tick": 960, "value": 64}"#,
+    );
+
+    common::mid()
+        .args(["apply", common::STACKED])
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        events_of_track(&output, 2),
+        vec![
+            (0, "strikes"),
+            (0, "strikes"),
+            (480, "releases"),
+            (480, "releases"),
+            (960, "strikes"),
+            (960, "strikes"),
+            (960, "controller"),
+            (1440, "releases"),
+            (1440, "releases"),
+        ]
+    );
+}
+
+/// A note-on at velocity zero is a release, and a state does not go in front of
+/// it.
+///
+/// The format spells a release two ways and `STACKED` uses both: Tick 1440 of
+/// track 1 holds one note event, a note-on at velocity 0 ending the last of the
+/// stack. Nothing is struck there, so clause 3 applies and the state goes last.
+/// Counting that note-on as a strike would put the state in front of it — which
+/// is the same mistake as placing it in front of a note-off, made by reading the
+/// status byte rather than the velocity.
+#[test]
+fn a_note_on_at_velocity_zero_is_a_release_and_not_a_strike() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "after-the-release",
+        r#"{"kind": "set_controller", "track": 1, "channel": 0, "controller": 11, "tick": 1440, "value": 64}"#,
+    );
+
+    common::mid()
+        .args(["apply", common::STACKED])
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        events_of_track(&output, 1),
+        vec![
+            (0, "strikes"),
+            (0, "strikes"),
+            (240, "releases"),
+            (960, "strikes"),
+            (960, "strikes"),
+            (960, "strikes"),
+            (960, "releases"),
+            (1080, "releases"),
+            (1200, "releases"),
+            (1440, "releases"),
+            (1440, "controller"),
+            (1920, "strikes"),
+            (2160, "strikes"),
+            (2400, "releases"),
+            (2880, "releases"),
+        ]
+    );
+}
+
+/// A Take that writes a release behind a strike at one Tick keeps that order,
+/// and the state lands in front of both.
+///
+/// The limit ADR-0008 states rather than hides. Tick 960 of `STACKED`'s track 1
+/// strikes three notes and *then* releases a fourth — a Tick that states no
+/// order between "as these end" and "as these begin". The state goes before the
+/// first strike, which is before that release, so a damper placed here catches a
+/// note the Take ends at 960. `mid` does not write that ordering itself; it
+/// carries in what it was given, and ADR-0003 keeps it.
+#[test]
+fn a_take_that_writes_a_release_behind_a_strike_keeps_that_order() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "damper-at-960",
+        r#"{"kind": "set_controller", "track": 1, "channel": 0, "controller": 64, "tick": 960, "value": 127}"#,
+    );
+
+    common::mid()
+        .args(["apply", common::STACKED])
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        events_of_track(&output, 1),
+        vec![
+            (0, "strikes"),
+            (0, "strikes"),
+            (240, "releases"),
+            (960, "controller"),
+            (960, "strikes"),
+            (960, "strikes"),
+            (960, "strikes"),
+            (960, "releases"),
+            (1080, "releases"),
+            (1200, "releases"),
+            (1440, "releases"),
+            (1920, "strikes"),
+            (2160, "strikes"),
+            (2400, "releases"),
+            (2880, "releases"),
+        ]
+    );
+}
+
 /// A named Controller Edit means the event it resolved against, for the whole
 /// Edit Set.
 ///

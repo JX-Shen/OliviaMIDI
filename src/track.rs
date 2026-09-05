@@ -8,9 +8,10 @@
 //! The fix is to stop asking one number to mean three things. In an encoded
 //! track, an event's place in the list is at once its *address* (how a resolved
 //! Edit finds it), its *musical time* (delta times accumulate along it), and its
-//! its *Rank* among the events sharing that Tick (which of two notes struck together is the
-//! first occurrence). Inserting an event has to change the second, so it drags
-//! the first with it, and every address taken before the insertion is wrong.
+//! *Rank* among the events sharing that Tick (which of two notes struck together
+//! is the first occurrence). Inserting an event has to change the second, so it
+//! drags the first with it, and every address taken before the insertion is
+//! wrong.
 //!
 //! Here they are three separate quantities:
 //!
@@ -70,37 +71,71 @@ const RANK_SPACING: i64 = 1 << 16;
 /// it is. See #24.
 #[derive(Clone, Copy)]
 pub(crate) enum Placement {
-    /// Starts a note. Placed after the events already at its Tick: occurrence
+    /// Starts a note. Placed after every event already at its Tick: occurrence
     /// indices are counted in note-on order, so a note arriving where others of
     /// its track, channel and pitch already begin has to arrive behind them and
     /// take the next index rather than one of theirs. See ADR-0002.
     Strike,
     /// Ends a note, by either spelling: a note-off, or a note-on at velocity
-    /// zero. Placed before the events already at its Tick — a release landing
+    /// zero. Placed before every event already at its Tick — a release landing
     /// exactly on the next strike of the same pitch would, placed last, silence
     /// the note that strike had just begun.
     Release,
-    /// States what a channel is on. Placed before the events already at its
-    /// Tick, alongside a Release, for the reason ADR-0008 and #12 give: a
-    /// note-on at that Tick has to sound on the Program the Take now states
-    /// there. It shares that position until #20 gives it one of its own,
-    /// between the releases and the strikes rather than alongside either.
+    /// States what a channel is on or holds: a program change or a control
+    /// change. ADR-0008 is the principle it is placed by — state before the
+    /// strikes it governs — and `before_the_strikes` is the rule #20 settled
+    /// from it, in the three clauses `mid apply --help` states.
+    State(Statement),
+}
+
+/// What one event states about a channel: which channel, and which of its
+/// states.
+///
+/// One type answers two questions that must not drift apart — where a state
+/// event is *written* (the first clause of the placement rule looks for the
+/// other statements of its own address) and which state event is *found* (a
+/// lookup for the one in force means the last of them by Rank). They agree by
+/// asking `is_stated_by`, rather than by two searches spelling out the same
+/// match.
+#[derive(Clone, Copy)]
+pub(crate) struct Statement {
+    pub(crate) channel: u8,
+    pub(crate) state: ChannelState,
+}
+
+/// Which state of a channel a `Statement` is about.
+#[derive(Clone, Copy)]
+pub(crate) enum ChannelState {
+    /// Which Program the channel is on.
     Program,
-    /// States what a channel holds for a Controller. Placed after the events
-    /// already at its Tick, alongside a Strike, until #20 gives it a rule of
-    /// its own.
-    Controller,
+    /// What the channel holds for one Controller, by its CC number.
+    Controller(u8),
+}
+
+impl Statement {
+    /// Whether this event states exactly this address.
+    fn is_stated_by(self, kind: &TrackEventKind) -> bool {
+        let TrackEventKind::Midi {
+            channel: on,
+            message,
+        } = kind
+        else {
+            return false;
+        };
+        on.as_int() == self.channel
+            && match (self.state, message) {
+                (ChannelState::Program, MidiMessage::ProgramChange { .. }) => true,
+                (ChannelState::Controller(number), MidiMessage::Controller { controller, .. }) => {
+                    controller.as_int() == number
+                }
+                _ => false,
+            }
+    }
 }
 
 /// A track opened up so a whole Edit Set can be applied to it.
 pub(crate) struct Rewrite<'a> {
     slots: Vec<Slot<'a>>,
-    /// The next Rank for a re-placed strike, and the next for a re-placed
-    /// release. Strikes count up from beyond every original's Rank, so a
-    /// re-placed one lands after every event already at its Tick; releases
-    /// count down below zero, so a re-placed one lands before them.
-    next_strike: i64,
-    next_release: i64,
 }
 
 impl<'a> Rewrite<'a> {
@@ -118,11 +153,7 @@ impl<'a> Rewrite<'a> {
                 alive: true,
             });
         }
-        Rewrite {
-            next_strike: slots.len() as i64 * RANK_SPACING,
-            next_release: 0,
-            slots,
-        }
+        Rewrite { slots }
     }
 
     /// Put a new event into the track. It goes on the end of the list, where it
@@ -231,15 +262,13 @@ impl<'a> Rewrite<'a> {
     /// answers "which of these was written first", not "which is in force" —
     /// the two agree only while nothing has been re-placed. See #24.
     pub(crate) fn program_at(&self, channel: u8, tick: u32) -> Option<usize> {
-        self.last_by_rank(tick, |kind| {
-            matches!(
-                kind,
-                TrackEventKind::Midi {
-                    channel: on,
-                    message: MidiMessage::ProgramChange { .. },
-                } if on.as_int() == channel
-            )
-        })
+        self.in_force_at(
+            tick,
+            Statement {
+                channel,
+                state: ChannelState::Program,
+            },
+        )
     }
 
     /// Put a program change on another Program, reporting the one it carried.
@@ -272,28 +301,29 @@ impl<'a> Rewrite<'a> {
     /// moment — the mover keeps the slot index it arrived with, which need not
     /// be the highest of the two. See #24.
     pub(crate) fn controller_at(&self, channel: u8, controller: u8, tick: u32) -> Option<usize> {
-        self.last_by_rank(tick, |kind| {
-            matches!(
-                kind,
-                TrackEventKind::Midi {
-                    channel: on,
-                    message: MidiMessage::Controller { controller: number, .. },
-                } if on.as_int() == channel && number.as_int() == controller
-            )
-        })
+        self.in_force_at(
+            tick,
+            Statement {
+                channel,
+                state: ChannelState::Controller(controller),
+            },
+        )
     }
 
-    /// The alive slot at this Tick whose kind matches, last by Rank — "in
-    /// force", by ADR-0008's rule. `None` if nothing does.
+    /// The alive slot stating this channel state at this Tick, last by Rank —
+    /// "in force", by ADR-0008's rule. `None` if the track states none there.
     ///
     /// The one place `program_at` and `controller_at` ask "which is in force",
     /// so that the answer is the same question asked twice rather than two
-    /// searches that could drift apart.
-    fn last_by_rank(&self, tick: u32, matches: impl Fn(&TrackEventKind) -> bool) -> Option<usize> {
+    /// searches that could drift apart. It is also the question the placement
+    /// rule's first clause asks, through the same `Statement`.
+    fn in_force_at(&self, tick: u32, statement: Statement) -> Option<usize> {
         self.slots
             .iter()
             .enumerate()
-            .filter(|(_, slot)| slot.alive && slot.tick == tick && matches(&slot.kind))
+            .filter(|(_, slot)| {
+                slot.alive && slot.tick == tick && statement.is_stated_by(&slot.kind)
+            })
             .max_by_key(|(_, slot)| slot.rank)
             .map(|(index, _)| index)
     }
@@ -329,30 +359,103 @@ impl<'a> Rewrite<'a> {
         self.slots[index].tick = tick;
     }
 
-    /// Give a slot the Rank its `Placement` calls for: ahead of every event
-    /// already at its Tick, or behind them.
+    /// Give a slot the Rank its `Placement` calls for, against the track as it
+    /// now stands.
     ///
-    /// Which of the two each `Placement` takes, and why, is written on its
+    /// Which position each `Placement` asks for, and why, is written on its
     /// variant. Every Edit that changes what a note's identity is derived from,
-    /// and every Edit that creates a note, ends here — and nothing here looks at
-    /// the event again, because the caller has already said what it is.
+    /// every Edit that creates a note, and every Edit that places or changes
+    /// what a channel is on or holds ends here — and nothing here looks at the
+    /// event to decide *which* rule to apply, because the caller has already
+    /// said what it is placing.
     ///
-    /// Each Rank is distinct: the two counters start beyond every original's and
-    /// step away from each other, and no slot is ever placed twice at once. That
-    /// is what lets a search for the last by Rank have one answer.
+    /// Read against the Tick rather than against a running counter: an Edit that
+    /// ran earlier may have carried an event onto this Tick or off it, and each
+    /// position is a claim about what is there now. Every position is derived
+    /// from the Ranks already in use and steps clear of them, so no two live
+    /// slots at a Tick share a Rank and a search for the last by Rank has one
+    /// answer — for as many placements at one position as `RANK_SPACING` leaves
+    /// room for.
     pub(crate) fn place_again(&mut self, index: usize, placement: Placement) {
+        let tick = self.slots[index].tick;
         let rank = match placement {
-            Placement::Release | Placement::Program => {
-                self.next_release -= RANK_SPACING;
-                self.next_release
-            }
-            Placement::Strike | Placement::Controller => {
-                let rank = self.next_strike;
-                self.next_strike += RANK_SPACING;
-                rank
-            }
+            Placement::Strike => self.after_everything(index, tick),
+            Placement::Release => self.before_everything(index, tick),
+            Placement::State(statement) => self.before_the_strikes(index, tick, statement),
         };
         self.slots[index].rank = rank;
+    }
+
+    /// The alive slots sharing a Tick with the one being placed.
+    ///
+    /// Never the slot itself: it is alive and at that Tick already, carrying the
+    /// stale Rank this placement is about to replace, and counting it would let
+    /// an event be placed relative to where it used to be.
+    fn sharing(&self, placing: usize, tick: u32) -> impl Iterator<Item = &Slot<'a>> + '_ {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter(move |(index, slot)| *index != placing && slot.alive && slot.tick == tick)
+            .map(|(_, slot)| slot)
+    }
+
+    /// Behind every event already at the Tick.
+    fn after_everything(&self, placing: usize, tick: u32) -> i64 {
+        self.sharing(placing, tick)
+            .map(|slot| slot.rank)
+            .max()
+            .map_or(0, |last| last + RANK_SPACING)
+    }
+
+    /// In front of every event already at the Tick.
+    fn before_everything(&self, placing: usize, tick: u32) -> i64 {
+        self.sharing(placing, tick)
+            .map(|slot| slot.rank)
+            .min()
+            .map_or(0, |first| first - RANK_SPACING)
+    }
+
+    /// Where a channel-state event goes among the events sharing its Tick.
+    ///
+    /// ADR-0008 is the principle — state before the strikes it governs — and
+    /// these are the three clauses #20 settled from it. Each is load bearing,
+    /// and `mid apply --help` states all three so that an agent can predict a
+    /// placement rather than discover it.
+    fn before_the_strikes(&self, placing: usize, tick: u32, statement: Statement) -> i64 {
+        // 1. After every other statement of its own address that remains here.
+        //    Without this, a statement moved onto a Tick that already states its
+        //    address can land behind the one it was meant to replace, and the
+        //    Edit's value is not the one in force.
+        let after = self
+            .sharing(placing, tick)
+            .filter(|slot| statement.is_stated_by(&slot.kind))
+            .map(|slot| slot.rank)
+            .max();
+        // 2. Then immediately before the first strike of its own channel that
+        //    follows that position — the notes this state was set for. Searching
+        //    forward from clause 1 is what keeps the two from contradicting each
+        //    other: clause 1 fixes a position, clause 2 searches on from it.
+        let strike = self
+            .sharing(placing, tick)
+            .filter(|slot| strikes(&slot.kind, statement.channel))
+            .map(|slot| slot.rank)
+            .filter(|rank| after.is_none_or(|already| *rank > already))
+            .min();
+        // 3. Or, where no strike follows it, at the end of the Tick. Without
+        //    this the placement is undefined wherever a Tick strikes nothing on
+        //    the channel.
+        let Some(strike) = strike else {
+            return self.after_everything(placing, tick);
+        };
+        // "Immediately before" is past everything that strike is already behind,
+        // which is also what keeps several placed here in the order the Edit Set
+        // asked for: each one becomes the last the next has to clear. A Rank is
+        // free there because `RANK_SPACING` leaves room between any two.
+        self.sharing(placing, tick)
+            .map(|slot| slot.rank)
+            .filter(|rank| *rank < strike)
+            .max()
+            .map_or(strike - RANK_SPACING, |behind| behind + 1)
     }
 
     /// The track as an event list again, in Tick order, with delta times.
@@ -382,6 +485,23 @@ impl<'a> Rewrite<'a> {
                 .chain([(end, TrackEventKind::Meta(MetaMessage::EndOfTrack))]),
         )
     }
+}
+
+/// Whether an event strikes a note on this channel: a note-on above velocity
+/// zero.
+///
+/// Velocity rather than status byte, because the format spells a release two
+/// ways and a note-on at velocity zero is the second of them. Counting one as a
+/// strike would put a state event in front of a release — which is the whole
+/// mistake, made one layer down.
+fn strikes(kind: &TrackEventKind, channel: u8) -> bool {
+    matches!(
+        kind,
+        TrackEventKind::Midi {
+            channel: on,
+            message: MidiMessage::NoteOn { vel, .. },
+        } if on.as_int() == channel && vel.as_int() > 0
+    )
 }
 
 /// Absolute Ticks in, delta times out: the one rule for placing events back

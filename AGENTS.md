@@ -132,13 +132,6 @@ already settled?" without opening six files.
   not configured it fails rather than guessing; do not work around this by
   picking a soundfont.
 
-**Known to be wrong on `main` right now.** Three defects in the Program and
-Controller Edits that 0.1.1 shipped, each of them a case where `mid` reports a
-state it did not produce: #18, #19 and #20, under #16. `tests/controller.rs` and
-`tests/program.rs` hold the failing tests. Do not work around them, and do not
-treat their failing tests as a broken suite. Delete this paragraph, and the
-README's, when the last of them is green.
-
 ## Git conventions
 
 - **No `Co-Authored-By` trailer, for agents or tools.** A commit is authored by

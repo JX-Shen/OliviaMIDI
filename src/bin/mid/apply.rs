@@ -71,16 +71,37 @@ use std::path::PathBuf;
 /// it, and one naming an event an earlier Edit deleted fails rather than turning
 /// to the statement beside it.
 ///
-/// A program change lands before the events already at its Tick, where a note
-/// lands after them. A note-on at that Tick has to sound on the Program the Take
-/// now states there; placed last, the Program would arrive after the note it was
-/// set for.
+/// A Tick is not an instant. It is a sequence carrying one timestamp, a
+/// synthesiser meets its events one after another, and which of them it meets
+/// first is audible. A channel-state event — a program change or a control
+/// change — that an Edit places or changes at Tick T is written into its own
+/// track:
 ///
-/// A control change does not do this yet, and should: one stated or moved onto a
-/// Tick is currently written after the note-ons already there, so the notes of
-/// that Tick still sound under the value the channel held before. Until that is
-/// fixed, place a Controller Edit a Tick or two earlier than the note it is
-/// meant to govern.
+///   1. after every other statement of its own address that remains at T,
+///   2. then immediately before the first strike (a note-on with velocity above
+///      zero) of its own channel, in that track, that follows that position,
+///   3. or, where no such strike follows it, at the end of T.
+///
+/// Several placed at one such position by one Edit Set keep the order the Edit
+/// Set gave them. So the notes struck at T sound under the state the Take now
+/// states there, whether the Edit put that statement there or changed one that
+/// was already there — and where the Take states an address twice, the value the
+/// Edit asked for is the one left in force.
+///
+/// Every event no Edit named or landed on keeps the Tick, the content, and the
+/// Rank — its place among the events sharing its Tick — relative to every event
+/// that stayed put, that it arrived with.
+///
+/// The limit, which is stated rather than hidden: where a track writes a release
+/// behind a strike at one Tick, the position above falls before that release, so
+/// a latching Controller placed there — a damper, a sostenuto — catches a note
+/// the Take ends at T and holds it on. Such a Tick states no order between "as
+/// these notes end" and "as these begin": a Program is decided only by the
+/// strikes at its Tick, a damper only by the releases, and one point cannot be
+/// on both sides of a pair written the wrong way round. The Program is
+/// protected, because a note on the wrong instrument is a worse answer than a
+/// note held too long. `mid` never writes that ordering itself and only ever
+/// carries one in.
 ///
 /// A note an Edit adds, moves or transposes is placed after every event already
 /// at its Tick. So a note landing where another of the same track, channel and

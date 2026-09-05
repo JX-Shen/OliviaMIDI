@@ -265,31 +265,6 @@ forbids by name.
 That is the whole of what is inside a Take, and 0.1.1 is where `mid` stopped
 being silent about any of it.
 
-### Known to be wrong in 0.1.1
-
-Being able to change a thing is not the same as being able to trust the change.
-Three defects in that new capability are in the published 0.1.1, each of them a
-case where `mid` reports a state it did not produce.
-[0.1.2](https://github.com/JX-Shen/OliviaMIDI/issues/16) is fixing them, and the
-list says where each one has got to:
-
-- ~~A `delete_controller` or `move_controller` finds its target again after
-  earlier Edits have already run, so where a Take states one Controller twice at
-  one address, a second Edit can turn round and act on the event the first one
-  left behind.~~ Fixed
-  ([#18](https://github.com/JX-Shen/OliviaMIDI/issues/18)).
-- A control change stated or moved onto a Tick is written *after* the note-ons
-  already there, so the notes of that Tick still sound under the value the
-  channel held before — while `inspect` reports the new one as in force
-  ([#20](https://github.com/JX-Shen/OliviaMIDI/issues/20)).
-- ~~`set_program` changes the *first* statement at a duplicate address rather
-  than the one actually in force, so the command succeeds, `diff` reports no
-  difference, and the channel is on the Program it was already on.~~ Fixed
-  ([#19](https://github.com/JX-Shen/OliviaMIDI/issues/19)).
-
-Not all of it is good yet, and that is the right order — nothing gets to be
-elegant before the loop closes.
-
 ```
 cargo build --release          # target/release/mid
 cargo test                     # the suite runs mid as a process
