@@ -77,6 +77,12 @@ landing exactly on the next strike of the same pitch would, placed last, silence
 the note that strike had just begun — a synthesiser stops a pitch, not an
 identity.
 
+That paragraph is the only place this project wrote down an audible ordering
+rule before it had one, and it said so in its first line. ADR-0008 is where it
+belongs, and states it for every event rather than for a release; this entry
+keeps it because a note's identity still depends on the other half of the same
+mechanism, and cites it rather than owning it.
+
 The remaining cost is the disambiguation rule. Two notes genuinely identical in
 track, channel, pitch and start Tick — a doubled voice, a stacked layer — are
 separated only by occurrence index, which is positional. Three things follow.

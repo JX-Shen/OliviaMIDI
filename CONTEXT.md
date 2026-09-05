@@ -163,7 +163,9 @@ length and different time signatures.
 
 **Tick**:
 The unit of musical time inside a MIDI file, relative to the file's PPQ. Ticks
-are the truth; bars, beats and seconds are all derived views of them.
+are the truth; bars, beats and seconds are all derived views of them. The finest
+time a file counts in, and not an indivisible one: several events may share a
+Tick, and the file still writes them in an order. See **Rank**.
 _中文_: 刻度
 _Avoid_: time, position, offset
 
@@ -185,8 +187,42 @@ ever had. What `position` may never name is the count in the file.
 
 The near case is under **Time signature**, which declined `time` for itself on
 the strength of this entry. It was right to: *in 3/4 time* is genuine, but a
-`time` in a MIDI tool is read as a moment, and a moment is what a Tick is. The
-word was a synonym; a Position is a reading.
+`time` in a MIDI tool is read as the moment something happens, and that is what
+a Tick names. The word was a synonym; a Position is a reading.
+
+Read *moment* there as *when*, not as *indivisible*. A Tick is the finest time
+the file counts in, and several events still share one — which is **Rank**, and
+which this entry did not have to know about, because a Position reads a Tick and
+cannot see inside it either.
+
+**Rank**:
+Where an event falls among the events sharing its Tick — which of them a
+synthesiser meets first. A Tick is the truth about *when*; a Rank is the truth
+about *which first*, and it is as audible: a Program met after the note it was
+set for leaves that note on the instrument before it, and a damper met after the
+note it was set for catches nothing.
+
+A Rank is derived, never stated. No Edit accepts one and no command prints one.
+An Edit names a Tick, and where its event falls among that Tick's is settled by
+one rule rather than by the Edit — because a Take gives every event a Rank
+whether anybody chose it or not, and a tool that let an Edit Set state one would
+be addressing below the Tick, one step from the selector `CHARTER.md` forbids.
+Two events at one Tick have one Position between them and a Rank each.
+_中文_: 次序
+_Avoid_: order, precedence, priority; 顺序、优先级
+
+**Rank** takes a word an organ builder uses for a row of pipes. `AGENTS.md`
+gives the musical meaning priority where two genuinely collide, and these do
+not: nothing here names a pipe, and neither does MIDI's own vocabulary. What
+settled it is that the code had been saying it for three versions — `track.rs`
+calls an event's place at its Tick a rank in seven sentences written before this
+term existed — while the field carrying it was called `order`, which this file
+cannot claim, because the repository already spends that word loosely in a
+hundred and fifty places. The term ratifies the prose and renames the field.
+
+`order` is avoided as a *name for a Rank*, by the rule argued under **Position**:
+an avoid list bans a word as a synonym for its own term and does not retire it.
+*The order they arrived in* stays good English and stays in use.
 
 **Tempo**:
 How fast a Take's ticks pass, as carried by the MIDI tempo meta event:
