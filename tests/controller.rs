@@ -1430,7 +1430,6 @@ fn a_refused_controller_edit_names_the_address_the_edit_set_wrote() {
         }));
 }
 
-
 /// The control changes one track states at one Tick, as (controller, value), in
 /// the order the file lists them.
 fn controllers_at(path: &std::path::Path, track: usize, at: u32) -> Vec<(u8, u8)> {

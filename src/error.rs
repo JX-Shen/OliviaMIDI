@@ -284,6 +284,47 @@ pub enum Error {
     NoteEventsLost(String),
 
     #[error(
+        "on track {track}, at tick {tick}, this Edit Set placed a release on channel {channel}, \
+         pitch {pitch} behind a strike of that same pitch. A synthesiser stops a pitch, not a \
+         note, so it would strike that note and silence it again immediately. That is a fault in \
+         battuta rather than in your Take or your Edit Set; nothing has been written."
+    )]
+    ReleaseBehindItsStrike {
+        track: usize,
+        tick: u32,
+        channel: u8,
+        pitch: u8,
+    },
+
+    #[error(
+        "on track {track}, at tick {tick}, this Edit Set placed a {state} on channel {channel} \
+         behind a note it governs there. Those notes would sound under the state the channel held \
+         before, while inspect reports the one the Edit asked for. That is a fault in battuta \
+         rather than in your Take or your Edit Set; nothing has been written."
+    )]
+    StateBehindItsStrikes {
+        track: usize,
+        tick: u32,
+        channel: u8,
+        state: String,
+    },
+
+    #[error(
+        "on track {track}, at tick {tick}, this Edit Set placed a {first} and then a {second} on \
+         channel {channel} at one position, and they came out in the other order. The Edit Set \
+         asked for the second one last, so the second one is what the channel should hold there, \
+         and it would hold the first. That is a fault in battuta rather than in your Take or your \
+         Edit Set; nothing has been written."
+    )]
+    StatesOutOfOrder {
+        track: usize,
+        tick: u32,
+        channel: u8,
+        first: String,
+        second: String,
+    },
+
+    #[error(
         "apply never writes in place: -o {0} names the input Take. One file has as many names as \
          something has given it, and a symlink or a second hard link to your input is still your \
          input. Choose an output that does not already name it."

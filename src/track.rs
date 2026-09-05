@@ -51,6 +51,12 @@ struct Slot<'a> {
     /// taking one out would renumber every slot after it and a later Edit is
     /// holding those numbers.
     alive: bool,
+    /// Which of this Edit Set's writes to this track last touched the event,
+    /// counting from 0 — Edits land in the order the Edit Set gave them, so it
+    /// is that order. `None` for an event that arrived in the Take and no Edit
+    /// has touched: ADR-0003 keeps those exactly where they were, and
+    /// `stay_placed` asserts nothing about them. See #27.
+    written: Option<usize>,
 }
 
 /// The distance between two originals' Ranks. Spacing them, rather than
@@ -112,6 +118,18 @@ pub(crate) enum ChannelState {
     Controller(u8),
 }
 
+impl ChannelState {
+    /// What to call this in a refusal. Enough to point at the event, not a
+    /// Controller's name — `mid` names Controllers where it reports them, and a
+    /// fault report is not the place to learn a second way to do it.
+    fn named(self) -> String {
+        match self {
+            ChannelState::Program => "program change".to_string(),
+            ChannelState::Controller(number) => format!("control change for CC {number}"),
+        }
+    }
+}
+
 impl Statement {
     /// Whether this event states exactly this address.
     fn is_stated_by(self, kind: &TrackEventKind) -> bool {
@@ -136,6 +154,8 @@ impl Statement {
 /// A track opened up so a whole Edit Set can be applied to it.
 pub(crate) struct Rewrite<'a> {
     slots: Vec<Slot<'a>>,
+    /// How many writes this rewrite has made, which numbers the next one.
+    writes: usize,
 }
 
 impl<'a> Rewrite<'a> {
@@ -151,9 +171,10 @@ impl<'a> Rewrite<'a> {
                 kind: event.kind,
                 rank: slots.len() as i64 * RANK_SPACING,
                 alive: true,
+                written: None,
             });
         }
-        Rewrite { slots }
+        Rewrite { slots, writes: 0 }
     }
 
     /// Put a new event into the track. It goes on the end of the list, where it
@@ -170,6 +191,7 @@ impl<'a> Rewrite<'a> {
             kind,
             rank: 0,
             alive: true,
+            written: None,
         });
         let index = self.slots.len() - 1;
         self.place_again(index, placement);
@@ -190,13 +212,7 @@ impl<'a> Rewrite<'a> {
     /// The key a note event names, whichever of the two spellings it uses.
     /// `None` if the event does not carry a note at all.
     pub(crate) fn key(&self, index: usize) -> Option<u8> {
-        match self.slots[index].kind {
-            TrackEventKind::Midi {
-                message: MidiMessage::NoteOn { key, .. } | MidiMessage::NoteOff { key, .. },
-                ..
-            } => Some(key.as_int()),
-            _ => None,
-        }
+        key(&self.slots[index].kind)
     }
 
     /// Put a note event on another key, reporting the key it was on. `None`, and
@@ -212,6 +228,7 @@ impl<'a> Rewrite<'a> {
         };
         let previous = current.as_int();
         *current = u7::new(key);
+        self.wrote(index);
         Some(previous)
     }
 
@@ -227,6 +244,7 @@ impl<'a> Rewrite<'a> {
         };
         let previous = vel.as_int();
         *vel = u7::new(velocity);
+        self.wrote(index);
         Some(previous)
     }
 
@@ -283,6 +301,7 @@ impl<'a> Rewrite<'a> {
         };
         let previous = current.as_int();
         *current = u7::new(program);
+        self.wrote(index);
         Some(previous)
     }
 
@@ -340,6 +359,7 @@ impl<'a> Rewrite<'a> {
         };
         let previous = current.as_int();
         *current = u7::new(value);
+        self.wrote(index);
         Some(previous)
     }
 
@@ -357,6 +377,7 @@ impl<'a> Rewrite<'a> {
 
     pub(crate) fn set_tick(&mut self, index: usize, tick: u32) {
         self.slots[index].tick = tick;
+        self.wrote(index);
     }
 
     /// Give a slot the Rank its `Placement` calls for, against the track as it
@@ -384,6 +405,19 @@ impl<'a> Rewrite<'a> {
             Placement::State(statement) => self.before_the_strikes(index, tick, statement),
         };
         self.slots[index].rank = rank;
+        self.wrote(index);
+    }
+
+    /// Mark an event as one this Edit Set has written, and number the write.
+    ///
+    /// Every mutation here comes through it, not only the ones that set a Rank.
+    /// `stay_placed` checks what this Edit Set wrote, and the defect it exists
+    /// to catch is an event an Edit moved and *failed* to place — which reaches
+    /// `set_tick` and never reaches `place_again`. Marking only the placements
+    /// would leave the check blind to exactly the shape of bug it is for.
+    fn wrote(&mut self, index: usize) {
+        self.slots[index].written = Some(self.writes);
+        self.writes += 1;
     }
 
     /// The alive slots sharing a Tick with the one being placed.
@@ -458,6 +492,164 @@ impl<'a> Rewrite<'a> {
             .map_or(strike - RANK_SPACING, |behind| behind + 1)
     }
 
+    /// Refuse a track whose Ranks contradict the rule that placed them.
+    ///
+    /// A sibling to `stay_distinct`, and the same posture as `with_delta_times`
+    /// reporting an event out of Tick order: a fault in `battuta` rather than a
+    /// problem with anybody's Take. If `place_again` is right this can never
+    /// fire, which is the point — every defect this project has shipped on
+    /// Rank was found by rendering audio and comparing it sample by sample,
+    /// which needs a Rig, needs CI to have a soundfont, and needs somebody to
+    /// already suspect the answer. ADR-0008 made the alternative possible: the
+    /// placement of every event this project writes is now decided by one
+    /// rule, and a rule is a property of the finished track. See #27.
+    ///
+    /// Only what this Edit Set wrote. A Take carried in with a release behind
+    /// a strike keeps it — ADR-0003 — so an event with no `written` is one this
+    /// check has nothing to say about. The cross-track case is not here
+    /// either: two tracks share no Rank, so there is nothing to compare, and
+    /// #26 refuses it earlier in the run.
+    ///
+    /// Which rule each event answers to is read from the event, not from the
+    /// `Placement` its caller named. `place_again` takes the caller's word on
+    /// purpose, so that a kind arriving with no rule of its own cannot have one
+    /// guessed for it (#24) — and a check that took the same word would agree
+    /// with a wrong one. Asking the event is the second opinion: a release is a
+    /// release whatever an Edit called it, and an Edit that moved one without
+    /// placing it at all named no `Placement` to be checked against.
+    pub(crate) fn stay_placed(&self, track: usize) -> Result<()> {
+        for (index, slot) in self.slots.iter().enumerate() {
+            let Some(written) = slot.written.filter(|_| slot.alive) else {
+                continue;
+            };
+            if released(&slot.kind).is_some() {
+                self.release_precedes_its_own_strike(track, index, slot)?;
+            }
+            if let Some(statement) = stated_by(&slot.kind) {
+                self.state_precedes_the_strikes_it_governs(track, index, slot, statement)?;
+                self.states_keep_the_order_they_were_written_in(
+                    track, index, slot, statement, written,
+                )?;
+            }
+            // A strike is asserted nothing about. It is placed behind everything
+            // at its Tick, and both of the other rules place things in front of
+            // what is there — so a release or a statement landing later is meant
+            // to end up in front of it. "Behind everything" is true when it is
+            // placed and need not be true afterwards, which makes it no property
+            // of the finished track.
+        }
+        Ok(())
+    }
+
+    /// A release this Edit Set wrote is in front of every strike of its own
+    /// channel and pitch at its Tick — #25's defect, as a property.
+    fn release_precedes_its_own_strike(
+        &self,
+        track: usize,
+        index: usize,
+        slot: &Slot<'a>,
+    ) -> Result<()> {
+        let Some((channel, pitch)) = released(&slot.kind) else {
+            return Ok(());
+        };
+        for behind in self.sharing(index, slot.tick) {
+            if behind.rank < slot.rank
+                && strikes(&behind.kind, channel)
+                && key(&behind.kind) == Some(pitch)
+            {
+                return Err(Error::ReleaseBehindItsStrike {
+                    track,
+                    tick: slot.tick,
+                    channel,
+                    pitch,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// A channel-state event this Edit Set wrote is in front of the strikes of
+    /// its channel that it governs at its Tick — ADR-0008, as a property.
+    ///
+    /// It governs the strikes from the statement of its own address in front of
+    /// it onwards. The strikes before *that* one belong to it, not to this: a
+    /// Tick may state an address twice, and the first of them is what the
+    /// strikes between them sound under.
+    fn state_precedes_the_strikes_it_governs(
+        &self,
+        track: usize,
+        index: usize,
+        slot: &Slot<'a>,
+        statement: Statement,
+    ) -> Result<()> {
+        let governs_from = self
+            .sharing(index, slot.tick)
+            .filter(|other| other.rank < slot.rank && statement.is_stated_by(&other.kind))
+            .map(|other| other.rank)
+            .max();
+        for behind in self.sharing(index, slot.tick) {
+            if behind.rank < slot.rank
+                && strikes(&behind.kind, statement.channel)
+                && governs_from.is_none_or(|from| behind.rank > from)
+            {
+                return Err(Error::StateBehindItsStrikes {
+                    track,
+                    tick: slot.tick,
+                    channel: statement.channel,
+                    state: statement.state.named(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    /// Two channel-state events this Edit Set wrote at one position are in the
+    /// order the Edit Set gave them.
+    ///
+    /// One position, not one Tick: a strike between two of them is what decides
+    /// their order instead, and either side of it they are answering to
+    /// different notes.
+    fn states_keep_the_order_they_were_written_in(
+        &self,
+        track: usize,
+        index: usize,
+        slot: &Slot<'a>,
+        statement: Statement,
+        written: usize,
+    ) -> Result<()> {
+        for (other, later) in self.slots.iter().enumerate() {
+            if other == index || !later.alive || later.tick != slot.tick {
+                continue;
+            }
+            let Some(order) = later.written else { continue };
+            let Some(other_statement) = stated_by(&later.kind) else {
+                continue;
+            };
+            if other_statement.channel != statement.channel || order < written {
+                continue;
+            }
+            if later.rank > slot.rank
+                || self.strikes_between(index, slot.tick, statement.channel, later.rank, slot.rank)
+            {
+                continue;
+            }
+            return Err(Error::StatesOutOfOrder {
+                track,
+                tick: slot.tick,
+                channel: statement.channel,
+                first: statement.state.named(),
+                second: other_statement.state.named(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Whether a strike of this channel falls between two Ranks at a Tick.
+    fn strikes_between(&self, placing: usize, tick: u32, channel: u8, low: i64, high: i64) -> bool {
+        self.sharing(placing, tick)
+            .any(|slot| slot.rank > low && slot.rank < high && strikes(&slot.kind, channel))
+    }
+
     /// The track as an event list again, in Tick order, with delta times.
     ///
     /// End-of-track is not sorted with the rest — it is where the track stops,
@@ -484,6 +676,55 @@ impl<'a> Rewrite<'a> {
                 .map(|slot| (slot.tick, slot.kind))
                 .chain([(end, TrackEventKind::Meta(MetaMessage::EndOfTrack))]),
         )
+    }
+}
+
+/// What a channel-state event states: its channel and its address. `None` if the
+/// event states nothing about a channel.
+///
+/// The inverse of `Statement::is_stated_by`, which asks whether one event states
+/// one known address. This asks an event which address it states, because a
+/// check reading the finished track has no address in hand to ask about.
+fn stated_by(kind: &TrackEventKind) -> Option<Statement> {
+    let TrackEventKind::Midi { channel, message } = kind else {
+        return None;
+    };
+    let state = match message {
+        MidiMessage::ProgramChange { .. } => ChannelState::Program,
+        MidiMessage::Controller { controller, .. } => ChannelState::Controller(controller.as_int()),
+        _ => return None,
+    };
+    Some(Statement {
+        channel: channel.as_int(),
+        state,
+    })
+}
+
+/// The channel and key a release ends, whichever of the two spellings it uses:
+/// a note-off, or a note-on at velocity zero. `None` if the event ends nothing.
+fn released(kind: &TrackEventKind) -> Option<(u8, u8)> {
+    match kind {
+        TrackEventKind::Midi {
+            channel,
+            message: MidiMessage::NoteOff { key, .. },
+        } => Some((channel.as_int(), key.as_int())),
+        TrackEventKind::Midi {
+            channel,
+            message: MidiMessage::NoteOn { key, vel },
+        } if vel.as_int() == 0 => Some((channel.as_int(), key.as_int())),
+        _ => None,
+    }
+}
+
+/// The key a note event names, whichever of the two spellings it uses. `None`
+/// if the event does not carry a note.
+fn key(kind: &TrackEventKind) -> Option<u8> {
+    match kind {
+        TrackEventKind::Midi {
+            message: MidiMessage::NoteOn { key, .. } | MidiMessage::NoteOff { key, .. },
+            ..
+        } => Some(key.as_int()),
+        _ => None,
     }
 }
 
@@ -542,12 +783,20 @@ pub(crate) fn with_delta_times<'a>(
 #[cfg(test)]
 mod tests {
     //! This crate's tests are at the process boundary, in `tests/`, because that
-    //! is where `mid`'s behaviour is observable. The encoding rule is the
-    //! exception. The difference between refusing an unwritable gap and masking
-    //! it into a smaller one shows up only in a Take sparse enough to need a
-    //! delta of 268 million Ticks, and committing a fixture that strange — or
-    //! generating one — to watch a single `u28` conversion would cost more than
-    //! stating the property here does.
+    //! is where `mid`'s behaviour is observable. Two rules are the exception.
+    //!
+    //! The encoding rule, because the difference between refusing an unwritable
+    //! gap and masking it into a smaller one shows up only in a Take sparse
+    //! enough to need a delta of 268 million Ticks, and committing a fixture
+    //! that strange — or generating one — to watch a single `u28` conversion
+    //! would cost more than stating the property here does.
+    //!
+    //! `stay_placed`, because it can only fire when `place_again` is wrong: a
+    //! test at the process boundary would have to ship a broken `mid` to watch
+    //! it. Each defect it is shown catching below was also reintroduced in the
+    //! real code and caught there, which is the evidence that it works; these
+    //! are what stop the check itself from being quietly disabled later by an
+    //! edit that inverts a comparison.
 
     use super::*;
 
@@ -600,5 +849,124 @@ mod tests {
         let refused = with_delta_times([(480, anything()), (0, anything())])
             .expect_err("events out of Tick order cannot be encoded");
         assert!(matches!(refused, Error::Encode(_)), "{refused}");
+    }
+
+    use midly::num::u4;
+
+    /// One event, at a distance from the one before it.
+    fn event(delta: u32, kind: TrackEventKind<'static>) -> TrackEvent<'static> {
+        TrackEvent {
+            delta: u28::new(delta),
+            kind,
+        }
+    }
+
+    /// A note-on above velocity zero, on channel 0.
+    fn strike(pitch: u8) -> TrackEventKind<'static> {
+        TrackEventKind::Midi {
+            channel: u4::new(0),
+            message: MidiMessage::NoteOn {
+                key: u7::new(pitch),
+                vel: u7::new(64),
+            },
+        }
+    }
+
+    /// A note-off, on channel 0.
+    fn release(pitch: u8) -> TrackEventKind<'static> {
+        TrackEventKind::Midi {
+            channel: u4::new(0),
+            message: MidiMessage::NoteOff {
+                key: u7::new(pitch),
+                vel: u7::new(0),
+            },
+        }
+    }
+
+    /// A control change, on channel 0.
+    fn control(number: u8, value: u8) -> TrackEventKind<'static> {
+        TrackEventKind::Midi {
+            channel: u4::new(0),
+            message: MidiMessage::Controller {
+                controller: u7::new(number),
+                value: u7::new(value),
+            },
+        }
+    }
+
+    /// The address a control change on channel 0 states.
+    fn holding(number: u8) -> Placement {
+        Placement::State(Statement {
+            channel: 0,
+            state: ChannelState::Controller(number),
+        })
+    }
+
+    /// #25's defect, in the smallest shape that produces it: a release carried
+    /// onto the Tick of a strike of its own pitch, and not placed again. A
+    /// synthesiser would strike that note and stop it in the same instant.
+    #[test]
+    fn a_release_written_behind_its_own_strike_is_a_fault() {
+        let events = vec![event(0, strike(60)), event(480, release(60))];
+        let mut track = Rewrite::of(&events);
+        track.set_tick(1, 0);
+        let refused = track
+            .stay_placed(0)
+            .expect_err("a release behind its own strike silences it");
+        assert!(
+            matches!(refused, Error::ReleaseBehindItsStrike { .. }),
+            "{refused}"
+        );
+    }
+
+    /// #20's defect: a channel-state event written after the note-ons already
+    /// at its Tick. Named here as a `Strike` to place it, which is the mistake —
+    /// and the check reads the event rather than the name it was placed under,
+    /// so it catches a caller that named the wrong rule as readily as a rule
+    /// that was implemented wrongly.
+    #[test]
+    fn a_state_written_behind_a_note_it_governs_is_a_fault() {
+        let events = vec![event(0, strike(60))];
+        let mut track = Rewrite::of(&events);
+        track.push(0, control(64, 127), Placement::Strike);
+        let refused = track
+            .stay_placed(0)
+            .expect_err("a state behind the notes it governs does not reach them");
+        assert!(
+            matches!(refused, Error::StateBehindItsStrikes { .. }),
+            "{refused}"
+        );
+    }
+
+    /// Two statements an Edit Set placed at one position, come out reversed. The
+    /// Edit Set asked for the second one last, so the second one is what the
+    /// channel should hold; reversed, it holds the first.
+    #[test]
+    fn two_states_written_out_of_the_order_asked_for_are_a_fault() {
+        let events = vec![event(0, strike(60))];
+        let mut track = Rewrite::of(&events);
+        let first = track.push(0, control(100, 1), holding(100));
+        let second = track.push(0, control(101, 1), holding(101));
+        track.slots[second].rank = track.slots[first].rank - 1;
+        let refused = track
+            .stay_placed(0)
+            .expect_err("two statements reversed leave the wrong one in force");
+        assert!(
+            matches!(refused, Error::StatesOutOfOrder { .. }),
+            "{refused}"
+        );
+    }
+
+    /// The other half of the rule, and the one that keeps this check honest: a
+    /// Take that arrived with a release behind a strike of its own pitch keeps
+    /// it. ADR-0003 — the order an event arrived in is the author's, and no Edit
+    /// named these.
+    #[test]
+    fn a_release_that_arrived_behind_its_strike_is_left_where_it_was() {
+        let events = vec![event(0, strike(60)), event(0, release(60))];
+        let track = Rewrite::of(&events);
+        track
+            .stay_placed(0)
+            .expect("carried-in order is the author's, whatever it is");
     }
 }

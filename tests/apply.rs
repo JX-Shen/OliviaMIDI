@@ -1348,3 +1348,52 @@ fn a_resize_of_no_ticks_leaves_the_order_the_take_arrived_in() {
         "a resize that moved nothing rearranged the events that arrived with it"
     );
 }
+
+/// The other half of #27's check, at the process boundary: it asserts nothing
+/// about the order events arrived in.
+///
+/// This Take writes the first note's release *after* the strike that begins the
+/// second — the shape a resize used to produce, here written by the author.
+/// ADR-0003 keeps it, so the Edit Set below has to succeed, and the release it
+/// does move has to be the only one the check looks at.
+#[test]
+fn a_release_the_take_arrived_with_behind_a_strike_is_left_alone() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_setting(
+        &dir.path().join("carried.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[
+            common::strike(0, 60),
+            common::strike(960, 60),
+            common::release(960, 60),
+            common::release(1440, 60),
+        ],
+        &[],
+    );
+    let out = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "shorten-the-second",
+        r#"{"kind": "resize_note", "id": "t1:c0:p60:s960:n0", "delta_ticks": -240}"#,
+    );
+    common::mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    assert_eq!(
+        common::events_of_track(&out, 1),
+        vec![
+            (0, "strikes"),
+            (960, "strikes"),
+            (960, "releases"),
+            (1200, "releases"),
+        ],
+        "the release the Take arrived with was moved, or the Edit Set was refused"
+    );
+}

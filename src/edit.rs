@@ -393,6 +393,9 @@ pub fn apply(take: &Take, edit_set: &EditSet) -> Result<Take> {
         }
     }
     stay_distinct(&tracks, &sounding)?;
+    for (number, track) in tracks.iter().enumerate() {
+        track.stay_placed(number)?;
+    }
 
     smf.tracks = tracks
         .into_iter()
