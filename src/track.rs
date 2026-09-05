@@ -8,7 +8,7 @@
 //! The fix is to stop asking one number to mean three things. In an encoded
 //! track, an event's place in the list is at once its *address* (how a resolved
 //! Edit finds it), its *musical time* (delta times accumulate along it), and its
-//! *rank among simultaneous events* (which of two notes struck together is the
+//! its *Rank* among the events sharing that Tick (which of two notes struck together is the
 //! first occurrence). Inserting an event has to change the second, so it drags
 //! the first with it, and every address taken before the insertion is wrong.
 //!
@@ -18,7 +18,7 @@
 //! |---|---|
 //! | address | a `Slot`'s index, which never moves |
 //! | musical time | `Slot::tick`, an absolute Tick |
-//! | rank at one Tick | `Slot::order` |
+//! | Rank at one Tick | `Slot::rank` |
 //!
 //! Nothing shifts an index: removing an event marks its slot dead, adding one
 //! pushes onto the end. Delta times are derived once, at the end, from the
@@ -35,24 +35,68 @@ use crate::error::{Error, Result};
 use midly::num::{u28, u7};
 use midly::{MetaMessage, MidiMessage, TrackEvent, TrackEventKind};
 
-/// One event of a track, found by its index and placed by its Tick and rank.
+/// One event of a track, found by its index and placed by its Tick and Rank.
 struct Slot<'a> {
     tick: u32,
     kind: TrackEventKind<'a>,
-    /// Rank among the events sharing this Tick. It starts as the event's own
-    /// index, so a track no Edit touched re-encodes to exactly what it was.
-    order: i64,
+    /// Where this event falls among the events sharing its Tick — which of
+    /// them a synthesiser meets first. Starts spaced by `RANK_SPACING` from an
+    /// original's own index, rather than equal to it, so a Rank can always be
+    /// found between any two original Ranks; a track no Edit touched still
+    /// re-encodes to exactly what it was, because spacing them preserves every
+    /// original's Rank relative to every other. See CONTEXT.md's **Rank**.
+    rank: i64,
     /// Cleared by `remove`. A slot is never taken out of the list, because
     /// taking one out would renumber every slot after it and a later Edit is
     /// holding those numbers.
     alive: bool,
 }
 
+/// The distance between two originals' Ranks. Spacing them, rather than
+/// numbering them 0, 1, 2, ..., is what leaves room to place an event between
+/// any two of them — which a `Slot`'s index cannot do, because an index is an
+/// address and never moves.
+///
+/// The size is not load bearing, only the room: any value above the number of
+/// events one Edit Set can place at a single Tick would do, and this one leaves
+/// 65535 of them. It is a power of two so that a Rank reads as an index and an
+/// offset when one is printed while debugging.
+const RANK_SPACING: i64 = 1 << 16;
+
+/// What an event placed or re-placed at a Tick is — named by the caller, which
+/// is the one place that knows, rather than guessed here from the event's own
+/// kind. A kind arriving with no rule of its own would otherwise be a fresh
+/// chance to guess one; naming it is how the next kind instead has to say what
+/// it is. See #24.
+#[derive(Clone, Copy)]
+pub(crate) enum Placement {
+    /// Starts a note. Placed after the events already at its Tick: occurrence
+    /// indices are counted in note-on order, so a note arriving where others of
+    /// its track, channel and pitch already begin has to arrive behind them and
+    /// take the next index rather than one of theirs. See ADR-0002.
+    Strike,
+    /// Ends a note, by either spelling: a note-off, or a note-on at velocity
+    /// zero. Placed before the events already at its Tick — a release landing
+    /// exactly on the next strike of the same pitch would, placed last, silence
+    /// the note that strike had just begun.
+    Release,
+    /// States what a channel is on. Placed before the events already at its
+    /// Tick, alongside a Release, for the reason ADR-0008 and #12 give: a
+    /// note-on at that Tick has to sound on the Program the Take now states
+    /// there. It shares that position until #20 gives it one of its own,
+    /// between the releases and the strikes rather than alongside either.
+    Program,
+    /// States what a channel holds for a Controller. Placed after the events
+    /// already at its Tick, alongside a Strike, until #20 gives it a rule of
+    /// its own.
+    Controller,
+}
+
 /// A track opened up so a whole Edit Set can be applied to it.
 pub(crate) struct Rewrite<'a> {
     slots: Vec<Slot<'a>>,
-    /// The next rank for a re-placed note-on, and the next for a re-placed
-    /// note-off. Strikes count up from beyond every original index, so a
+    /// The next Rank for a re-placed strike, and the next for a re-placed
+    /// release. Strikes count up from beyond every original's Rank, so a
     /// re-placed one lands after every event already at its Tick; releases
     /// count down below zero, so a re-placed one lands before them.
     next_strike: i64,
@@ -70,12 +114,12 @@ impl<'a> Rewrite<'a> {
             slots.push(Slot {
                 tick,
                 kind: event.kind,
-                order: slots.len() as i64,
+                rank: slots.len() as i64 * RANK_SPACING,
                 alive: true,
             });
         }
         Rewrite {
-            next_strike: slots.len() as i64,
+            next_strike: slots.len() as i64 * RANK_SPACING,
             next_release: 0,
             slots,
         }
@@ -84,15 +128,20 @@ impl<'a> Rewrite<'a> {
     /// Put a new event into the track. It goes on the end of the list, where it
     /// cannot shift any index a resolved Edit is holding, and is placed among
     /// the events at its Tick by the same rule as any changed one.
-    pub(crate) fn push(&mut self, tick: u32, kind: TrackEventKind<'a>) -> usize {
+    pub(crate) fn push(
+        &mut self,
+        tick: u32,
+        kind: TrackEventKind<'a>,
+        placement: Placement,
+    ) -> usize {
         self.slots.push(Slot {
             tick,
             kind,
-            order: 0,
+            rank: 0,
             alive: true,
         });
         let index = self.slots.len() - 1;
-        self.place_again(index);
+        self.place_again(index, placement);
         index
     }
 
@@ -171,29 +220,25 @@ impl<'a> Rewrite<'a> {
     /// statement before it, which is about an earlier moment, nor the one after,
     /// which the Take still makes and a later `inspect` still reports.
     ///
-    /// The *last* such event rather than the first, as `controller_at` finds the
-    /// last control change. Two program changes at one address are both carried
-    /// (ADR-0003 — an Edit Set naming neither may not fold them), and the one in
-    /// force is the one written last, which is what `inspect` reports and what a
-    /// synthesiser plays. See #19.
+    /// The *last* such event by Rank rather than the first, as `controller_at`
+    /// finds the last control change by Rank. Two program changes at one
+    /// address are both carried (ADR-0003 — an Edit Set naming neither may not
+    /// fold them), and the one in force is the one last by Rank, which is what
+    /// `inspect` reports and what a synthesiser plays. See #19.
     ///
-    /// Last by slot index, which is last in the finished track only while the
-    /// two agree. They do: an original keeps `order` equal to its index, and a
-    /// program change is only ever pushed where the track holds none, so the
-    /// pushed one has both the highest index and its own Tick to itself. An Edit
-    /// that re-placed an existing program change would break that, and would
-    /// have to make this ask about `order` instead.
+    /// By Rank, and not by slot index: an event a resolved Edit re-places keeps
+    /// the index it was given when the track was opened, so an index search
+    /// answers "which of these was written first", not "which is in force" —
+    /// the two agree only while nothing has been re-placed. See #24.
     pub(crate) fn program_at(&self, channel: u8, tick: u32) -> Option<usize> {
-        self.slots.iter().rposition(|slot| {
-            slot.alive
-                && slot.tick == tick
-                && matches!(
-                    slot.kind,
-                    TrackEventKind::Midi {
-                        channel: on,
-                        message: MidiMessage::ProgramChange { .. },
-                    } if on.as_int() == channel
-                )
+        self.last_by_rank(tick, |kind| {
+            matches!(
+                kind,
+                TrackEventKind::Midi {
+                    channel: on,
+                    message: MidiMessage::ProgramChange { .. },
+                } if on.as_int() == channel
+            )
         })
     }
 
@@ -214,23 +259,43 @@ impl<'a> Rewrite<'a> {
 
     /// Where a Controller is stated on a channel at a Tick, or `None`.
     ///
-    /// The *last* such event rather than the first, as `program_at` finds the
-    /// last program change. Two control changes at one address are both carried
-    /// (ADR-0003 — an Edit Set naming neither may not fold them), and the one in
-    /// force is the one written last, so that is the one an Edit naming the
-    /// address means.
+    /// The *last* such event by Rank rather than the first, as `program_at`
+    /// finds the last program change by Rank. Two control changes at one
+    /// address are both carried (ADR-0003 — an Edit Set naming neither may not
+    /// fold them), and the one in force is the one last by Rank, so that is the
+    /// one an Edit naming the address means.
+    ///
+    /// By Rank, and not by slot index, for the reason `program_at` is: an
+    /// index search answers which was written first, and stops agreeing with
+    /// which is in force the moment anything has been re-placed. A Controller
+    /// moved onto an address a duplicate already occupies is exactly that
+    /// moment — the mover keeps the slot index it arrived with, which need not
+    /// be the highest of the two. See #24.
     pub(crate) fn controller_at(&self, channel: u8, controller: u8, tick: u32) -> Option<usize> {
-        self.slots.iter().rposition(|slot| {
-            slot.alive
-                && slot.tick == tick
-                && matches!(
-                    slot.kind,
-                    TrackEventKind::Midi {
-                        channel: on,
-                        message: MidiMessage::Controller { controller: number, .. },
-                    } if on.as_int() == channel && number.as_int() == controller
-                )
+        self.last_by_rank(tick, |kind| {
+            matches!(
+                kind,
+                TrackEventKind::Midi {
+                    channel: on,
+                    message: MidiMessage::Controller { controller: number, .. },
+                } if on.as_int() == channel && number.as_int() == controller
+            )
         })
+    }
+
+    /// The alive slot at this Tick whose kind matches, last by Rank — "in
+    /// force", by ADR-0008's rule. `None` if nothing does.
+    ///
+    /// The one place `program_at` and `controller_at` ask "which is in force",
+    /// so that the answer is the same question asked twice rather than two
+    /// searches that could drift apart.
+    fn last_by_rank(&self, tick: u32, matches: impl Fn(&TrackEventKind) -> bool) -> Option<usize> {
+        self.slots
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| slot.alive && slot.tick == tick && matches(&slot.kind))
+            .max_by_key(|(_, slot)| slot.rank)
+            .map(|(index, _)| index)
     }
 
     /// Put a control change on another value, reporting the one it carried.
@@ -248,12 +313,12 @@ impl<'a> Rewrite<'a> {
         Some(previous)
     }
 
-    /// Where an event will end up: its Tick, and its rank among the events
+    /// Where an event will end up: its Tick, and its Rank among the events
     /// sharing that Tick. The pair the track is finally sorted by, so comparing
     /// two of them answers "which of these comes first" without sorting.
     pub(crate) fn place(&self, index: usize) -> (u32, i64) {
         let slot = &self.slots[index];
-        (slot.tick, slot.order)
+        (slot.tick, slot.rank)
     }
 
     pub(crate) fn tick(&self, index: usize) -> u32 {
@@ -264,30 +329,30 @@ impl<'a> Rewrite<'a> {
         self.slots[index].tick = tick;
     }
 
-    /// Place a slot after every event already at its Tick — or, if it ends a
-    /// note, before them.
+    /// Give a slot the Rank its `Placement` calls for: ahead of every event
+    /// already at its Tick, or behind them.
     ///
-    /// Every Edit that changes what a note's identity is derived from, and every
-    /// Edit that creates a note, ends here. Placing a changed note-on last is
-    /// what stops the notes already struck at that Tick from being renumbered:
-    /// occurrence indices are counted in note-on order, so a note arriving at
-    /// their Tick has to arrive behind them and take the next index rather than
-    /// one of theirs. See ADR-0002.
+    /// Which of the two each `Placement` takes, and why, is written on its
+    /// variant. Every Edit that changes what a note's identity is derived from,
+    /// and every Edit that creates a note, ends here — and nothing here looks at
+    /// the event again, because the caller has already said what it is.
     ///
-    /// A note-off goes the other way, and the reason is audible rather than
-    /// arithmetic. A release landing exactly on the next strike of the same
-    /// pitch would, placed last, silence the note that strike had just begun: a
-    /// synthesiser stops a pitch, not an identity.
-    pub(crate) fn place_again(&mut self, index: usize) {
-        let order = if goes_before_the_events_at_its_tick(&self.slots[index].kind) {
-            self.next_release -= 1;
-            self.next_release
-        } else {
-            let order = self.next_strike;
-            self.next_strike += 1;
-            order
+    /// Each Rank is distinct: the two counters start beyond every original's and
+    /// step away from each other, and no slot is ever placed twice at once. That
+    /// is what lets a search for the last by Rank have one answer.
+    pub(crate) fn place_again(&mut self, index: usize, placement: Placement) {
+        let rank = match placement {
+            Placement::Release | Placement::Program => {
+                self.next_release -= RANK_SPACING;
+                self.next_release
+            }
+            Placement::Strike | Placement::Controller => {
+                let rank = self.next_strike;
+                self.next_strike += RANK_SPACING;
+                rank
+            }
         };
-        self.slots[index].order = order;
+        self.slots[index].rank = rank;
     }
 
     /// The track as an event list again, in Tick order, with delta times.
@@ -307,7 +372,7 @@ impl<'a> Rewrite<'a> {
             }
             true
         });
-        self.slots.sort_by_key(|slot| (slot.tick, slot.order));
+        self.slots.sort_by_key(|slot| (slot.tick, slot.rank));
         let end = end.max(self.slots.last().map_or(0, |slot| slot.tick));
 
         with_delta_times(
@@ -352,43 +417,6 @@ pub(crate) fn with_delta_times<'a>(
             })
         })
         .collect()
-}
-
-/// Whether an event ends a note. Both spellings count: a note-on with velocity 0
-/// is a note-off, and the format uses the two interchangeably.
-/// Whether an event has to precede the events already at its Tick.
-///
-/// Two kinds do, for the same kind of reason — what a synthesiser does with the
-/// events of one Tick depends on the order it meets them in:
-///
-/// A release, because a note-off landing exactly on the next strike of the same
-/// pitch would, placed last, silence the note that strike had just begun.
-///
-/// A program change, because a note-on at that Tick has to sound on the Program
-/// the Take now states there. Placed last, the new Program would arrive after
-/// the note it was set for, and the note would sound on the one before it — an
-/// `apply` that succeeded, a file that plays, and the change inaudible in the
-/// one Bar it was asked for.
-fn goes_before_the_events_at_its_tick(kind: &TrackEventKind) -> bool {
-    releases_a_note(kind)
-        || matches!(
-            kind,
-            TrackEventKind::Midi {
-                message: MidiMessage::ProgramChange { .. },
-                ..
-            }
-        )
-}
-
-fn releases_a_note(kind: &TrackEventKind) -> bool {
-    match kind {
-        TrackEventKind::Midi { message, .. } => match message {
-            MidiMessage::NoteOff { .. } => true,
-            MidiMessage::NoteOn { vel, .. } => vel.as_int() == 0,
-            _ => false,
-        },
-        _ => false,
-    }
 }
 
 #[cfg(test)]

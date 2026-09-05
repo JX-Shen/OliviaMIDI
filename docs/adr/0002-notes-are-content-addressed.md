@@ -90,7 +90,7 @@ separated only by occurrence index, which is positional. Three things follow.
 Within a single Edit Set the up-front binding above neutralises it.
 
 **Across a write and a re-read it holds, and that is measured rather than
-assumed.** A track is re-sorted by `(tick, order)` where an untouched event keeps
+assumed.** A track is re-sorted by `(tick, rank)` where an untouched event keeps
 the order it was read in, so a Take that changed nothing comes back with the same
 event stream and the same identities; the bytes are free to differ under
 ADR-0003, and do. `tests/stacked.rs` asserts it against a Take that arrived

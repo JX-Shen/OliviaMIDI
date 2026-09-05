@@ -1052,6 +1052,58 @@ fn a_move_onto_a_duplicate_address_gives_way_only_to_the_statement_in_force() {
     );
 }
 
+/// A `set_controller` after a `move_controller` reaches the statement the move
+/// left in force, even when that statement sits at a lower slot index than the
+/// duplicate it moved in beside.
+///
+/// `crescendo` states CC11 twice at Tick 960 — 30, then 40 — with 40 in force.
+/// The mover starts at Tick 240, earlier in the file than either, and so at a
+/// lower slot index than both. It moves onto Tick 960: the move's own lookup is
+/// unambiguous (40 is the only thing there yet to give way to) and removes it,
+/// leaving the mover in force beside the 30 — genuinely in force, because
+/// nothing at that Tick outranks it, but sitting behind the 30 as the array
+/// stores events, because it kept the low index it arrived with.
+///
+/// A lookup that answers by position rather than by Rank cannot tell the two
+/// apart, and the second Edit is where that would show: naming Tick 960 again
+/// would reach the 30 — the wrong event, changed to a value the Edit Set never
+/// meant to give it, while the mover it *did* mean sails past untouched. See
+/// #24.
+#[test]
+fn a_set_controller_reaches_the_statement_a_move_left_in_force_at_a_lower_index() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_with_controllers(
+        &dir.path().join("crescendo.mid"),
+        480,
+        &[],
+        &[(240, 11, 99), (960, 11, 30), (960, 11, 40)],
+        &[],
+    );
+    let edits = common::edit_set(
+        dir.path(),
+        "move-then-set",
+        r#"{"kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 240, "delta_ticks": 720},
+           {"kind": "set_controller", "track": 1, "channel": 0, "controller": 11, "tick": 960, "value": 77}"#,
+    );
+    let output = dir.path().join("out.mid");
+
+    common::mid()
+        .args(["apply"])
+        .arg(&take)
+        .arg(&edits)
+        .arg("-o")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        stated_controller(&output, 1, 0, 11, 960),
+        vec![30, 77],
+        "the set_controller changed the mover, in force at Tick 960, not the \
+         30 it happens to sit behind in the array"
+    );
+}
+
 /// The refusal names the address the Edit Set wrote, not where the event stands.
 ///
 /// An earlier Edit may have carried the target somewhere else before the one

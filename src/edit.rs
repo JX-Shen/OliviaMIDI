@@ -2,7 +2,7 @@ use crate::controller::FIRST_CHANNEL_MODE;
 use crate::error::{Error, Result};
 use crate::note::{Note, NoteId};
 use crate::take::Take;
-use crate::track::Rewrite;
+use crate::track::{Placement, Rewrite};
 use midly::num::{u4, u7};
 use midly::{MidiMessage, TrackEventKind};
 use serde::Deserialize;
@@ -495,6 +495,15 @@ fn change_note(track: &mut Rewrite, change: Change, note: &Note) -> Result<()> {
     }
     let lost = || Error::NoteEventsLost(note.id.to_string());
 
+    /// A note's two events, paired with which end of it each one is — the
+    /// pairing `Change::Transpose` and `Change::Move` both re-place by.
+    fn both_events(note: &Note) -> [(usize, Placement); 2] {
+        [
+            (note.on_event, Placement::Strike),
+            (note.off_event, Placement::Release),
+        ]
+    }
+
     match change {
         Change::Velocity(velocity) => {
             let velocity = midi_value(velocity, 127)
@@ -515,9 +524,9 @@ fn change_note(track: &mut Rewrite, change: Change, note: &Note) -> Result<()> {
                 semitones,
                 landed,
             })?;
-            for index in [note.on_event, note.off_event] {
+            for (index, placement) in both_events(note) {
                 track.set_key(index, pitch).ok_or_else(lost)?;
-                track.place_again(index);
+                track.place_again(index, placement);
             }
         }
 
@@ -525,7 +534,7 @@ fn change_note(track: &mut Rewrite, change: Change, note: &Note) -> Result<()> {
         // delta times around them are re-derived at the end, from Ticks: nothing
         // here touches a neighbour.
         Change::Move(delta_ticks) => {
-            for index in [note.on_event, note.off_event] {
+            for (index, placement) in both_events(note) {
                 let landed = i64::from(track.tick(index)) + delta_ticks;
                 let tick = u32::try_from(landed).map_err(|_| Error::MoveOutOfRange {
                     id: note.id.to_string(),
@@ -533,7 +542,7 @@ fn change_note(track: &mut Rewrite, change: Change, note: &Note) -> Result<()> {
                     landed,
                 })?;
                 track.set_tick(index, tick);
-                track.place_again(index);
+                track.place_again(index, placement);
             }
         }
 
@@ -609,6 +618,7 @@ fn add(tracks: &mut [Rewrite], new: NewNote) -> Result<NoteSlots> {
                 key: u7::new(pitch),
                 vel: u7::new(velocity),
             }),
+            Placement::Strike,
         ),
         off: track.push(
             end,
@@ -616,6 +626,7 @@ fn add(tracks: &mut [Rewrite], new: NewNote) -> Result<NoteSlots> {
                 key: u7::new(pitch),
                 vel: u7::new(0),
             }),
+            Placement::Release,
         ),
     })
 }
@@ -663,6 +674,7 @@ fn set_program(tracks: &mut [Rewrite], new: NewProgram) -> Result<()> {
                         program: u7::new(program),
                     },
                 },
+                Placement::Program,
             );
         }
     }
@@ -713,6 +725,7 @@ fn state_controller(tracks: &mut [Rewrite], new: NewController) -> Result<()> {
                         value: u7::new(value),
                     },
                 },
+                Placement::Controller,
             );
         }
     }
@@ -768,7 +781,7 @@ fn change_controller(
                 }
             }
             track.set_tick(named.event, moved);
-            track.place_again(named.event);
+            track.place_again(named.event, Placement::Controller);
         }
     }
     Ok(())
