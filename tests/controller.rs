@@ -738,7 +738,7 @@ fn an_inserted_control_change_precedes_the_notes_at_its_tick() {
         .success();
 
     assert_eq!(
-        events_of_track(&output, 1),
+        common::events_of_track(&output, 1),
         vec![
             (0, "strikes"),
             (480, "releases"),
@@ -782,7 +782,7 @@ fn a_moved_control_change_precedes_the_notes_at_its_tick() {
         .success();
 
     assert_eq!(
-        events_of_track(&output, 1),
+        common::events_of_track(&output, 1),
         vec![
             (0, "strikes"),
             (480, "releases"),
@@ -872,7 +872,7 @@ fn a_stated_control_change_lands_after_the_releases_at_its_tick() {
         .success();
 
     assert_eq!(
-        events_of_track(&output, 1),
+        common::events_of_track(&output, 1),
         vec![
             (0, "strikes"),
             (1440, "releases"),
@@ -928,7 +928,7 @@ fn a_statement_carried_in_behind_a_strike_is_re_placed_by_a_set() {
         "the statement was changed where it stood, not added beside itself"
     );
     assert_eq!(
-        events_of_track(&output, 1),
+        common::events_of_track(&output, 1),
         vec![
             (0, "strikes"),
             (1440, "releases"),
@@ -1018,7 +1018,7 @@ fn a_tick_that_strikes_nothing_on_the_channel_takes_the_state_at_its_end() {
         .success();
 
     assert_eq!(
-        events_of_track(&output, 2),
+        common::events_of_track(&output, 2),
         vec![
             (0, "strikes"),
             (0, "strikes"),
@@ -1061,7 +1061,7 @@ fn a_note_on_at_velocity_zero_is_a_release_and_not_a_strike() {
         .success();
 
     assert_eq!(
-        events_of_track(&output, 1),
+        common::events_of_track(&output, 1),
         vec![
             (0, "strikes"),
             (0, "strikes"),
@@ -1110,7 +1110,7 @@ fn a_take_that_writes_a_release_behind_a_strike_keeps_that_order() {
         .success();
 
     assert_eq!(
-        events_of_track(&output, 1),
+        common::events_of_track(&output, 1),
         vec![
             (0, "strikes"),
             (0, "strikes"),
@@ -1430,32 +1430,6 @@ fn a_refused_controller_edit_names_the_address_the_edit_set_wrote() {
         }));
 }
 
-/// One track's events in file order, as (tick, what it does) — enough to see
-/// which of two events sharing a Tick the synthesiser meets first.
-fn events_of_track(path: &std::path::Path, track: usize) -> Vec<(u32, &'static str)> {
-    let bytes = std::fs::read(path).expect("Take is readable");
-    let smf = midly::Smf::parse(&bytes).expect("Take parses");
-    let mut found = Vec::new();
-    let mut tick = 0u32;
-    for event in &smf.tracks[track] {
-        tick += event.delta.as_int();
-        let midly::TrackEventKind::Midi { message, .. } = event.kind else {
-            continue;
-        };
-        found.push((
-            tick,
-            match message {
-                midly::MidiMessage::Controller { .. } => "controller",
-                midly::MidiMessage::NoteOn { vel, .. } if vel.as_int() > 0 => "strikes",
-                midly::MidiMessage::NoteOff { .. } | midly::MidiMessage::NoteOn { .. } => {
-                    "releases"
-                }
-                _ => continue,
-            },
-        ));
-    }
-    found
-}
 
 /// The control changes one track states at one Tick, as (controller, value), in
 /// the order the file lists them.

@@ -1044,3 +1044,307 @@ fn a_release_landing_on_the_next_strike_is_written_before_it() {
         "the release at Tick 960 was not written before the strike it lands on"
     );
 }
+
+/// The same rule reached through the other Edit that moves a release. A resize
+/// changes no identity, so its *strike* is deliberately left where it sits — but
+/// its release is under the audible rule above, not the identity one, and a
+/// shrink is how a release most easily lands on a strike already written. See
+/// #25.
+#[test]
+fn a_shrunk_note_releases_before_the_strike_it_lands_on() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("overlapping.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(0, 1920, 60), (1440, 960, 60)],
+    );
+    let out = dir.path().join("shrunk.mid");
+
+    // The first note shrinks so that it now ends exactly where the second began.
+    mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(edit_set(
+            dir.path(),
+            "shrink-onto-the-next-strike",
+            r#"{ "kind": "resize_note", "id": "t1:c0:p60:s0:n0", "delta_ticks": -480 }"#,
+        ))
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    assert_eq!(
+        common::note_events(&out),
+        vec![
+            (0, "strikes", 60),
+            (1440, "releases", 60),
+            (1440, "strikes", 60),
+            (2400, "releases", 60),
+        ],
+        "the shrunk release was written after the strike it lands on, which silences it"
+    );
+}
+
+/// And in the other direction. A release extended onto a strike is the same
+/// audible case, and it is written before it for the same reason — not because
+/// it happened to have been written earlier in the file.
+#[test]
+fn an_extended_note_releases_before_the_strike_it_lands_on() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("spaced.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(0, 480, 60), (1440, 960, 60)],
+    );
+    let out = dir.path().join("extended.mid");
+
+    // The first note grows so that it now ends exactly where the second begins.
+    mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(edit_set(
+            dir.path(),
+            "extend-onto-the-next-strike",
+            r#"{ "kind": "resize_note", "id": "t1:c0:p60:s0:n0", "delta_ticks": 960 }"#,
+        ))
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    assert_eq!(
+        common::note_events(&out),
+        vec![
+            (0, "strikes", 60),
+            (1440, "releases", 60),
+            (1440, "strikes", 60),
+            (2400, "releases", 60),
+        ],
+        "the extended release was written after the strike it lands on, which silences it"
+    );
+}
+
+/// What the resize still may not do. Occurrence indices are counted in note-on
+/// order, so re-placing a *strike* would renumber the notes already at that Tick
+/// — which is why only the release moves. Two notes identical in track, channel,
+/// pitch and start, told apart by their lengths: resizing the first must leave
+/// both answering to the names they had.
+#[test]
+fn a_resize_does_not_renumber_the_notes_stacked_with_it() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("stacked-pair.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(1440, 480, 60), (1440, 960, 60)],
+    );
+    let out = dir.path().join("resized.mid");
+
+    mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(edit_set(
+            dir.path(),
+            "resize-one-of-a-stack",
+            r#"{ "kind": "resize_note", "id": "t1:c0:p60:s1440:n0", "delta_ticks": 240 }"#,
+        ))
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    let named = |take: &Path| -> Vec<(String, u64)> {
+        common::notes(&common::inspect_json(take))
+            .iter()
+            .map(|note| {
+                (
+                    note["id"].as_str().expect("id is a string").to_string(),
+                    note["duration"].as_u64().expect("duration is a number"),
+                )
+            })
+            .collect()
+    };
+    assert_eq!(
+        named(&take),
+        vec![
+            ("t1:c0:p60:s1440:n0".to_string(), 480),
+            ("t1:c0:p60:s1440:n1".to_string(), 960),
+        ],
+        "the built Take is not the stack this test is about"
+    );
+    assert_eq!(
+        named(&out),
+        vec![
+            ("t1:c0:p60:s1440:n0".to_string(), 720),
+            ("t1:c0:p60:s1440:n1".to_string(), 960),
+        ],
+        "a resize renumbered the notes stacked with the one it named"
+    );
+}
+
+/// A release re-placed onto a Tick that already holds a release of the same
+/// pitch. Both notes are released there whichever of the two a reader takes
+/// first, so each keeps the length its own strike gives it — which is why
+/// `Sounding` compares releases by Tick alone.
+#[test]
+fn a_release_shrunk_onto_another_release_keeps_both_lengths() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("two-releases.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(0, 960, 60), (480, 960, 60)],
+    );
+    let out = dir.path().join("shrunk.mid");
+
+    // The second note shrinks onto the Tick the first is already released on.
+    mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(edit_set(
+            dir.path(),
+            "shrink-onto-another-release",
+            r#"{ "kind": "resize_note", "id": "t1:c0:p60:s480:n0", "delta_ticks": -480 }"#,
+        ))
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    let lengths: Vec<(u64, u64)> = common::notes(&common::inspect_json(&out))
+        .iter()
+        .map(|note| {
+            (
+                note["start"].as_u64().expect("start is a number"),
+                note["duration"].as_u64().expect("duration is a number"),
+            )
+        })
+        .collect();
+    assert_eq!(
+        lengths,
+        vec![(0, 960), (480, 480)],
+        "two releases at one Tick handed the notes each other's length"
+    );
+}
+
+/// The other half of that. Where a resize *would* swap two lengths — by leaving
+/// one note of a pitch finishing inside another — the Take is refused, exactly
+/// as an `add_note` that nests is. A release only has to be heard in the right
+/// place; it cannot buy its way out of `stay_distinct`.
+#[test]
+fn a_resize_that_would_nest_two_notes_of_a_pitch_fails() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("two-notes.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(0, 960, 60), (480, 960, 60)],
+    );
+    let out = dir.path().join("nested.mid");
+
+    // The first note grows past the end of the second, which begins inside it.
+    mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(edit_set(
+            dir.path(),
+            "resize-into-a-nest",
+            r#"{ "kind": "resize_note", "id": "t1:c0:p60:s0:n0", "delta_ticks": 960 }"#,
+        ))
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .failure()
+        .stderr(predicates::str::contains("pitch 60"));
+    assert!(!out.exists());
+}
+
+/// The extend direction, reached the only way it can fail. A single extend
+/// cannot exhibit #25: the release's new Tick is later than its old one, so any
+/// strike it lands on was already written after it and already outranked it. Two
+/// resizes on one note in one Edit Set are what put an extended release on a
+/// strike it did not already follow — the note is first shortened past that
+/// strike, then grown back onto it.
+#[test]
+fn a_release_extended_back_onto_a_strike_is_written_before_it() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("overlapping.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(0, 2400, 60), (1440, 1440, 60)],
+    );
+    let out = dir.path().join("shrunk-then-grown.mid");
+
+    mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(edit_set(
+            dir.path(),
+            "shrink-past-then-grow-onto",
+            r#"{ "kind": "resize_note", "id": "t1:c0:p60:s0:n0", "delta_ticks": -1920 },
+               { "kind": "resize_note", "id": "t1:c0:p60:s0:n0", "delta_ticks": 960 }"#,
+        ))
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    assert_eq!(
+        common::note_events(&out),
+        vec![
+            (0, "strikes", 60),
+            (1440, "releases", 60),
+            (1440, "strikes", 60),
+            (2880, "releases", 60),
+        ],
+        "the release grown back onto the strike was written after it, which silences it"
+    );
+}
+
+/// A resize of zero ticks re-places nothing. The release is placed again because
+/// it arrived ranked for the Tick it left; one that goes nowhere never left, and
+/// the order it was written in is the author's (ADR-0008). Here the Take states
+/// the damper at the Tick the note is released on, in that order — pedal down,
+/// then note-off, which is how a pedalled note is caught. Re-placing the release
+/// would put it in front and the pedal would catch nothing.
+#[test]
+fn a_resize_of_no_ticks_leaves_the_order_the_take_arrived_in() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_with_controllers(
+        &dir.path().join("pedalled.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(960, 64, 127)],
+        &[(0, 960, 60)],
+    );
+    let out = dir.path().join("resized.mid");
+
+    assert_eq!(
+        common::events_of_track(&take, 1),
+        vec![(0, "strikes"), (960, "controller"), (960, "releases")],
+        "the built Take is not the pedalled release this test is about"
+    );
+
+    mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(edit_set(
+            dir.path(),
+            "resize-by-nothing",
+            r#"{ "kind": "resize_note", "id": "t1:c0:p60:s0:n0", "delta_ticks": 0 }"#,
+        ))
+        .arg("-o")
+        .arg(&out)
+        .assert()
+        .success();
+
+    assert_eq!(
+        common::events_of_track(&out, 1),
+        vec![(0, "strikes"), (960, "controller"), (960, "releases")],
+        "a resize that moved nothing rearranged the events that arrived with it"
+    );
+}

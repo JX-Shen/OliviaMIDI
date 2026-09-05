@@ -547,10 +547,19 @@ fn change_note(track: &mut Rewrite, change: Change, note: &Note) -> Result<()> {
         }
 
         // The note-off alone moves, so the note keeps its start and with it its
-        // identity — which is why it is deliberately not placed again. Placing a
-        // note again is how an Edit that *changes* an identity keeps from
-        // renumbering the notes already at a Tick, and a resize changes no
-        // identity at all, so it has nothing to get out of the way of.
+        // identity. The two events are therefore placed by different rules, and
+        // only one of them by ADR-0002's.
+        //
+        // The strike is deliberately left where it sits. Placing a note again is
+        // how an Edit that *changes* an identity keeps from renumbering the notes
+        // already at a Tick; a resize changes no identity, so re-placing its
+        // strike would renumber notes nobody asked to touch and get nothing back.
+        //
+        // The release is placed again all the same, by the audible rule on
+        // `Placement::Release` rather than the identity one — it arrived ranked
+        // for the Tick it left. A release that goes nowhere never left, so it
+        // keeps the rank it was written with; carried-in order is the author's
+        // (ADR-0008). See #25.
         Change::Resize(delta_ticks) => {
             let landed = i64::from(track.tick(note.off_event)) + delta_ticks;
             let duration = landed - i64::from(track.tick(note.on_event));
@@ -562,7 +571,10 @@ fn change_note(track: &mut Rewrite, change: Change, note: &Note) -> Result<()> {
                     delta_ticks,
                     duration,
                 })?;
-            track.set_tick(note.off_event, end);
+            if end != track.tick(note.off_event) {
+                track.set_tick(note.off_event, end);
+                track.place_again(note.off_event, Placement::Release);
+            }
         }
 
         // Both events go or neither does. A note-off left behind would release a

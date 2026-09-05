@@ -194,6 +194,33 @@ pub fn note_events(path: &Path) -> Vec<(u32, &'static str, u8)> {
     found
 }
 
+/// One track's events in file order, as (tick, what it does) — enough to see
+/// which of two events sharing a Tick the synthesiser meets first.
+pub fn events_of_track(path: &Path, track: usize) -> Vec<(u32, &'static str)> {
+    let bytes = std::fs::read(path).expect("Take is readable");
+    let smf = midly::Smf::parse(&bytes).expect("Take parses");
+    let mut found = Vec::new();
+    let mut tick = 0u32;
+    for event in &smf.tracks[track] {
+        tick += event.delta.as_int();
+        let midly::TrackEventKind::Midi { message, .. } = event.kind else {
+            continue;
+        };
+        found.push((
+            tick,
+            match message {
+                midly::MidiMessage::Controller { .. } => "controller",
+                midly::MidiMessage::NoteOn { vel, .. } if vel.as_int() > 0 => "strikes",
+                midly::MidiMessage::NoteOff { .. } | midly::MidiMessage::NoteOn { .. } => {
+                    "releases"
+                }
+                _ => continue,
+            },
+        ));
+    }
+    found
+}
+
 pub fn note_ids(json: &str) -> Vec<String> {
     notes(json)
         .iter()

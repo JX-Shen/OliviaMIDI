@@ -68,7 +68,9 @@ It reaches `move_note` and `transpose_note` for the same reason it reaches
 changes a note's start Tick and a transpose changes its pitch, and both are
 content an identity is derived from — so both can land a note on top of another
 and renumber it. `set_velocity` and `resize_note` change nothing an identity is
-derived from, and so leave a note exactly where it sits.
+derived from, so this rule re-places nothing for them. It governs a note's
+*strike* in any case, that being the only one of its two events an occurrence
+index is counted on; where a release goes is the next paragraph's.
 
 A note-off is placed the other way, before the events already at its Tick, and
 that is not an identity rule at all: occurrence indices are counted in note-on
@@ -106,3 +108,16 @@ stale Edit Set written against an earlier Take is the case that stays dangerous,
 and it is the one this decision cannot help with, because a renumbered identity
 still resolves. What protects a human there is `mid diff` — *an Edit Set states
 what was asked for; a diff states what happened*, in `CHARTER.md`.
+
+## Amended: an Edit that moves no identity can still move a release
+
+"`resize_note` leaves a note exactly where it sits" was written about the
+identity rule and read as a rule about both of a note's events. `resize_note`
+moves one of them. What that misreading cost is #25.
+
+Nothing about identity is amended: a resize still re-places no strike, still
+renumbers nothing, and the reasoning above for why is unchanged. What is
+corrected is the scope. This entry decides where a *strike* goes. Where a
+release goes was never its to say — it is the audible rule, ADR-0008's, which
+this entry cites rather than owns, and it reaches every Edit that moves a
+release rather than only the ones that move an identity.

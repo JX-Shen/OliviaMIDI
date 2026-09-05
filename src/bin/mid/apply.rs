@@ -108,6 +108,12 @@ use std::path::PathBuf;
 /// pitch already starts takes the next occurrence index, and the note that was
 /// there keeps the name it had.
 ///
+/// A resize moves a note's release and nothing else, and a release is placed
+/// before the events already at its Tick. So a note shortened or lengthened onto
+/// the Tick where the next note of its pitch is struck releases first and leaves
+/// that strike sounding; it does not renumber anything, a release having no
+/// occurrence index of its own.
+///
 /// Refused rather than guessed at:
 ///
 ///   * a transpose leaving MIDI's 0-127, or a move landing before Tick 0
