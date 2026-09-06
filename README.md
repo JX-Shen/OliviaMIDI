@@ -65,7 +65,7 @@ to your music.
 cargo install battuta
 ```
 
-The crate is `battuta`; the binary it installs is `mid`. Rust 1.82 or newer.
+The crate is `battuta`; the binary it installs is `mid`. Rust 1.85 or newer.
 
 Four of the five commands need nothing but the binary. `play` needs two more
 things — FluidSynth on PATH, and a Rig it will never choose for you — and each
