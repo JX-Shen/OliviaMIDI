@@ -210,38 +210,48 @@ pub fn diff(before: &Take, after: &Take, tolerance: Option<u32>) -> Result<Diff>
         }
     }
 
-    // Greedy, in the order `Take::notes` fixes — track order, then note-on order
-    // — because greedy makes that order observable: two unmatched notes the same
-    // distance from a candidate produce different pairings depending on which is
-    // reached first. The order is part of `notes`' contract, so the answer is
-    // the same on every run rather than whatever iteration happened to do.
-    for (index, note) in before_notes.iter().enumerate() {
-        if matched_to[index].is_some() {
-            continue;
-        }
-        let nearest = after_notes
-            .iter()
-            .enumerate()
-            .filter(|&(candidate, other)| {
-                !taken[candidate]
-                    && other.track == note.track
-                    && other.channel == note.channel
-                    && other.start.abs_diff(note.start) <= tolerance_ticks
-            })
-            // Nearest in Ticks, which is what the tolerance bounds. Pitch breaks
-            // a tie because a transposed note sits at the same Tick as whatever
-            // else did not move, and the after Take's own order breaks the rest.
-            .min_by_key(|&(candidate, other)| {
-                (
-                    other.start.abs_diff(note.start),
-                    other.pitch.abs_diff(note.pitch),
-                    candidate,
-                )
-            })
-            .map(|(candidate, _)| candidate);
-        if let Some(candidate) = nearest {
-            matched_to[index] = Some(candidate);
-            taken[candidate] = true;
+    // A tolerance of nought asks for the first pass alone, and the bound cannot
+    // deliver that by itself: a note replaced at its own Tick is nought Ticks
+    // away, so the filter below admits it however tight the tolerance is, and
+    // pitch reaches the comparison only as a tie-break. Not running the pass is
+    // therefore the whole of the difference between matching by identity and
+    // matching by nearness — #29.
+    if tolerance_ticks > 0 {
+        // Greedy, in the order `Take::notes` fixes — track order, then note-on
+        // order — because greedy makes that order observable: two unmatched
+        // notes the same distance from a candidate produce different pairings
+        // depending on which is reached first. The order is part of `notes`'
+        // contract, so the answer is the same on every run rather than whatever
+        // iteration happened to do.
+        for (index, note) in before_notes.iter().enumerate() {
+            if matched_to[index].is_some() {
+                continue;
+            }
+            let nearest = after_notes
+                .iter()
+                .enumerate()
+                .filter(|&(candidate, other)| {
+                    !taken[candidate]
+                        && other.track == note.track
+                        && other.channel == note.channel
+                        && other.start.abs_diff(note.start) <= tolerance_ticks
+                })
+                // Nearest in Ticks, which is what the tolerance bounds. Pitch
+                // breaks a tie because a transposed note sits at the same Tick
+                // as whatever else did not move, and the after Take's own order
+                // breaks the rest.
+                .min_by_key(|&(candidate, other)| {
+                    (
+                        other.start.abs_diff(note.start),
+                        other.pitch.abs_diff(note.pitch),
+                        candidate,
+                    )
+                })
+                .map(|(candidate, _)| candidate);
+            if let Some(candidate) = nearest {
+                matched_to[index] = Some(candidate);
+                taken[candidate] = true;
+            }
         }
     }
 

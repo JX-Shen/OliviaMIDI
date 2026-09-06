@@ -65,6 +65,29 @@ fn changed(diff: &Value) -> Vec<(String, String, Vec<String>)> {
         .collect()
 }
 
+/// Two Takes holding one note at one Tick, the second one having replaced it
+/// with a different pitch.
+///
+/// The distance the tolerance bounds is zero here, so this is the case that
+/// separates *matching by identity* from *matching by nearness*: identity says
+/// two notes, nearness says one note transposed, and only the tolerance decides
+/// which claim the diff is entitled to make.
+fn substituted_by(dir: &Path, semitones: u8) -> (PathBuf, PathBuf) {
+    let before = build_take(
+        &dir.join("before.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(480, 240, 60)],
+    );
+    let after = build_take(
+        &dir.join("after.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(480, 240, 60 + semitones)],
+    );
+    (before, after)
+}
+
 /// Two Takes holding the same one note, the second one having moved it.
 ///
 /// Built rather than derived from the fixture because a test about the tolerance
@@ -177,6 +200,43 @@ fn a_tolerance_of_zero_matches_by_identity_alone() {
     assert_eq!(list(&diff, "changed").len(), 0);
     assert_eq!(list(&diff, "added").len(), 1);
     assert_eq!(list(&diff, "removed").len(), 1);
+}
+
+/// The case a distance cannot reject, because the distance is zero.
+///
+/// Moving a note far enough puts it outside the tolerance and the bound does the
+/// work. A note *replaced* at its own Tick is never outside any bound, so at
+/// zero the first pass has to be the only pass — or the diff answers a caller
+/// who asked it not to infer with an inference.
+#[test]
+fn a_tolerance_of_zero_does_not_pair_a_substituted_pitch_with_what_it_replaced() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (before, after) = substituted_by(dir.path(), 2);
+
+    let diff = diff_json(&before, &after, Some("0"));
+    assert_eq!(list(&diff, "changed").len(), 0);
+    assert_eq!(list(&diff, "removed")[0]["id"], "t1:c0:p60:s480:n0");
+    assert_eq!(list(&diff, "added")[0]["id"], "t1:c0:p62:s480:n0");
+}
+
+/// The other side of the boundary: the inference is still there to be asked
+/// for, and asking for it is what a tolerance above zero does.
+#[test]
+fn the_same_substitution_at_the_default_tolerance_is_one_transposed_note() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (before, after) = substituted_by(dir.path(), 2);
+
+    let diff = diff_json(&before, &after, None);
+    assert_eq!(list(&diff, "added").len(), 0);
+    assert_eq!(list(&diff, "removed").len(), 0);
+    assert_eq!(
+        changed(&diff),
+        vec![(
+            "t1:c0:p60:s480:n0".to_string(),
+            "t1:c0:p62:s480:n0".to_string(),
+            vec!["pitch".to_string()]
+        )]
+    );
 }
 
 #[test]
