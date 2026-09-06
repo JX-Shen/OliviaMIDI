@@ -106,6 +106,54 @@ directory used before 0.1.0 to where each one's content went. Add a line when
 you add an ADR; it is the only place that answers "what has this project
 already settled?" without opening six files.
 
+## When a decision is not the agent's
+
+The Working Philosophy says to verify with a human on a contradiction. That is
+the whole of it, and it was written for an agent working while somebody was
+awake. Unattended — overnight, or under `/implement` on a set of tickets — it
+needs a boundary that can be applied without first asking what the word means.
+
+**Stop, and leave it for the human:**
+
+- a contradiction between `CHARTER.md`, an ADR, a `decision` issue and the code,
+  including one that only appears once the work is under way;
+- a change that would widen the scope the issue asked for, or touch a file the
+  issue did not name;
+- anything irreversible or visible outside this repository: a tag, a publish, a
+  force-push, a closed issue, a deleted branch;
+- a trade-off between two defensible behaviours that the charter and the ADRs do
+  not decide between. Choosing one and noting the choice is still choosing.
+
+**Do not stop for:**
+
+- a read-only probe, however wide;
+- any job in `ci.yml`, or any `cargo` command that does not write to the tree;
+- an unambiguous defect inside the slice the issue already named;
+- a question the issue's acceptance criteria already answer.
+
+**Uncertainty rounds up.** Where it is unclear whether something crosses the
+boundary, it crosses. A wrong stop costs one morning's reading; a wrong
+continuation puts a decision the human owns into the tree with a green tick on
+top of it. The asymmetry decides this, not how confident the agent feels.
+
+**Stopping means stopping somewhere it will be seen.** Comment on the issue with
+what was found and what is left, leave the work uncommitted rather than
+committing half a decision, and do not open a second issue to carry on through.
+An agent that stops and then works around the thing it stopped at has not
+stopped.
+
+## When to stop repairing
+
+**Two failed repairs of one root cause end the repair.** After the second, stop
+changing code and re-examine the seam, the assumption, the contract, or the way
+the work was sliced. A third attempt at the same level is rarely the one that
+works and reliably the one that leaves a workaround behind.
+
+**Name what changed before retrying anything.** Before a second attempt at a
+failed action, state the new evidence or the changed precondition that makes
+another attempt worth making. Running it again, rewording it, or handing it to a
+different agent is none of those.
+
 ## How agents drive this tool
 
 `mid` is meant to be driven by agents, and it is self-describing on purpose:
@@ -179,6 +227,11 @@ release that changed anything an agent is told about.
   `CHARTER.md`. Do not add the trailer even when a tool's defaults suggest it.
 - Subject line in the imperative, under ~72 characters. Body explains why the
   change was made, not what the diff already shows.
+- **An agent does not commit to `main`.** Branch first, named for the issue the
+  work came from, and leave the merge to the human. `ci.yml` runs on every
+  branch, so this costs no signal: a branch gets the same four jobs. What it
+  buys is that a disagreement lands somewhere other than the history everyone
+  else reads.
 
 ## Agent skills
 
