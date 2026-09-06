@@ -1,6 +1,6 @@
 [package]
 name = "battuta"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 # Checked, not remembered: `cargo check --locked` and `cargo test --locked` on
 # exactly this version, on every push (#21). 1.82 was declared and was never
