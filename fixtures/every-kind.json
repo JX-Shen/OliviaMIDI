@@ -1,0 +1,18 @@
+{
+  "edits": [
+    { "kind": "move_note",      "id": "t1:c0:p69:s0:n0", "delta_ticks": -240 },
+    { "kind": "transpose_note", "id": "t1:c0:p69:s0:n0", "semitones": -2 },
+    { "kind": "resize_note",    "id": "t1:c0:p69:s0:n0", "delta_ticks": 120 },
+    { "kind": "set_velocity",   "id": "t1:c0:p69:s0:n0", "velocity": 40 },
+    { "kind": "delete_note",    "id": "t1:c0:p69:s0:n0" },
+    { "kind": "add_note", "track": 1, "channel": 0, "pitch": 69,
+                          "start": 5760, "duration": 955, "velocity": 50 },
+    { "kind": "set_program", "track": 1, "channel": 0, "tick": 0, "program": 40 },
+    { "kind": "set_controller",    "track": 1, "channel": 0, "controller": 11,
+                                   "tick": 1440, "value": 100 },
+    { "kind": "delete_controller", "track": 1, "channel": 0, "controller": 11,
+                                   "tick": 1440 },
+    { "kind": "move_controller",   "track": 1, "channel": 0, "controller": 11,
+                                   "tick": 1440, "delta_ticks": 240 }
+  ]
+}

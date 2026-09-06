@@ -1,0 +1,94 @@
+# The release gate — #21.
+#
+# 0.1.1 was tagged and published from a commit whose AGENTS.md told agents not
+# to write the Edits that commit had just shipped. Nothing caught it because
+# nothing was looking: there was no checked-in workflow, and the only thing
+# between a disagreement and a published version was somebody remembering to
+# reread four files. Remembering is not a mechanism.
+#
+# Deliberately light. Three jobs and a smoke test, not a release train: an
+# automated pipeline would be more machinery than the thing it protects, and
+# `cargo publish` stays manual on purpose (#22) because a checklist read by a
+# human catches an incoherent release narrative that a green tick cannot.
+
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Everything that can be decided by reading the tree, plus proof that the tree
+  # packages. `cargo package` here rather than at release time: a file missing
+  # from the crate is a fact about this commit, and finding it out while tagging
+  # is finding it out too late.
+  linux:
+    name: linux stable
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo package --locked
+
+  # The tests, on the platform this project is developed on. Signals, temporary
+  # Takes and the FluidSynth fake are all here, and none of them is decided by
+  # the same code path on both systems.
+  macos:
+    name: macos stable
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test
+
+  # The version the manifest promises. `--locked` on both, because an MSRV that
+  # only holds under a freshly resolved lockfile is not one anybody can rely on.
+  msrv:
+    name: msrv 1.85
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --locked
+      - run: cargo test --locked
+
+  # What a fresh install actually presents. `mid --version` reads the version
+  # from the manifest, so on a tagged commit this one line checks the tag, the
+  # manifest and the binary against each other; `mid apply --help` is the Edit
+  # Set contract as somebody who ran `cargo install battuta` would meet it.
+  install:
+    name: fresh install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install --path . --root "$RUNNER_TEMP/install" --locked
+      - name: the installed binary states its version
+        run: |
+          "$RUNNER_TEMP/install/bin/mid" --version
+      - name: the installed binary presents the Edit Set contract
+        run: |
+          "$RUNNER_TEMP/install/bin/mid" apply --help
+      - name: a tag and the manifest agree
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tagged="${GITHUB_REF_NAME#v}"
+          built="$("$RUNNER_TEMP/install/bin/mid" --version | awk '{print $2}')"
+          if [ "$tagged" != "$built" ]; then
+            echo "tag $GITHUB_REF_NAME does not match the binary's $built" >&2
+            exit 1
+          fi

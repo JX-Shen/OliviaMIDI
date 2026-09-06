@@ -2,7 +2,11 @@
 name = "battuta"
 version = "0.1.1"
 edition = "2021"
-rust-version = "1.82"
+# Checked, not remembered: `cargo check --locked` and `cargo test --locked` on
+# exactly this version, on every push (#21). 1.82 was declared and was never
+# true — `tempfile` reaches `getrandom`, which needs a Cargo that has edition
+# 2024, and 1.82's has not.
+rust-version = "1.85"
 description = "The core of OliviaMIDI: read, change, compare and audition a Take."
 license = "MIT"
 repository = "https://github.com/JX-Shen/OliviaMIDI"

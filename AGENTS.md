@@ -132,6 +132,45 @@ already settled?" without opening six files.
   not configured it fails rather than guessing; do not work around this by
   picking a soundfont.
 
+## Releasing
+
+0.1.1 was tagged and published from a commit whose `AGENTS.md` told agents not
+to write the Edits that commit had just shipped, and nothing caught it because
+nothing was looking. What follows is the mechanism that replaced remembering.
+Do not release without it, and do not work around a red one.
+
+**The gate is `.github/workflows/ci.yml`, and it is green or there is no
+release.** Four jobs: everything decidable by reading the tree plus `cargo
+package`, the tests on macOS, `check` and `test` under the manifest's own
+`rust-version` with `--locked`, and a fresh install whose binary is asked for
+`--version` and `apply --help`. On a `v*` tag the install job also refuses a tag
+that disagrees with the binary.
+
+**What each answers, so that a red one is read rather than retried:**
+
+- `tests/contract.rs` — that `mid apply --help` lists exactly the Edit kinds the
+  binary accepts, in both directions. The list of kinds is read out of the type,
+  never written down beside it.
+- `cargo package` — that the crate holds the files it needs. A file missing from
+  the package is a fact about the commit, and finding it out while tagging is
+  finding it out too late.
+- the MSRV job — that `rust-version` is true. It was not, when this was written.
+- the fresh install — that a `cargo install` presents what the repository says
+  it does, which is the only place the tag, the manifest and the binary are
+  compared against each other.
+
+**`cargo publish` is not automated, and is not to be.** A green pipeline cannot
+read a release narrative. #22 is the checklist, and it is run by a human.
+
+**The test no CI can run, and it is worth more than the ones it can.** Start an
+agent with no history of this project. Give it the repository and a Take
+carrying a CC11 curve, and ask for `inspect` → a Controller Edit → `apply` →
+`diff` → `play`. It passes when the agent does not say Controllers are
+unsupported, does not read `src/` to guess the schema, is sent here and then to
+`mid apply --help`, writes a legal Edit Set, can explain the diff, and the target
+note is audibly governed by the Controller at its own Tick. Run it before a
+release that changed anything an agent is told about.
+
 ## Git conventions
 
 - **No `Co-Authored-By` trailer, for agents or tools.** A commit is authored by
