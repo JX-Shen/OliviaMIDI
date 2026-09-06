@@ -379,3 +379,40 @@ pub fn stated_program(lines: Option<BarLines>, stated: &StatedProgram) -> Vec<St
         program(stated.channel, Some(stated.program)),
     ]
 }
+
+/// A place the Take states no order between two of its tracks.
+///
+/// One sentence rather than a table row. The other blocks answer a question the
+/// reader asked — what is each channel on, where does the passage state another
+/// — and this one answers a question they did not: it is a warning, and a
+/// warning laid out as a table reads as data. It also has to say what to do,
+/// which no row of four cells has room for.
+///
+/// It names both tracks, because knowing only one of them does not tell you
+/// which way to move anything, and it spells the site the way
+/// `--allow-unranked` takes it, so that a reader who decides to answer for it
+/// can copy the argument out of the line.
+pub fn unranked(lines: Option<BarLines>, row: &battuta::Unranked) -> String {
+    let state = match row.controller {
+        None => "the program change".to_string(),
+        Some(number) => format!("the control change for CC {number}"),
+    };
+    let against = match row.against {
+        battuta::Against::Notes => format!("notes of that channel on track {}", row.against_track),
+        battuta::Against::Value => {
+            format!("a different value for it on track {}", row.against_track)
+        }
+    };
+    format!(
+        "{}  {} for channel {} on track {} has no order the file states against {}  \
+         (t{}:c{}:s{})",
+        at(lines, row.tick),
+        state,
+        row.channel,
+        row.track,
+        against,
+        row.track,
+        row.channel,
+        row.tick,
+    )
+}

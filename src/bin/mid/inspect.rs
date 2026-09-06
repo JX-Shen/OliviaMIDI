@@ -67,6 +67,10 @@ struct Listing {
     stated_programs: Vec<battuta::StatedProgram>,
     controllers: Vec<battuta::Controller>,
     stated_controllers: Vec<battuta::StatedController>,
+    /// Where the passage states no order between two of its tracks. Added, and
+    /// nothing else moved: a consumer reading the payload for the four lists
+    /// above still finds them exactly where they were.
+    unranked: Vec<battuta::Unranked>,
     notes: Vec<battuta::Note>,
 }
 
@@ -75,6 +79,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
     let notes = take.notes_in(args.bars)?;
     let programs = take.programs_in(args.bars)?;
     let controllers = take.controllers_in(args.bars)?;
+    let unranked = take.unranked(args.bars)?;
 
     if args.json {
         println!(
@@ -84,6 +89,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
                 stated_programs: programs.stated,
                 controllers: controllers.controllers,
                 stated_controllers: controllers.stated,
+                unranked,
                 notes,
             })
         );
@@ -184,6 +190,17 @@ pub fn run(args: Args) -> battuta::Result<()> {
                 .map(|stated| crate::wording::stated_controller(lines, stated))
                 .collect();
             crate::wording::table(&rows);
+        }
+        println!();
+    }
+
+    // Printed only where there is one, unlike the two blocks above. Those
+    // answer what a reader asked and so have to answer it even when the answer
+    // is "nothing"; this one is a warning, and a warning that says "no warnings"
+    // every time is one a reader learns to skip.
+    if !unranked.is_empty() {
+        for row in &unranked {
+            println!("{}", crate::wording::unranked(lines, row));
         }
         println!();
     }

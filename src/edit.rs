@@ -359,6 +359,17 @@ fn resolve(
 /// the order given with their effects ordered while their targets were all fixed
 /// in advance.
 pub fn apply(take: &Take, edit_set: &EditSet) -> Result<Take> {
+    apply_allowing(take, edit_set, &[])
+}
+
+/// The same, allowing named sites to be left in an order the file does not
+/// state.
+///
+/// Separate from `apply` rather than a parameter on it, because an allowance is
+/// not part of an Edit Set: the Edit Set says what to do to the music, and this
+/// says who is answering for a place where the file cannot say what the music
+/// is. A caller that has nothing to answer for never has to mention it. See #26.
+pub fn apply_allowing(take: &Take, edit_set: &EditSet, allowed: &[Site]) -> Result<Take> {
     let notes = take.notes()?;
     let resolved = resolve(&notes, &take.controller_events()?, &edit_set.edits)?;
 
@@ -393,6 +404,7 @@ pub fn apply(take: &Take, edit_set: &EditSet) -> Result<Take> {
         }
     }
     stay_distinct(&tracks, &sounding)?;
+    stay_rankable(&tracks, allowed)?;
     for (number, track) in tracks.iter().enumerate() {
         track.stay_placed(number)?;
     }
@@ -481,6 +493,150 @@ fn stay_distinct(tracks: &[Rewrite], sounding: &[NoteSlots]) -> Result<()> {
                     pitch: addressed.pitch,
                     first: pair[0].strike.0,
                     second: pair[1].strike.0,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// One site the run is allowed to leave unranked: where a channel-state event
+/// this Edit Set wrote is, spelled as the address it was written to.
+///
+/// The state event's own address, never the notes' track, because that is the
+/// thing the Edit Set asked for and so the thing somebody can take
+/// responsibility for. Spelled `t2:c0:s1920` — the same three letters a note's
+/// identity uses for the same three facts (ADR-0002), so that one grammar
+/// answers "which track, which channel, which Tick" wherever it is asked.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Site {
+    pub track: usize,
+    pub channel: u8,
+    pub tick: u32,
+}
+
+impl std::str::FromStr for Site {
+    type Err = Error;
+
+    /// `t2:c0:s1920`, and nothing else. Three parts, each a letter and a number,
+    /// in one order — the grammar a note's identity already uses, so that a
+    /// reader who can read one can read the other.
+    fn from_str(site: &str) -> Result<Site> {
+        let malformed = || Error::UnrankedSiteMalformed(site.to_string());
+        let [track, channel, tick] =
+            <[&str; 3]>::try_from(site.split(':').collect::<Vec<_>>()).map_err(|_| malformed())?;
+        fn number<T: std::str::FromStr>(part: &str, letter: char, site: &str) -> Result<T> {
+            part.strip_prefix(letter)
+                .and_then(|digits| digits.parse().ok())
+                .ok_or_else(|| Error::UnrankedSiteMalformed(site.to_string()))
+        }
+        Ok(Site {
+            track: number(track, 't', site)?,
+            channel: number(channel, 'c', site)?,
+            tick: number(tick, 's', site)?,
+        })
+    }
+}
+
+/// Refuse a Take this Edit Set left depending on an order the file does not
+/// state.
+///
+/// A Rank orders events within one track (ADR-0008). A channel's state written
+/// on one track and a strike of that channel on another have no order the file
+/// states, and none this project may invent: a Type-1 player merges the tracks,
+/// the format does not say in which order, and a rule resting on how one
+/// synthesiser happens to merge them would be a Rig deciding something about a
+/// Piece. So the answer is a refusal, not a guess (`CHARTER.md`, ADR-0008).
+///
+/// Two shapes, and they are one condition seen from either end:
+///
+/// - a channel-state event, and a strike of its channel on another track at its
+///   Tick. Reached from either side — a `set_program` landing where another
+///   track already strikes, and an `add_note` landing where another track
+///   already states — because the Edit Set created the collision either way and
+///   which of the two it moved is not the point.
+/// - a channel-state event, and another track stating the same address at its
+///   Tick with a *different* value. Nothing is said where the values agree: both
+///   orders leave the channel where the Take says, so the file determining no
+///   order determines nothing.
+///
+/// Only what this Edit Set wrote, as `stay_placed` and `stay_distinct` are. A
+/// Take that arrived with a programme on one track and its notes on another
+/// keeps it — that is the author's file and ADR-0003 keeps what it carried in.
+/// `mid inspect` is where those are reported; this is only about what we would
+/// write ourselves. See #26.
+fn stay_rankable(tracks: &[Rewrite], allowed: &[Site]) -> Result<()> {
+    let named = |track: usize, channel: u8, tick: u32| {
+        allowed.contains(&Site {
+            track,
+            channel,
+            tick,
+        })
+    };
+
+    for (stating, track) in tracks.iter().enumerate() {
+        for state in track.stated().filter(|state| state.written) {
+            let statement = state.statement;
+            if named(stating, statement.channel, state.tick) {
+                continue;
+            }
+            for (other, elsewhere) in tracks.iter().enumerate() {
+                if other == stating {
+                    continue;
+                }
+                if elsewhere
+                    .struck_notes()
+                    .any(|note| note.tick == state.tick && note.channel == statement.channel)
+                {
+                    return Err(Error::StateUnrankedAgainstNotes {
+                        stating,
+                        sounding: other,
+                        tick: state.tick,
+                        channel: statement.channel,
+                        state: statement.state.named(),
+                    });
+                }
+                if let Some(carried) = elsewhere
+                    .stated()
+                    .find(|held| held.tick == state.tick && held.statement == statement)
+                    .filter(|held| held.value != state.value)
+                {
+                    return Err(Error::StatesUnrankedAgainstEachOther {
+                        stating,
+                        stated: other,
+                        tick: state.tick,
+                        channel: statement.channel,
+                        state: statement.state.named(),
+                        asked: state.value,
+                        carried: carried.value,
+                    });
+                }
+            }
+        }
+
+        // The same condition from the notes' end: a strike this Edit Set wrote,
+        // landing at a Tick another track states its channel at. The state event
+        // is the site somebody would name, so it is the one the refusal is
+        // addressed from, whichever end the Edit Set moved.
+        for note in track.struck_notes().filter(|note| note.written) {
+            for (other, elsewhere) in tracks.iter().enumerate() {
+                if other == stating {
+                    continue;
+                }
+                let Some(state) = elsewhere.stated().find(|state| {
+                    state.tick == note.tick && state.statement.channel == note.channel
+                }) else {
+                    continue;
+                };
+                if named(other, note.channel, note.tick) {
+                    continue;
+                }
+                return Err(Error::StateUnrankedAgainstNotes {
+                    stating: other,
+                    sounding: stating,
+                    tick: note.tick,
+                    channel: note.channel,
+                    state: state.statement.state.named(),
                 });
             }
         }
@@ -835,13 +991,18 @@ fn midi_value(value: i64, largest: u8) -> Option<u8> {
 /// `Take::write`, which writes a new file and renames it onto the output and so
 /// never writes through a file the input also names. A check tells the user
 /// what they did; the structure is what holds when a check is wrong.
-pub fn apply_to_new_take(input: &Path, edit_set: &Path, output: &Path) -> Result<()> {
+pub fn apply_to_new_take(
+    input: &Path,
+    edit_set: &Path,
+    output: &Path,
+    allowed: &[Site],
+) -> Result<()> {
     if same_file(input, output) {
         return Err(Error::WriteInPlace(output.to_path_buf()));
     }
     let take = Take::read(input)?;
     let edit_set = EditSet::read(edit_set)?;
-    apply(&take, &edit_set)?.write(output)
+    apply_allowing(&take, &edit_set, allowed)?.write(output)
 }
 
 /// Whether two paths name the same file.

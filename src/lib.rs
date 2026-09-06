@@ -20,14 +20,16 @@ pub mod rig;
 pub mod take;
 mod temporary;
 mod track;
+pub mod unranked;
 
 pub use bars::{BarLines, BarRange, Position, TickSpan};
 pub use controller::{spec_name, Controller, Controllers, StatedController, FIRST_CHANNEL_MODE};
 pub use diff::{Change, ControllerDifference, ControllerSide, Diff, NoteChange, ProgramDifference};
-pub use edit::{apply, Edit, EditSet};
+pub use edit::{apply, apply_allowing, Edit, EditSet, Site};
 pub use error::{Error, Result};
 pub use note::{pitch_name, Note, NoteId, PitchName};
 pub use program::{gm_name, Program, Programs, StatedProgram, GM_PERCUSSION_CHANNEL};
 pub use rig::{Audition, Rig};
 pub use take::{Info, Take, Tempo, TimeSignature};
 pub use temporary::remove_temporary_takes_on_signals;
+pub use unranked::{Against, Unranked};

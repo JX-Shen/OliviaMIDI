@@ -640,6 +640,106 @@ pub fn build_take_setting(
     path.to_path_buf()
 }
 
+/// A Take that states a channel's state on a track of its own, away from the
+/// notes that channel plays: conductor, then the notes, then the setting.
+///
+/// The shape a DAW export reaches when somebody keeps a patch-change track, and
+/// the one no Rank can order — a Rank runs within a track and these are on two.
+/// The other builders put the setting on the voice track, where the file does
+/// state an order, so none of them can express this. See #26.
+pub fn build_take_stating_apart(
+    path: &Path,
+    ppq: u16,
+    stated: &[StatedTimeSignature],
+    setting: &[(u32, midly::TrackEventKind<'static>)],
+    notes: &[NoteSpec],
+) -> PathBuf {
+    use midly::num::{u15, u24, u28, u4, u7};
+    use midly::{
+        Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind,
+    };
+
+    fn deltas(mut events: Vec<(u32, TrackEventKind<'static>)>) -> Vec<TrackEvent<'static>> {
+        events.sort_by_key(|(tick, _)| *tick);
+        let mut previous = 0u32;
+        events
+            .into_iter()
+            .map(|(tick, kind)| {
+                let event = TrackEvent {
+                    delta: u28::new(tick - previous),
+                    kind,
+                };
+                previous = tick;
+                event
+            })
+            .collect()
+    }
+
+    let mut conductor: Vec<(u32, TrackEventKind<'static>)> = stated
+        .iter()
+        .map(|&(tick, numerator, denominator)| {
+            let power = u8::try_from(denominator.trailing_zeros()).expect("a note value");
+            (
+                tick,
+                TrackEventKind::Meta(MetaMessage::TimeSignature(numerator, power, 24, 8)),
+            )
+        })
+        .collect();
+    conductor.push((
+        0,
+        TrackEventKind::Meta(MetaMessage::Tempo(u24::new(500_000))),
+    ));
+    conductor.push((
+        stated.iter().map(|&(tick, ..)| tick).max().unwrap_or(0),
+        TrackEventKind::Meta(MetaMessage::EndOfTrack),
+    ));
+
+    let mut voice: Vec<(u32, TrackEventKind<'static>)> = Vec::new();
+    for &(start, duration, pitch) in notes {
+        voice.push((
+            start,
+            TrackEventKind::Midi {
+                channel: u4::new(0),
+                message: MidiMessage::NoteOn {
+                    key: u7::new(pitch),
+                    vel: u7::new(64),
+                },
+            },
+        ));
+        voice.push((
+            start + duration,
+            TrackEventKind::Midi {
+                channel: u4::new(0),
+                message: MidiMessage::NoteOff {
+                    key: u7::new(pitch),
+                    vel: u7::new(0),
+                },
+            },
+        ));
+    }
+    voice.push((
+        notes
+            .iter()
+            .map(|&(start, duration, _)| start + duration)
+            .max()
+            .unwrap_or(0),
+        TrackEventKind::Meta(MetaMessage::EndOfTrack),
+    ));
+
+    let mut apart: Vec<(u32, TrackEventKind<'static>)> = setting.to_vec();
+    apart.push((
+        setting.iter().map(|&(tick, _)| tick).max().unwrap_or(0),
+        TrackEventKind::Meta(MetaMessage::EndOfTrack),
+    ));
+
+    let smf = Smf {
+        header: Header::new(Format::Parallel, Timing::Metrical(u15::new(ppq))),
+        tracks: vec![deltas(conductor), deltas(voice), deltas(apart)],
+    };
+    smf.save(path).expect("built Take is writable");
+    path.to_path_buf()
+}
+
 /// A Take whose delta times are each writable and whose running total is not.
 ///
 /// A delta time is 28 bits and a track may hold any number of them, so a file

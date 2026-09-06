@@ -131,6 +131,25 @@ use std::path::PathBuf;
 ///   * an Edit leaving two notes of one track, channel and pitch finishing out
 ///     of the order they began in. MIDI has no way to tell such notes apart, so
 ///     re-reading the Take would give each of them the other's length.
+///   * an Edit leaving a channel-state event on one track and, at its Tick, a
+///     strike of that channel or a different value for its own address on
+///     another. A Rank runs within a track. Two tracks have none between them
+///     and the format does not say which a player merges first, so the file
+///     would not state what the music is. See below.
+///
+/// A Take that arrived that way keeps it: what the author wrote is the author's
+/// (ADR-0003), `mid inspect` reports where a Take leaves an order unstated, and
+/// only what this Edit Set would write is refused. Nor is anything said where
+/// two tracks state one channel the *same* value at one Tick — both orders leave
+/// the channel where the Take says, so the order decides nothing.
+///
+/// The two remedies are the two habits this ambiguity has always been avoided
+/// by: state it on the track that carries those notes, or at a Tick where that
+/// channel strikes nothing. Where neither is what you want — you know the player,
+/// or the Take is a test — `--allow-unranked t2:c0:s1920` names the one site you
+/// are answering for, spelled as a note's identity spells the same three facts.
+/// It is per site and repeatable on purpose: there is no way to turn the check
+/// off for a run.
 #[derive(clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
@@ -143,8 +162,13 @@ pub struct Args {
     /// Where to write the new Take. Required, and never the input.
     #[arg(short = 'o', long = "output")]
     output: PathBuf,
+
+    /// A site to leave in an order the file does not state, as `t2:c0:s1920`.
+    /// Repeatable; each names one place you are answering for.
+    #[arg(long = "allow-unranked", value_name = "SITE")]
+    allow_unranked: Vec<battuta::Site>,
 }
 
 pub fn run(args: Args) -> battuta::Result<()> {
-    battuta::edit::apply_to_new_take(&args.take, &args.edits, &args.output)
+    battuta::edit::apply_to_new_take(&args.take, &args.edits, &args.output, &args.allow_unranked)
 }

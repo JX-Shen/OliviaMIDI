@@ -103,14 +103,14 @@ pub(crate) enum Placement {
 /// lookup for the one in force means the last of them by Rank). They agree by
 /// asking `is_stated_by`, rather than by two searches spelling out the same
 /// match.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Statement {
     pub(crate) channel: u8,
     pub(crate) state: ChannelState,
 }
 
 /// Which state of a channel a `Statement` is about.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ChannelState {
     /// Which Program the channel is on.
     Program,
@@ -122,7 +122,7 @@ impl ChannelState {
     /// What to call this in a refusal. Enough to point at the event, not a
     /// Controller's name — `mid` names Controllers where it reports them, and a
     /// fault report is not the place to learn a second way to do it.
-    fn named(self) -> String {
+    pub(crate) fn named(self) -> String {
         match self {
             ChannelState::Program => "program change".to_string(),
             ChannelState::Controller(number) => format!("control change for CC {number}"),
@@ -363,6 +363,44 @@ impl<'a> Rewrite<'a> {
         Some(previous)
     }
 
+    /// Every channel-state event the track still holds, as the cross-track check
+    /// reads them.
+    ///
+    /// No Rank comes out. A Rank orders events within one track and the caller
+    /// of this is comparing two, which is the whole reason that check exists —
+    /// handing it a number it must not compare would be an invitation.
+    pub(crate) fn stated(&self) -> impl Iterator<Item = Stated> + '_ {
+        self.slots
+            .iter()
+            .filter(|slot| slot.alive)
+            .filter_map(|slot| {
+                Some(Stated {
+                    tick: slot.tick,
+                    statement: stated_by(&slot.kind)?,
+                    value: valued(&slot.kind)?,
+                    written: slot.written.is_some(),
+                })
+            })
+    }
+
+    /// Every strike the track still holds, as the cross-track check reads them.
+    pub(crate) fn struck_notes(&self) -> impl Iterator<Item = Struck> + '_ {
+        self.slots
+            .iter()
+            .filter(|slot| slot.alive)
+            .filter_map(|slot| match slot.kind {
+                TrackEventKind::Midi {
+                    channel,
+                    message: MidiMessage::NoteOn { vel, .. },
+                } if vel.as_int() > 0 => Some(Struck {
+                    tick: slot.tick,
+                    channel: channel.as_int(),
+                    written: slot.written.is_some(),
+                }),
+                _ => None,
+            })
+    }
+
     /// Where an event will end up: its Tick, and its Rank among the events
     /// sharing that Tick. The pair the track is finally sorted by, so comparing
     /// two of them answers "which of these comes first" without sorting.
@@ -507,8 +545,10 @@ impl<'a> Rewrite<'a> {
     /// Only what this Edit Set wrote. A Take carried in with a release behind
     /// a strike keeps it — ADR-0003 — so an event with no `written` is one this
     /// check has nothing to say about. The cross-track case is not here
-    /// either: two tracks share no Rank, so there is nothing to compare, and
-    /// #26 refuses it earlier in the run.
+    /// either: two tracks share no Rank, so there is nothing to compare. That
+    /// one is `stay_rankable`, a sibling run over the same finished Take — this
+    /// asserts the order the rule gave, that one refuses where the file gives
+    /// none. See #26.
     ///
     /// Which rule each event answers to is read from the event, not from the
     /// `Placement` its caller named. `place_again` takes the caller's word on
@@ -698,6 +738,41 @@ fn stated_by(kind: &TrackEventKind) -> Option<Statement> {
         channel: channel.as_int(),
         state,
     })
+}
+
+/// What a channel-state event states the channel is on or holds: a program
+/// number, or a Controller's value. `None` if the event states nothing about a
+/// channel.
+///
+/// The value, and not only the address, because two tracks stating one channel
+/// the *same* value at one Tick leave an order that decides nothing: both ways
+/// round the channel ends up where the Take says. See #26.
+fn valued(kind: &TrackEventKind) -> Option<u8> {
+    let TrackEventKind::Midi { message, .. } = kind else {
+        return None;
+    };
+    match message {
+        MidiMessage::ProgramChange { program } => Some(program.as_int()),
+        MidiMessage::Controller { value, .. } => Some(value.as_int()),
+        _ => None,
+    }
+}
+
+/// One channel-state event, seen from outside its own track. See `stated`.
+pub(crate) struct Stated {
+    pub(crate) tick: u32,
+    pub(crate) statement: Statement,
+    pub(crate) value: u8,
+    /// Whether this Edit Set wrote it. A Take carried one in is the author's,
+    /// and ADR-0003 keeps it.
+    pub(crate) written: bool,
+}
+
+/// One strike, seen from outside its own track. See `struck_notes`.
+pub(crate) struct Struck {
+    pub(crate) tick: u32,
+    pub(crate) channel: u8,
+    pub(crate) written: bool,
 }
 
 /// The channel and key a release ends, whichever of the two spellings it uses:

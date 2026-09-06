@@ -325,6 +325,52 @@ pub enum Error {
     },
 
     #[error(
+        "--allow-unranked {0} is not a site. A site is a track, a channel and a tick, in that \
+         order and spelled as a note's identity spells them: t2:c0:s1920."
+    )]
+    UnrankedSiteMalformed(String),
+
+    #[error(
+        "at tick {tick}, this Edit Set put a {state} for channel {channel} on track {stating}, \
+         while track {sounding} strikes that channel at the same tick. A Rank orders events within \
+         one track; these are on two, and the file states no order between them, so which one a \
+         synthesiser meets first is not something your Take says. Those notes would sound under \
+         either state depending on the player. Nothing has been written.\n\
+         \n\
+         State it on track {sounding}, which carries those notes, or at a tick where channel \
+         {channel} strikes nothing. If you know what you are doing here, name the site: \
+         --allow-unranked t{stating}:c{channel}:s{tick}"
+    )]
+    StateUnrankedAgainstNotes {
+        stating: usize,
+        sounding: usize,
+        tick: u32,
+        channel: u8,
+        state: String,
+    },
+
+    #[error(
+        "at tick {tick}, this Edit Set put a {state} for channel {channel} on track {stating}, \
+         while track {stated} states the same thing there and says {carried} rather than {asked}. \
+         A Rank orders events within one track; these are on two, and the file states no order \
+         between them, so the channel would end up on either value depending on the player. \
+         Nothing has been written.\n\
+         \n\
+         Change the statement on track {stated} as well, or take it away, or put yours at a tick \
+         that one does not share. If you know what you are doing here, name the site: \
+         --allow-unranked t{stating}:c{channel}:s{tick}"
+    )]
+    StatesUnrankedAgainstEachOther {
+        stating: usize,
+        stated: usize,
+        tick: u32,
+        channel: u8,
+        state: String,
+        asked: u8,
+        carried: u8,
+    },
+
+    #[error(
         "apply never writes in place: -o {0} names the input Take. One file has as many names as \
          something has given it, and a symlink or a second hard link to your input is still your \
          input. Choose an output that does not already name it."
