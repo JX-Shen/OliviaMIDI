@@ -339,15 +339,59 @@ pub fn stated_controller(lines: Option<BarLines>, stated: &StatedController) -> 
     ]
 }
 
-/// The stretch a controller difference covers: `bar 6 beat 1 until bar 7 beat
-/// 1`.
+/// The rows one controller difference occupies: `controller`, the span, the
+/// channel, the Controller, and what each Take holds for it across the span.
 ///
-/// `until` names the Tick the two Takes agree again, so the stretch reads as
-/// half-open — up to that Bar and Beat, not through it. A span that never closes
-/// says so in words rather than borrowing the last Tick either Take happens to
-/// hold, which would read as a moment the two came back together.
-pub fn controller_span(lines: Option<BarLines>, difference: &ControllerDifference) -> String {
-    span(lines, difference.from, difference.until)
+/// The same rows a tempo and a bend take, on the same one-row-or-three
+/// threshold. `span`'s doc comment gives the reason the three share one
+/// sentence for the stretch — a reader who has learnt to read one row has
+/// learnt to read all three — and it holds for the sides as well as for the
+/// span. Two readers' worth of habit for one kind of fact is what #45 is about.
+///
+/// One excursion where a tempo and a bend have two, and that is the right
+/// number rather than a shortfall: a Controller runs from nought upwards and
+/// has no meaningful low extreme, which is ADR-0007's own argument and the
+/// reason the other two needed a second field. `ControllerSide` already carries
+/// everything `Side` asks for, so `--json` comes out byte for byte as it was.
+///
+/// `unstated` on either side, in the same shape as the numbers, for the reason
+/// `program_difference` prints it: a blank would read as nothing having been
+/// said rather than as the Take saying nothing. It is not a reason to stop
+/// reading — an `unstated` side still says the peak it reaches inside the span
+/// and where the span leaves it. That silence is the fault #32 inherited from
+/// this row and fixed one state over.
+pub fn controller_rows(
+    before_lines: Option<BarLines>,
+    after_lines: Option<BarLines>,
+    difference: &ControllerDifference,
+) -> Vec<Vec<String>> {
+    let side = |lines, side: &ControllerSide| Side {
+        at_start: match side.at_start {
+            None => "unstated".to_string(),
+            Some(at_start) => at_start.to_string(),
+        },
+        excursions: extremes([
+            side.peak.zip(side.peak_at).and_then(|(peak, peak_at)| {
+                (Some(peak) != side.at_start)
+                    .then(|| (peak_at, format!("{peak} at {}", at(lines, peak_at))))
+            }),
+            None,
+        ]),
+        at_end: side
+            .at_end
+            .filter(|&at_end| Some(at_end) != side.at_start)
+            .map(|at_end| at_end.to_string()),
+    };
+    span_rows(
+        "controller",
+        span(before_lines, difference.from, difference.until),
+        vec![
+            channel(difference.channel),
+            controller_number(difference.controller),
+        ],
+        side(before_lines, &difference.before),
+        side(after_lines, &difference.after),
+    )
 }
 
 /// Where a stretch of the Piece two Takes disagree over begins and ends.
@@ -362,37 +406,6 @@ pub fn span(lines: Option<BarLines>, from: u32, until: Option<u32>) -> String {
         None => format!("{} onwards", at(lines, from)),
         Some(until) => format!("{} until {}", at(lines, from), at(lines, until)),
     }
-}
-
-/// What the two Takes hold for a Controller across the span: `70 -> 100`.
-///
-/// Each side is what it holds where the span begins, which is the fact a
-/// listener starting there hears. Where a side reaches something higher inside
-/// the span it says so — `70 (peak 85 at bar 6 beat 2) -> 100` — and where it
-/// does not, the clause is left off rather than restating the number beside it.
-///
-/// `unstated` on either side, in the same shape as the numbers, for the reason
-/// `program_difference` prints it: a blank would read as nothing having been
-/// said rather than as the Take saying nothing.
-pub fn controller_difference(
-    before_lines: Option<BarLines>,
-    after_lines: Option<BarLines>,
-    difference: &ControllerDifference,
-) -> String {
-    let side = |lines, side: &ControllerSide| match side.at_start {
-        None => "unstated".to_string(),
-        Some(value) => match (side.peak, side.peak_at) {
-            (Some(peak), Some(peak_at)) if peak > value => {
-                format!("{value} (peak {peak} at {})", at(lines, peak_at))
-            }
-            _ => value.to_string(),
-        },
-    };
-    format!(
-        "{} -> {}",
-        side(before_lines, &difference.before),
-        side(after_lines, &difference.after)
-    )
 }
 
 /// One side of a span difference, and everything it has to say: what it holds
@@ -475,7 +488,7 @@ fn extremes(reached: [Option<(u32, String)>; 2]) -> Vec<(u32, String)> {
 fn span_rows(
     label: &str,
     span: String,
-    subject: Option<String>,
+    subject: Vec<String>,
     before: Side,
     after: Side,
 ) -> Vec<Vec<String>> {
@@ -548,7 +561,7 @@ pub fn tempo_rows(
     span_rows(
         "tempo",
         span(before_lines, difference.from, difference.until),
-        None,
+        Vec::new(),
         side(before_lines, &difference.before),
         side(after_lines, &difference.after),
     )
@@ -653,7 +666,7 @@ pub fn bend_rows(
     span_rows(
         "bend",
         span(before_lines, difference.from, difference.until),
-        Some(channel(difference.channel)),
+        vec![channel(difference.channel)],
         side(before_lines, &difference.before),
         side(after_lines, &difference.after),
     )

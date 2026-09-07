@@ -1578,3 +1578,179 @@ fn stated_controller(
     }
     found
 }
+
+/// An `unstated` side still says the interior of the span — #45.
+///
+/// The fault #32 fixed for a tempo and a bend, in the row it inherited it from.
+/// `controller_difference` matched `at_start == None` and stopped, although
+/// `ControllerSide`'s peak and end are filled from statements inside the span
+/// whether or not the span opens on one. So a Take that states nothing where
+/// the span opens, climbs to 100 and leaves off at 20 printed `unstated -> 40`,
+/// with everything it did in `--json` and nowhere in the row a reader reads.
+#[test]
+fn an_unstated_controller_side_still_reports_the_interior_of_the_span() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let notes = &[
+        (0, 480, 69),
+        (1440, 480, 69),
+        (2880, 480, 69),
+        (4320, 480, 69),
+    ];
+    let before = common::build_take_with_controllers(
+        &dir.path().join("before.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(2880, 11, 100), (4320, 11, 20)],
+        notes,
+    );
+    let after = common::build_take_with_controllers(
+        &dir.path().join("after.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(0, 11, 40)],
+        notes,
+    );
+
+    let said = common::human_output(&[
+        "diff",
+        before.to_str().expect("a path"),
+        after.to_str().expect("a path"),
+    ]);
+    assert_eq!(
+        said,
+        "\
+controller  bar 1 beat 1 onwards  channel 0  CC11 (expression controller)
+  before    unstated, up to 100 at bar 3 beat 1, ends at 20
+  after     40
+"
+    );
+    assert!(
+        !said.contains("unstated -> 40"),
+        "the row is the projection #45 exists to remove: {said}"
+    );
+}
+
+/// A Controller difference reads the way a tempo and a bend do.
+///
+/// `wording::span`'s doc comment gives the reason the three share one sentence
+/// for the stretch: a reader who has learnt to read one row has learnt to read
+/// all three. #32 gave two of them a second shape for the sides and left this
+/// one behind, which is two readers' worth of habit for one kind of fact. The
+/// same Take, compared for a Controller and for a bend, now takes the same
+/// rows.
+#[test]
+fn a_controller_difference_takes_the_rows_a_bend_difference_takes() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let notes = &[(0, 480, 69), (1440, 480, 69), (2880, 480, 69)];
+    let before = common::build_take_with_controllers(
+        &dir.path().join("before.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(0, 11, 40), (1440, 11, 100), (2880, 11, 60)],
+        notes,
+    );
+    let after = common::build_take_with_controllers(
+        &dir.path().join("after.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(0, 11, 70)],
+        notes,
+    );
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path"),
+        ]),
+        "\
+controller  bar 1 beat 1 onwards  channel 0  CC11 (expression controller)
+  before    40, up to 100 at bar 2 beat 1, ends at 60
+  after     70
+"
+    );
+}
+
+/// A difference whose reading fits one row still takes one row.
+///
+/// The threshold is the same one a tempo and a bend are on: three rows where
+/// either side says something beyond where the span begins, and one where
+/// neither does. `reports_a_controller_difference_as_a_span_over_what_is_in_force`
+/// above is the one-row case as it has always read; this is the assertion that
+/// the layout did not become unconditional.
+#[test]
+fn a_controller_difference_with_no_interior_stays_on_one_row() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let notes = &[(0, 480, 69), (1440, 480, 69)];
+    let before = common::build_take_with_controllers(
+        &dir.path().join("before.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(0, 11, 40)],
+        notes,
+    );
+    let after = common::build_take_with_controllers(
+        &dir.path().join("after.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(0, 11, 70)],
+        notes,
+    );
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path"),
+        ]),
+        "controller  bar 1 beat 1 onwards  channel 0  CC11 (expression controller)  40 -> 70\n"
+    );
+}
+
+/// The payload is untouched, field for field.
+///
+/// #45 changes a layout and nothing else. `ControllerSide` already carried
+/// `at_start`, `at_end`, `peak` and `peak_at` — everything the shared `Side`
+/// asks for — so no field was added, renamed or read differently, and #29's
+/// compatibility constraint has nothing to reach here. One excursion is also
+/// the *right* number for a Controller: it runs from nought upwards and has no
+/// meaningful low extreme, which is ADR-0007's own argument and the reason a
+/// tempo and a bend needed a second one.
+#[test]
+fn the_controller_payload_is_unchanged_by_the_new_rows() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let notes = &[(0, 480, 69), (1440, 480, 69), (2880, 480, 69)];
+    let before = common::build_take_with_controllers(
+        &dir.path().join("before.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(2880, 11, 100)],
+        notes,
+    );
+    let after = common::build_take_with_controllers(
+        &dir.path().join("after.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(0, 11, 40)],
+        notes,
+    );
+
+    let payload: serde_json::Value = serde_json::from_str(&common::json_output(&[
+        "diff",
+        before.to_str().expect("a path"),
+        after.to_str().expect("a path"),
+        "--json",
+    ]))
+    .expect("the payload is JSON");
+    assert_eq!(
+        payload["controllers"],
+        serde_json::json!([{
+            "channel": 0,
+            "controller": 11,
+            "from": 0,
+            "until": null,
+            "before": { "at_start": null, "at_end": 100, "peak": 100, "peak_at": 2880 },
+            "after": { "at_start": 40, "at_end": 40, "peak": 40, "peak_at": 0 },
+        }])
+    );
+}
