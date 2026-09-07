@@ -16,7 +16,11 @@ categories = ["command-line-utilities", "multimedia::audio", "parser-implementat
 
 # Agent operating instructions are how this repository is worked in, not part of
 # what the crate ships. They also name the machine's account layout.
-exclude = [".claude/", "AGENTS.md", "docs/agents/"]
+#
+# `CLAUDE.md` is a symlink to `AGENTS.md` and is excluded for the same reason —
+# and it has to be named here, because excluding a file does not exclude a link
+# to it: `cargo package` carries the link and publishes what it points at.
+exclude = [".claude/", "AGENTS.md", "CLAUDE.md", "docs/agents/"]
 
 [lib]
 name = "battuta"
