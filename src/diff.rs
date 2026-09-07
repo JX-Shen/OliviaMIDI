@@ -2,6 +2,7 @@ use crate::controller::StatedController;
 use crate::error::{Error, Result};
 use crate::note::{Note, NoteId};
 use crate::program::StatedProgram;
+use crate::rank::{RankDisagreement, UnrankedSite};
 use crate::take::Take;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -34,6 +35,19 @@ pub struct Diff {
     /// difference either, and never a list of events: what is compared is what
     /// is in force (ADR-0007).
     pub controllers: Vec<ControllerDifference>,
+
+    /// Where the two Takes place a causally-dependent pair of events at one
+    /// Tick in the two possible orders — ADR-0008's amendment. Same events,
+    /// same Ticks, and a synthesiser that hears two different things.
+    pub rank_disagreements: Vec<RankDisagreement>,
+
+    /// Where a Take writes such a pair across two tracks, so that the file
+    /// states no order and this comparison could not be made.
+    ///
+    /// Not a difference, and `is_empty` does not consult it. It is here for the
+    /// reason `tolerance_ticks` is: a reader told two Takes agree about ordering
+    /// is owed the sites where the question could not be put.
+    pub unranked_sites: Vec<UnrankedSite>,
 }
 
 /// One Controller, one stretch of the Piece, and what each Take holds for it
@@ -138,6 +152,7 @@ impl Diff {
             && self.changed.is_empty()
             && self.programs.is_empty()
             && self.controllers.is_empty()
+            && self.rank_disagreements.is_empty()
     }
 }
 
@@ -284,6 +299,8 @@ pub fn diff(before: &Take, after: &Take, tolerance: Option<u32>) -> Result<Diff>
         .map(|(_, note)| note.clone())
         .collect();
 
+    let (rank_disagreements, unranked_sites) = crate::rank::rank_differences(before, after)?;
+
     Ok(Diff {
         tolerance_ticks,
         added,
@@ -291,6 +308,8 @@ pub fn diff(before: &Take, after: &Take, tolerance: Option<u32>) -> Result<Diff>
         changed,
         programs: program_differences(before, after)?,
         controllers: controller_differences(before, after)?,
+        rank_disagreements,
+        unranked_sites,
     })
 }
 

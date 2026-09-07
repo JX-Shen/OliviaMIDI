@@ -152,6 +152,34 @@ pub fn channel(channel: u8) -> String {
     format!("channel {channel}")
 }
 
+/// Which of the two Takes puts a ranked pair in the order the rule calls
+/// correct.
+///
+/// Always one of them and never both: a disagreement is reported only where the
+/// two readings differ, and each reading is one of the two orders. So the clause
+/// can say which side is which rather than leaving the reader to work it out
+/// from a pair of booleans.
+///
+/// It says *the rule* and not *right*. ADR-0008's rule is what a Take this
+/// project writes obeys; a Take that arrived the other way round is the author's
+/// (ADR-0003), and `mid` reports the disagreement rather than grading it.
+pub fn rank_difference(difference: &battuta::RankDisagreement) -> String {
+    if difference.before_is_correct {
+        "before follows the rule, after does not".to_string()
+    } else {
+        "after follows the rule, before does not".to_string()
+    }
+}
+
+/// Which of the two Takes leaves a site with no order to read.
+pub fn unranked_site(site: &battuta::UnrankedSite) -> String {
+    match (site.in_before, site.in_after) {
+        (true, true) => "neither states an order between the tracks".to_string(),
+        (true, false) => "before states no order between the tracks".to_string(),
+        _ => "after states no order between the tracks".to_string(),
+    }
+}
+
 /// Which Program, with what General Midi calls it.
 ///
 /// The label is load-bearing. A pitch name is a claim about the file's own
