@@ -106,6 +106,41 @@ directory used before 0.1.0 to where each one's content went. Add a line when
 you add an ADR; it is the only place that answers "what has this project
 already settled?" without opening six files.
 
+## Where a fact lives
+
+A decision has three homes and the boundary is about kind. A *fact* — the
+minimum Rust version, how many Edit kinds there are, which version is published
+— has one home, and the question is only ever which. What follows is an
+ordering, best first. Going one step down needs a reason, and the reason has to
+be that the step above is genuinely unavailable.
+
+1. **Delete the copy.** Nothing left to drift. #17 did this for the Edit kinds
+   — not by adding a check that the README's count was right, but by removing
+   the count, because `mid apply --help` was already the exhaustive list and a
+   second one could only ever agree or lie. Ask first whether the copy is
+   telling the reader anything its owner would not.
+2. **Derive it.** The copy is computed from its owner and cannot disagree.
+   `mid --version` comes from the manifest. `tests/contract.rs` reads the list
+   of Edit kinds out of the type, never from a list written down beside it.
+3. **Gate it.** Only where a fact must genuinely live in several places, all of
+   them necessary. A tag, a manifest and an installed binary are three such
+   places, and the fresh-install job in `ci.yml` is what compares them.
+4. **Remember it.** This is what 0.1.1 did, and #16 is the record of how that
+   went. It is not a reason; it is the absence of one.
+
+**A gate cannot fix a second writer.** It can only report the disagreement once
+both copies exist, which is a worse place to stand than never having made the
+copy. `README.md` naming a Rust version was not the MSRV gate's failure: the
+manifest was corrected and the README was a writer nobody had counted.
+
+**And a gate can only hold what has been named.** `stay_placed` is not a test
+somebody thought to write — it is the mechanical form of ADR-0008, and it could
+not exist before the rule did. Every one of the five Rank defects was found by
+rendering audio and comparing it, because there was nothing to assert against.
+The same is true of prose: `tests/contract.rs` is possible only because #17
+settled which surface owns the list. Two surfaces both passing their own check
+is a repository that lies with a green pipeline.
+
 ## When a decision is not the agent's
 
 The Working Philosophy says to verify with a human on a contradiction. That is
@@ -165,8 +200,9 @@ different agent is none of those.
   the schema from this file, from `README.md`, from an issue body, or from
   memory: every one of those is a copy, and this repository has already shipped
   a release where the copies disagreed with the binary. No prose outside the
-  help may enumerate the kinds or count them — a number is the cheapest fact to
-  write down and the first one to go stale.
+  help may enumerate the kinds or count them — this is *Where a fact lives*
+  applied to the one fact this repository has already been burnt by, and a
+  number is the cheapest fact to write down and the first one to go stale.
 - `--json` on `info`, `inspect` and `diff` gives structured output. Prefer it
   over parsing human output.
 - Edits are mechanical only. Musical intent is the agent's job to hold and the

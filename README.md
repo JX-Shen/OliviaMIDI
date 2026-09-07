@@ -39,18 +39,13 @@ generator. Nothing here composes for you.
 
 ## What it does
 
-Five commands, deliberately few:
+`info`, `inspect`, `apply`, `diff`, `play` — deliberately few. The loop they
+exist to close: **inspect → change → listen → react.** Listening is the arbiter.
+A change that is theoretically better and sounds worse loses.
 
-```
-mid info    song.mid
-mid inspect song.mid --bars 5:8 [--json]
-mid apply   song.mid edits.json -o take-03.mid
-mid diff    before.mid after.mid
-mid play    song.mid --bars 5:8
-```
-
-The loop they exist to close: **inspect → change → listen → react.** Listening
-is the arbiter. A change that is theoretically better and sounds worse loses.
+`mid help` is the command reference, and it is the binary rather than a page
+here that could disagree with it. `mid apply --help` is the Edit vocabulary,
+exhaustively, for the same reason.
 
 Edits are mechanical — each one names a note, a Program or a Controller and
 changes something you can point at in the file. There is no `make_sadder`, and
@@ -59,18 +54,31 @@ belongs to the agent; execution belongs to the core. Keeping that line sharp is
 what makes an agent's work *auditable*: you can always know exactly what it did
 to your music.
 
+Human output reads as music rather than as numbers: a note is placed where a
+musician would point at it, called by its name, and listed in the order the
+music happens. `--json` on `info`, `inspect` and `diff` is the same facts for a
+program, with the numbers the file actually holds.
+
 ## Install
 
 ```
 cargo install battuta
 ```
 
-The crate is `battuta`; the binary it installs is `mid`. Rust 1.85 or newer.
+The crate is `battuta`; the binary it installs is `mid`. Cargo will tell you if
+your toolchain is too old, and which version it wants.
 
-Four of the five commands need nothing but the binary. `play` needs two more
-things — FluidSynth on PATH, and a Rig it will never choose for you — and each
-failure names its own remedy, including which bank to go and get. See
+Only `play` needs anything beyond the binary, and it needs two things —
+FluidSynth on PATH, and a Rig it will never choose for you. Each failure names
+its own remedy, including which bank to go and get. See
 [Setting up a Rig](#setting-up-a-rig).
+
+From a clone:
+
+```
+cargo build --release          # target/release/mid
+cargo test                     # the suite runs mid as a process
+```
 
 ## The one rule worth knowing before anything else
 
@@ -169,109 +177,6 @@ exactly the right relationship: a tribute, not a theme.
 
 `battuta` — Italian for *bar* — is the core crate; `mid` is what you type.
 
-## Status
-
-The vocabulary came first, on purpose: the charter, the glossary and the
-decision records were written before any code, because a wrong word is expensive
-to change once it is in use and quietly bends every later decision around it.
-Several had to be corrected before a line was written — an edit set is not a
-`patch` (a patch is a sound preset), and a `.mid` file is not a `score` (a score
-implies notation MIDI does not carry).
-
-The first milestone is a single sentence, and it was meant to be uncomfortable:
-
-> Before the end of the first weekend: the human says one sentence in natural
-> language → the agent inspects the MIDI → a few notes change → `mid diff` →
-> `mid play` → the human hears the result.
-
-That loop now closes. All five commands exist, and are being made good one at a
-time rather than all at once. `apply` understands the whole Edit vocabulary,
-which `mid apply --help` states and nothing else does. `diff` now
-says a note *moved* rather than that one vanished and another appeared, on the
-evidence of a `--tolerance` it states with every answer.
-
-And the output without `--json` now reads as music rather than as numbers. A note
-is placed where a musician would point at it, called by its name, and listed in
-the order the music happens — with the identity an Edit Set copies last on the
-line:
-
-```
-$ mid inspect fixtures/olivia.mid --bars 7:8
-no programs stated
-
-bar 7 beat 1  track 1  E4   velocity 50  duration 955   t1:c0:p64:s8640:n0
-bar 7 beat 1  track 2  D2   velocity 45  duration 475   t2:c1:p38:s8640:n0
-bar 7 beat 2  track 2  F#3  velocity 38  duration 955   t2:c1:p54:s9120:n0
-bar 7 beat 2  track 2  A3   velocity 38  duration 955   t2:c1:p57:s9120:n0
-bar 7 beat 3  track 1  C#4  velocity 50  duration 475   t1:c0:p61:s9600:n0
-bar 8 beat 1  track 1  D4   velocity 50  duration 1435  t1:c0:p62:s10080:n0
-bar 8 beat 1  track 2  D2   velocity 45  duration 475   t2:c1:p38:s10080:n0
-```
-
-That is the last two bars landing on D: the melody on D4 over a D2 in the bass,
-after an A major chord the bar before. Reading it was the point.
-
-`diff` reads the same way — `changed  bar 5 beat 1  track 1  F#4  transposed to
-F4` — and a note that moved says it moved.
-
-A diff row names a note the way the listing above does, because a row carrying
-only a position and a track would be true of both notes of that chord in bar 7.
-Where notes genuinely collide — same track, channel, pitch and start Tick, a
-doubled voice — not even the pitch separates them, and the row says which
-occurrence: `E4 n1`. That appears only at an address where something actually
-collides.
-
-The number is never replaced: `p64` is still in the identity, and `--json` still
-carries the number and not the name, in the Take's own order. Naming a pitch chooses two things the file
-does not state, and [#7](https://github.com/JX-Shen/OliviaMIDI/issues/7) records
-which two and why neither is a flag.
-
-That first line is the orchestration, and until 0.1.1 it was not there. A
-program change is in the file, so by the one rule above it is the Piece —
-**orchestration is composition** — and `mid` used to carry one without ever
-mentioning it: `play` respected it, `apply` did not disturb a byte of it, and
-`inspect`, `diff` and the Edit vocabulary were silent. Preserved, invisible,
-untouchable, and the invisible middle term is where you fix a badly shaped
-phrase by rewriting a good line.
-
-So a listing now opens with what each channel is on, including a Program the
-Take set many bars before the passage began, and says where the passage switches:
-
-```
-$ mid inspect fixtures/orchestrated.mid --bars 2:4
-channel 0  program 40 (GM violin)
-channel 1  unstated
-channel 2  unstated
-
-bar 3 beat 1  track 2  channel 1  program 60 (GM french horn)
-```
-
-`unstated` is not program 0. General MIDI's default makes those two sound
-identical and they are different Pieces, so the file's silence is reported as
-silence — everywhere, including `--json`, where it is `null`. The name in
-brackets is General MIDI's and says so, because *which* instrument a program
-number selects is in the file while what it *sounds* like is the Rig. `mid diff`
-reports a switch as a state — `program bar 3 beat 1 channel 1 unstated -> 60 (GM
-french horn)` — and `set_program` is the Edit that changes it.
-
-Controller data came with it, the harder half of the same silence. A channel's
-expression, its sustain pedal, its brightness are all in the file and all were
-invisible; now `inspect` opens on what each channel holds, `diff` reports a
-change of state rather than forty rows of events, and the Edits that reach a
-Controller are in `mid apply --help` with the rest. A curve is dozens of Edits,
-deliberately: there is no Edit that names a stretch, because a selector would be
-a query language and that is one step from the composition DSL the charter
-forbids by name.
-
-That is the whole of what is inside a Take, and 0.1.1 is where `mid` stopped
-being silent about any of it.
-
-```
-cargo build --release          # target/release/mid
-cargo test                     # the suite runs mid as a process
-mid help                       # the command reference is the binary
-```
-
 ## Setting up a Rig
 
 Playback needs two separate things. They fail with two separate messages because
@@ -338,10 +243,17 @@ V1's named Rigs, and a stated non-goal for V0.
 | [`CONTEXT.md`](./CONTEXT.md) | the glossary; every term pins a Chinese equivalent |
 | [`docs/adr/`](./docs/adr/README.md) | the principles the code is built on — the index is one line per principle |
 | [issues labelled `decision`](https://github.com/JX-Shen/OliviaMIDI/issues?q=label%3Adecision) | every judgement made about one behaviour, closed with the options it rejected |
-| [`AGENTS.md`](./AGENTS.md) | how agents are expected to behave here; not shipped in the crate |
+| [releases](https://github.com/JX-Shen/OliviaMIDI/releases) | what each version changed, and which silence it stopped keeping |
+| [`AGENTS.md`](https://github.com/JX-Shen/OliviaMIDI/blob/main/AGENTS.md) | how agents are expected to behave here — deliberately not packaged with the crate, so this one link leaves it |
+
+The first four files are in the crate as published; the last two are in the
+repository, and their links say so by leaving crates.io.
 
 This README is an introduction, not an authority. Where it and `CHARTER.md`
-disagree, the charter is right and this file is stale.
+disagree, the charter is right and this file is stale. What the tool accepts is
+`mid apply --help`; what a version changed is its release; what is known broken
+is the issue tracker. None of the three is restated here, because a copy of a
+fact is a fact that can go wrong on its own.
 
 ## Acknowledgements
 
