@@ -7,7 +7,8 @@
 //! playback. What travels and what is left behind is decided in #4.
 
 use crate::bars::{BarRange, TickSpan};
-use crate::error::Result;
+use crate::error::{Error, Result};
+use crate::rank::{role, Role};
 use crate::take::Take;
 use crate::track::with_delta_times;
 use midly::{MetaMessage, MidiMessage, TrackEvent, TrackEventKind};
@@ -39,11 +40,72 @@ impl Take {
             }
         }
 
+        // What each track puts at the passage's first Tick, gathered across all
+        // of them, because the question it answers is a cross-track one.
+        let mut landings: Vec<Landing> = Vec::new();
         for (index, track) in smf.tracks.iter_mut().enumerate() {
-            *track = restricted(track, span, &kept[index])?;
+            *track = restricted(track, span, &kept[index], index, &mut landings)?;
         }
+        keeps_the_orders_the_take_stated(&landings)?;
         Take::from_smf(&smf)
     }
+}
+
+/// One event the passage puts at its first Tick, and the Tick it held before.
+///
+/// Only the events that take part in an ordering claim — ADR-0008's ranked
+/// pairs — because they are the only ones whose order says anything about the
+/// music. Two notes arriving at Tick 0 from two Ticks is what a passage *is*.
+struct Landing {
+    track: usize,
+    channel: u8,
+    role: Role,
+    /// The Tick this event held in the Take the passage was cut from.
+    from: u32,
+}
+
+/// Refuse a passage that would state no order where the Take stated one.
+///
+/// Inheriting is a collapse: everything the Take had already set arrives at the
+/// passage's first Tick, from however many Ticks away. Within one track that
+/// costs nothing — a Rank still orders them, and it orders them as they were.
+/// Across two tracks it costs the order itself. A Program stated on one track at
+/// Tick 0 and a chord struck on another at Tick 960 are ordered by *time* in the
+/// Take, unambiguously and without any rule being needed; put both at the
+/// passage's first Tick and a Rank is the only thing that could order them, and
+/// a Rank does not run between tracks (ADR-0008). The passage would sound one
+/// way or the other depending on the player.
+///
+/// So this is not the reading `Take::unranked` does. That one reports a site the
+/// *author* left open, which is theirs to leave (ADR-0003) and is reported
+/// rather than refused. This is a site `mid` would be creating, out of one that
+/// was closed, while preparing an audition nobody asked to be approximate — and
+/// `CHARTER.md` refuses rather than answering plausibly.
+///
+/// A pair that shared a Tick in the Take already is left alone: it arrived
+/// unranked and the passage has taken nothing away.
+fn keeps_the_orders_the_take_stated(landings: &[Landing]) -> Result<()> {
+    for state in landings.iter().filter(|landing| landing.role.governing) {
+        for note in landings.iter().filter(|landing| !landing.role.governing) {
+            if state.role.pair != note.role.pair
+                || state.channel != note.channel
+                || state.track == note.track
+                || state.from == note.from
+            {
+                continue;
+            }
+            return Err(Error::PassageWouldLoseAnOrder {
+                stating: state.track,
+                sounding: note.track,
+                from: state.from,
+                at: note.from,
+                channel: state.channel,
+                state: state.role.pair.governing_named(),
+                against: state.role.pair.governed_named(),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// One track of a Take, restricted to a passage and moved to Tick 0.
@@ -61,10 +123,31 @@ fn restricted<'a>(
     track: &[TrackEvent<'a>],
     span: TickSpan,
     kept_notes: &HashSet<usize>,
+    index_of_track: usize,
+    landings: &mut Vec<Landing>,
 ) -> Result<Vec<TrackEvent<'a>>> {
     let mut inherited: Vec<TrackEventKind<'a>> = Vec::new();
     let mut inside: Vec<(u32, TrackEventKind<'a>)> = Vec::new();
     let mut tick = 0u32;
+
+    // Everything the passage puts at its own first Tick, whether it was carried
+    // there by inheritance or was already at the Tick the passage begins on.
+    let mut lands = |at: u32, kind: &TrackEventKind<'a>, from: u32| {
+        if at != 0 {
+            return;
+        }
+        let TrackEventKind::Midi { channel, message } = kind else {
+            return;
+        };
+        if let Some(role) = role(message) {
+            landings.push(Landing {
+                track: index_of_track,
+                channel: channel.as_int(),
+                role,
+                from,
+            });
+        }
+    };
 
     for (index, event) in track.iter().enumerate() {
         tick += event.delta.as_int();
@@ -75,15 +158,19 @@ fn restricted<'a>(
             // shortening it here would make `play` disagree with the duration
             // `inspect` reports for the same note.
             if kept_notes.contains(&index) {
-                inside.push((tick.saturating_sub(span.start), event.kind));
+                let at = tick.saturating_sub(span.start);
+                lands(at, &event.kind, tick);
+                inside.push((at, event.kind));
             }
         } else if matches!(event.kind, TrackEventKind::Meta(MetaMessage::EndOfTrack)) {
             continue;
         } else if tick < span.start {
             if outlives_its_moment(&event.kind) {
+                lands(0, &event.kind, tick);
                 inherited.push(event.kind);
             }
         } else if tick < span.end {
+            lands(tick - span.start, &event.kind, tick);
             inside.push((tick - span.start, event.kind));
         }
     }

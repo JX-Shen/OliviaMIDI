@@ -19,6 +19,17 @@ use std::path::PathBuf;
 /// FluidSynth is handed is a temporary file, and nothing is left behind when
 /// the command ends, Ctrl-C included.
 ///
+/// Inheriting is a collapse, and one shape of it is refused rather than
+/// played. Everything the Take had already set arrives at the passage's first
+/// Tick, from however many Ticks away — so two events the Take ordered by
+/// *time* can end up sharing an instant. On one track that costs nothing. On
+/// two, nothing orders them: a Program on one track and the notes it governs
+/// on another have no order the file states, and the passage would say less
+/// than the Take did about something you are about to form an opinion from.
+/// The refusal names both tracks and the channel, and nothing is written. A
+/// site the Take *already* left open is played, not refused — that one is the
+/// author's, and `mid inspect` is where it is reported.
+///
 /// Playback is FluidSynth, found on PATH. "FluidSynth is missing" and "no Rig is
 /// configured" are two different failures with two different remedies.
 #[derive(clap::Args)]

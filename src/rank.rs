@@ -54,6 +54,24 @@ impl RankedPairKind {
             RankedPairKind::DamperAfterRelease => "damper after its releases",
         }
     }
+
+    /// What the governing half of this pair is called in a refusal. Enough to
+    /// point at the event, for `ChannelState::named`'s reason.
+    pub(crate) fn governing_named(self) -> &'static str {
+        match self {
+            RankedPairKind::ProgramBeforeStrike => "program change",
+            RankedPairKind::DamperAfterRelease => "damper",
+        }
+    }
+
+    /// What the events it is ranked against are called, as a plural noun a
+    /// refusal can put a channel after: "strikes of channel 0".
+    pub(crate) fn governed_named(self) -> &'static str {
+        match self {
+            RankedPairKind::ProgramBeforeStrike => "strikes",
+            RankedPairKind::DamperAfterRelease => "releases",
+        }
+    }
 }
 
 /// One Tick where the two Takes carry a ranked pair in different orders.
@@ -92,6 +110,42 @@ pub struct UnrankedSite {
     pub pair: RankedPairKind,
     pub in_before: bool,
     pub in_after: bool,
+}
+
+/// Which half of which ranked pair an event is.
+///
+/// The one place an event kind is turned into an ordering claim, because two
+/// readers ask it: this module, comparing two Takes, and `passage`, refusing to
+/// prepare one that would lose an order it had. A second copy of this match is
+/// a second answer to "is a damper a governing event", and they would not stay
+/// the same answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Role {
+    pub(crate) pair: RankedPairKind,
+    /// Whether this is the event that governs the other — the Program, or the
+    /// damper — rather than one of the events it is ranked against.
+    pub(crate) governing: bool,
+}
+
+/// What ordering claim, if any, an event takes part in.
+pub(crate) fn role(message: &MidiMessage) -> Option<Role> {
+    let (pair, governing) = match message {
+        MidiMessage::ProgramChange { .. } => (RankedPairKind::ProgramBeforeStrike, true),
+        // A note-on above velocity zero is a strike; at velocity zero it is the
+        // format's other spelling of a release, and counting it as a strike is
+        // the mistake the placement rule avoids one layer down.
+        MidiMessage::NoteOn { vel, .. } if vel.as_int() > 0 => {
+            (RankedPairKind::ProgramBeforeStrike, false)
+        }
+        MidiMessage::NoteOff { .. } | MidiMessage::NoteOn { .. } => {
+            (RankedPairKind::DamperAfterRelease, false)
+        }
+        MidiMessage::Controller { controller, .. } if controller.as_int() == DAMPER => {
+            (RankedPairKind::DamperAfterRelease, true)
+        }
+        _ => return None,
+    };
+    Some(Role { pair, governing })
 }
 
 /// What one Take says about one pair at one Tick.
@@ -178,32 +232,14 @@ fn claims(take: &Take) -> Result<Claims> {
                 continue;
             };
             let channel = channel.as_int();
-            let mut sight = |pair: RankedPairKind, governing: bool| {
-                let sightings = seen.entry((tick, channel, pair)).or_default();
-                if governing {
-                    sightings.governing.push((track, at));
-                } else {
-                    sightings.governed.push((track, at));
-                }
+            let Some(Role { pair, governing }) = role(&message) else {
+                continue;
             };
-            match message {
-                MidiMessage::ProgramChange { .. } => {
-                    sight(RankedPairKind::ProgramBeforeStrike, true);
-                }
-                // A note-on above velocity zero is a strike; at velocity zero it
-                // is the format's other spelling of a release, and counting it
-                // as a strike is the mistake the placement rule avoids one layer
-                // down.
-                MidiMessage::NoteOn { vel, .. } if vel.as_int() > 0 => {
-                    sight(RankedPairKind::ProgramBeforeStrike, false);
-                }
-                MidiMessage::NoteOff { .. } | MidiMessage::NoteOn { .. } => {
-                    sight(RankedPairKind::DamperAfterRelease, false);
-                }
-                MidiMessage::Controller { controller, .. } if controller.as_int() == DAMPER => {
-                    sight(RankedPairKind::DamperAfterRelease, true);
-                }
-                _ => {}
+            let sightings = seen.entry((tick, channel, pair)).or_default();
+            if governing {
+                sightings.governing.push((track, at));
+            } else {
+                sightings.governed.push((track, at));
             }
         }
     }

@@ -325,6 +325,27 @@ pub enum Error {
     },
 
     #[error(
+        "this passage would inherit a {state} for channel {channel} from tick {from} on track \
+         {stating}, and track {sounding} carries {against} of that channel at tick {at}, where \
+         the passage begins. The Take orders those two by Tick. The passage puts both at its \
+         first Tick, and a Rank orders events within one track — these are on two, so the \
+         passage would state no order between them where the Take stated one, and a synthesiser \
+         would meet them either way round. Nothing has been written.\n\
+         \n\
+         Ask for a passage beginning where track {sounding} carries no {against} of channel \
+         {channel}, or state the {state} on track {sounding}, which carries them."
+    )]
+    PassageWouldLoseAnOrder {
+        stating: usize,
+        sounding: usize,
+        from: u32,
+        at: u32,
+        channel: u8,
+        state: &'static str,
+        against: &'static str,
+    },
+
+    #[error(
         "--allow-unranked {0} is not a site. A site is a track, a channel and a tick, in that \
          order and spelled as a note's identity spells them: t2:c0:s1920."
     )]
