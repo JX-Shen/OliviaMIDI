@@ -124,11 +124,11 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // Take rather than a channel or a note. A Take that got faster reframes every
     // row beneath it, orchestration included.
     for difference in &diff.tempos {
-        rows.push(vec![
-            "tempo".to_string(),
-            crate::wording::span(before_lines, difference.from, difference.until),
-            crate::wording::tempo_difference(before_lines, after_lines, difference),
-        ]);
+        rows.extend(crate::wording::tempo_rows(
+            before_lines,
+            after_lines,
+            difference,
+        ));
     }
     // Orchestration first. A channel that changed instrument reframes every note
     // row under it — the same notes on a horn are a different passage — so it is
@@ -160,12 +160,11 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // about the same channel — what the expression is doing — and a reader
     // looking for it should not have to find it in two places.
     for difference in &diff.bends {
-        rows.push(vec![
-            "bend".to_string(),
-            crate::wording::span(before_lines, difference.from, difference.until),
-            crate::wording::channel(difference.channel),
-            crate::wording::bend_difference(before_lines, after_lines, difference),
-        ]);
+        rows.extend(crate::wording::bend_rows(
+            before_lines,
+            after_lines,
+            difference,
+        ));
     }
     // Then the ordering, which is the layer under both of those: the same
     // Program at the same Tick, met on the other side of the notes it governs.

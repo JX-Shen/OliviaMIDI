@@ -627,6 +627,34 @@ pub fn build_take_setting(
     setting: &[(u32, midly::TrackEventKind<'static>)],
     notes: &[NoteSpec],
 ) -> PathBuf {
+    build_take_stating_tempo(path, ppq, stated, Some(500_000), setting, notes)
+}
+
+/// The same again, stating no tempo anywhere — not even the 120 at Tick 0 every
+/// other builder here writes.
+///
+/// A Take that says nothing about the tempo and a Take at 120 are different
+/// Pieces, and until this existed no test could hold the first of them: the
+/// conductor track was unconditionally given a tempo, so the claim was
+/// unreachable from outside `src/`.
+pub fn build_take_stating_no_tempo(
+    path: &Path,
+    ppq: u16,
+    stated: &[StatedTimeSignature],
+    setting: &[(u32, midly::TrackEventKind<'static>)],
+    notes: &[NoteSpec],
+) -> PathBuf {
+    build_take_stating_tempo(path, ppq, stated, None, setting, notes)
+}
+
+fn build_take_stating_tempo(
+    path: &Path,
+    ppq: u16,
+    stated: &[StatedTimeSignature],
+    conductor_tempo: Option<u32>,
+    setting: &[(u32, midly::TrackEventKind<'static>)],
+    notes: &[NoteSpec],
+) -> PathBuf {
     use midly::num::{u15, u24, u28, u4, u7};
     use midly::{
         Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind,
@@ -659,10 +687,12 @@ pub fn build_take_setting(
             )
         })
         .collect();
-    conductor.push((
-        0,
-        TrackEventKind::Meta(MetaMessage::Tempo(u24::new(500_000))),
-    ));
+    if let Some(micros_per_quarter) = conductor_tempo {
+        conductor.push((
+            0,
+            TrackEventKind::Meta(MetaMessage::Tempo(u24::new(micros_per_quarter))),
+        ));
+    }
     let conductor_end = stated.iter().map(|&(tick, ..)| tick).max().unwrap_or(0);
     conductor.push((conductor_end, TrackEventKind::Meta(MetaMessage::EndOfTrack)));
 

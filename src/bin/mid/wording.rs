@@ -395,65 +395,210 @@ pub fn controller_difference(
     )
 }
 
-/// What tempo the two Takes are at across a span: `120 -> 132`.
+/// One side of a span difference, and everything it has to say: what it holds
+/// where the span begins, every extreme it reaches inside, and what it holds
+/// where the span ends.
+///
+/// The excursions are in time order rather than a fixed up-then-down, because a
+/// reader follows a stretch forwards and two clauses in the order they happened
+/// are two facts rather than a shape. Saying which of them moved furthest, or
+/// calling the pair a rise or a fall, would be the inference ADR-0007 rejects;
+/// this states the extremes and leaves the gesture to whoever is reading.
+struct Side {
+    at_start: String,
+    excursions: Vec<(u32, String)>,
+    at_end: Option<String>,
+}
+
+impl Side {
+    /// Whether this side says anything beyond where the span begins. Where
+    /// neither side of a difference does, the whole difference is one row.
+    fn has_interior(&self) -> bool {
+        !self.excursions.is_empty() || self.at_end.is_some()
+    }
+
+    fn in_full(mut self) -> String {
+        self.excursions.sort_by_key(|&(tick, _)| tick);
+        let mut said = self.at_start;
+        for (_, excursion) in self.excursions {
+            said.push_str(", ");
+            said.push_str(&excursion);
+        }
+        if let Some(at_end) = self.at_end {
+            said.push_str(", ends at ");
+            said.push_str(&at_end);
+        }
+        said
+    }
+}
+
+/// One side's two extremes as clauses, each already carrying its reading and the
+/// Tick it was reached at: `up to 144 at bar 6 beat 1`.
+///
+/// Both verbs where there are genuinely two extremes, and neither where the two
+/// are one reading. A direction is a claim about where the side started, and a
+/// side that started nowhere — `unstated` — has both its extremes stated and no
+/// point to have moved from, so a span containing a single value would otherwise
+/// come out as *up to 4000, down to 4000*: two clauses about one fact, each
+/// asserting a direction off a floor that is not there. `reaching` says what the
+/// pair actually knows in that case.
+///
+/// One extreme alone is a different thing and keeps its verb: the other was
+/// dropped for equalling where the span began, so there is a point to have moved
+/// from and the direction is read off it.
+fn extremes(reached: [Option<(u32, String)>; 2]) -> Vec<(u32, String)> {
+    let [up, down] = reached;
+    match (up, down) {
+        (Some(up), Some(down)) if up == down => vec![(up.0, format!("reaching {}", up.1))],
+        (up, down) => up
+            .map(|(tick, said)| (tick, format!("up to {said}")))
+            .into_iter()
+            .chain(down.map(|(tick, said)| (tick, format!("down to {said}"))))
+            .collect(),
+    }
+}
+
+/// The rows one span difference occupies.
+///
+/// One row where neither side has anything to say beyond where the span begins
+/// — `tempo  bar 1 beat 1 onwards  60 -> 120` — and three where either does: a
+/// heading naming the span, then a line for each side saying the whole of what
+/// it holds across it.
+///
+/// Three rows rather than a longer one because a side's full reading is four
+/// clauses and two of them side by side on one line is a line nobody finishes
+/// reading. ADR-0007's *collapse into the one difference that states it* is
+/// about not reporting an accelerando as forty differences and is untouched:
+/// this is one difference either way, and the rows are its layout. What is not
+/// allowed is what the single row used to do — hold a projection of the reading
+/// and drop the rest of it (#32).
+fn span_rows(
+    label: &str,
+    span: String,
+    subject: Option<String>,
+    before: Side,
+    after: Side,
+) -> Vec<Vec<String>> {
+    if !before.has_interior() && !after.has_interior() {
+        let mut row = vec![label.to_string(), span];
+        row.extend(subject);
+        row.push(format!("{} -> {}", before.at_start, after.at_start));
+        return vec![row];
+    }
+    let mut heading = vec![label.to_string(), span];
+    heading.extend(subject);
+    vec![
+        heading,
+        vec!["  before".to_string(), before.in_full()],
+        vec!["  after".to_string(), after.in_full()],
+    ]
+}
+
+/// The rows one tempo difference occupies: `tempo`, the span, and what each Take
+/// is doing with the tempo across it.
 ///
 /// Beats per minute, because that is the number a musician holds and the one
 /// `mid info` already prints; the microseconds the file carries are in `--json`
-/// for anyone who needs them. Rounded to a whole beat where it is one, because a
-/// tempo written as 120 comes back as 120.000001 through the microseconds and a
-/// diff that says so is reporting the arithmetic rather than the Piece.
+/// for anyone who needs them — except where the beats alone would print two of
+/// this difference's tempos identically, which `tempo_reading` covers.
 ///
-/// Where a side reaches a different tempo inside the span it says the extreme
-/// that moved furthest from where the span began — `120 (up to 144 at bar 6
-/// beat 1) -> 132`. Where it holds one tempo throughout, the clause is left off
-/// rather than restating the number beside it.
-///
-/// `unstated` on either side, in the same shape as the numbers, for the reason
-/// `program_difference` prints it: a Take that names no tempo is not a Take at
-/// 120.
-pub fn tempo_difference(
+/// `unstated` where a Take states no tempo across the span, in the same shape as
+/// the numbers, for the reason `program_difference` prints it: a Take that names
+/// no tempo is not a Take at 120. It is not a reason to stop reading, either —
+/// an `unstated` side still says every extreme reached inside the span, since a
+/// span the other Take opens is a span this one may still move about in.
+pub fn tempo_rows(
     before_lines: Option<BarLines>,
     after_lines: Option<BarLines>,
     difference: &TempoDifference,
-) -> String {
-    let side = |lines, side: &TempoSide| match side.at_start {
-        None => "unstated".to_string(),
-        Some(start) => {
-            let excursion = [
-                (side.fastest, side.fastest_at, "up to"),
-                (side.slowest, side.slowest_at, "down to"),
-            ]
-            .into_iter()
-            .filter_map(|(reached, reached_at, verb)| match (reached, reached_at) {
-                (Some(reached), Some(reached_at))
-                    if reached.micros_per_quarter != start.micros_per_quarter =>
-                {
-                    Some((
-                        (reached.bpm - start.bpm).abs(),
-                        format!("{verb} {} at {}", bpm(reached.bpm), at(lines, reached_at)),
-                    ))
-                }
-                _ => None,
-            })
-            .max_by(|(one, _), (two, _)| one.total_cmp(two))
-            .map(|(_, said)| said);
-            match excursion {
-                Some(said) => format!("{} ({said})", bpm(start.bpm)),
-                None => bpm(start.bpm),
-            }
+) -> Vec<Vec<String>> {
+    let micros = beats_alone_collide(difference);
+    let side = |lines, side: &TempoSide| {
+        let start = side.at_start.map(|start| start.micros_per_quarter);
+        Side {
+            at_start: match side.at_start {
+                None => "unstated".to_string(),
+                Some(at_start) => tempo_reading(at_start, micros),
+            },
+            excursions: extremes(
+                [
+                    (side.fastest, side.fastest_at),
+                    (side.slowest, side.slowest_at),
+                ]
+                .map(|(reached, reached_at)| {
+                    let (reached, reached_at) = (reached?, reached_at?);
+                    (Some(reached.micros_per_quarter) != start).then(|| {
+                        (
+                            reached_at,
+                            format!(
+                                "{} at {}",
+                                tempo_reading(reached, micros),
+                                at(lines, reached_at)
+                            ),
+                        )
+                    })
+                }),
+            ),
+            at_end: side
+                .at_end
+                .filter(|at_end| Some(at_end.micros_per_quarter) != start)
+                .map(|at_end| tempo_reading(at_end, micros)),
         }
     };
-    format!(
-        "{} -> {}",
+    span_rows(
+        "tempo",
+        span(before_lines, difference.from, difference.until),
+        None,
         side(before_lines, &difference.before),
-        side(after_lines, &difference.after)
+        side(after_lines, &difference.after),
     )
 }
 
+/// A tempo as a musician says it, with the microseconds beside it where the
+/// beats alone would not tell two of one difference's tempos apart.
+///
+/// The beats are a rounding — see `bpm` — and two tempos a hair apart in
+/// microseconds round to the same whole beat. A row asserting two sides differ
+/// and then printing the same number on both of them is the failure `TempoSide`
+/// carries two extremes to avoid, arriving by another road: the reader is told
+/// of a difference and shown none. So where the collision happens the number the
+/// file actually carries goes beside every tempo in that difference, and where
+/// it does not the row stays as short as it reads.
+///
+/// Beside it, not instead of it, and never only in `--json`: ADR-0004's
+/// carve-out for a convention holds only while the number it is a convention
+/// about stays in view.
+fn tempo_reading(tempo: battuta::Tempo, micros: bool) -> String {
+    match micros {
+        false => bpm(tempo.bpm),
+        true => format!("{} ({} us)", bpm(tempo.bpm), tempo.micros_per_quarter),
+    }
+}
+
+/// Whether two tempos of one difference are different tempos that print as the
+/// same number of beats.
+fn beats_alone_collide(difference: &TempoDifference) -> bool {
+    let mut readings = Vec::new();
+    for side in [&difference.before, &difference.after] {
+        for tempo in [side.at_start, side.at_end, side.fastest, side.slowest]
+            .into_iter()
+            .flatten()
+        {
+            readings.push((bpm(tempo.bpm), tempo.micros_per_quarter));
+        }
+    }
+    readings.iter().any(|(beats, micros)| {
+        readings
+            .iter()
+            .any(|(other_beats, other_micros)| beats == other_beats && micros != other_micros)
+    })
+}
+
 /// A tempo as a musician says it. Whole beats where the file means whole beats:
-/// the microseconds a tempo is stored as do not divide evenly into a minute, so
-/// 120 arrives back as 120.00000000000001 and printing that would be reporting
-/// the encoding.
+/// the microseconds a tempo is stored as do not all divide evenly into a
+/// minute, so a tempo written as 140 arrives back as 140.00014 and printing
+/// that would be reporting the encoding rather than the Piece. 120 divides
+/// exactly and never needed this; the tempos either side of it do.
 fn bpm(bpm: f64) -> String {
     if (bpm - bpm.round()).abs() < 0.005 {
         format!("{}", bpm.round() as i64)
@@ -462,7 +607,8 @@ fn bpm(bpm: f64) -> String {
     }
 }
 
-/// How far the two Takes bend a channel across a span: `0 -> -2048`.
+/// The rows one bend difference occupies: `bend`, the span, the channel, and how
+/// far each Take bends it across the span.
 ///
 /// The raw signed number, not semitones. How many semitones a bend is worth is
 /// the synthesiser's bend range and is not in the file, so naming semitones here
@@ -470,42 +616,46 @@ fn bpm(bpm: f64) -> String {
 /// value: a channel bent back to nought is not a channel never bent, which is
 /// what `unstated` says.
 ///
-/// Where a side goes further inside the span it says the furthest excursion from
-/// where the span began — `0 (down to -4096 at bar 6 beat 1) -> -2048`. Both
-/// directions are considered, which is the whole reason `BendSide` carries two:
-/// a dip below the centre is invisible to anything looking for a peak.
-pub fn bend_difference(
+/// Both directions are said, in time order, which is the whole reason `BendSide`
+/// carries two extremes: a bend is signed about a centre MIDI fixes, so a dive
+/// below the note and a rise above it are two facts and neither stands in for
+/// the other.
+pub fn bend_rows(
     before_lines: Option<BarLines>,
     after_lines: Option<BarLines>,
     difference: &BendDifference,
-) -> String {
-    let side = |lines, side: &BendSide| match side.at_start {
-        None => "unstated".to_string(),
-        Some(start) => {
-            let excursion = [
-                (side.furthest_up, side.furthest_up_at, "up to"),
-                (side.furthest_down, side.furthest_down_at, "down to"),
+) -> Vec<Vec<String>> {
+    let side = |lines, side: &BendSide| Side {
+        at_start: match side.at_start {
+            None => "unstated".to_string(),
+            Some(at_start) => at_start.to_string(),
+        },
+        excursions: extremes(
+            [
+                (side.furthest_up, side.furthest_up_at),
+                (side.furthest_down, side.furthest_down_at),
             ]
-            .into_iter()
-            .filter_map(|(reached, reached_at, verb)| match (reached, reached_at) {
-                (Some(reached), Some(reached_at)) if reached != start => Some((
-                    reached.abs_diff(start),
-                    format!("{verb} {reached} at {}", at(lines, reached_at)),
-                )),
-                _ => None,
-            })
-            .max_by_key(|&(distance, _)| distance)
-            .map(|(_, said)| said);
-            match excursion {
-                Some(said) => format!("{start} ({said})"),
-                None => start.to_string(),
-            }
-        }
+            .map(|(reached, reached_at)| {
+                let (reached, reached_at) = (reached?, reached_at?);
+                (Some(reached) != side.at_start).then(|| {
+                    (
+                        reached_at,
+                        format!("{reached} at {}", at(lines, reached_at)),
+                    )
+                })
+            }),
+        ),
+        at_end: side
+            .at_end
+            .filter(|&at_end| Some(at_end) != side.at_start)
+            .map(|at_end| at_end.to_string()),
     };
-    format!(
-        "{} -> {}",
+    span_rows(
+        "bend",
+        span(before_lines, difference.from, difference.until),
+        Some(channel(difference.channel)),
         side(before_lines, &difference.before),
-        side(after_lines, &difference.after)
+        side(after_lines, &difference.after),
     )
 }
 

@@ -651,6 +651,27 @@ fn stating(dir: &Path, name: &str, setting: &[(u32, midly::TrackEventKind<'stati
     )
 }
 
+/// The same Take, stating no tempo at all — not even the 120 at Tick 0 that
+/// `stating` writes on the conductor track.
+fn stating_no_tempo(
+    dir: &Path,
+    name: &str,
+    setting: &[(u32, midly::TrackEventKind<'static>)],
+) -> PathBuf {
+    common::build_take_stating_no_tempo(
+        &dir.join(format!("{name}.mid")),
+        480,
+        &[(0, 4, 4)],
+        setting,
+        &[
+            (0, 480, 60),
+            (480, 480, 62),
+            (960, 480, 64),
+            (1440, 480, 65),
+        ],
+    )
+}
+
 /// Every note-level list of a diff, so a test about one state can say that the
 /// notes are not what it found.
 fn notes_agree(diff: &Value) {
@@ -769,8 +790,9 @@ fn a_dive_inside_a_bend_span_is_reported_although_it_is_no_peak() {
             before.to_str().expect("a path"),
             after.to_str().expect("a path")
         ]),
-        "bend  bar 1 beat 2 until bar 2 beat 1  channel 0  \
-         100 -> 101 (down to -4096 at bar 1 beat 3)\n"
+        "bend      bar 1 beat 2 until bar 2 beat 1  channel 0\n\
+         \x20 before  100\n\
+         \x20 after   101, down to -4096 at bar 1 beat 3\n"
     );
 }
 
@@ -845,6 +867,263 @@ fn a_take_stating_a_tempo_and_a_bend_does_not_differ_from_itself() {
     assert_eq!(
         common::human_output(&["diff", path, path]),
         "no differences\n"
+    );
+}
+
+/// The other extreme of `TempoSide`, which nothing else asks for: a span that
+/// slows down. Every other tempo test here either quickens or holds, so
+/// `slowest` and `slowest_at` could both be `None` and the suite stayed green.
+/// See #32.
+#[test]
+fn a_ritardando_reports_the_slowest_tempo_reached_inside_the_span() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = stating(dir.path(), "before", &[]);
+    // 150 from Bar 1 Beat 3, dropping to 60 for a Beat and picking 150 back up,
+    // so the span's two ends agree and the slowing is only visible inside it.
+    let after = stating(
+        dir.path(),
+        "after",
+        &[
+            common::tempo(960, 400_000),
+            common::tempo(1440, 1_000_000),
+            common::tempo(1680, 400_000),
+        ],
+    );
+
+    let diff = diff_json(&before, &after, None);
+    let tempos = list(&diff, "tempos");
+    assert_eq!(tempos.len(), 1, "tempos: {tempos:?}");
+    assert_eq!(
+        tempos[0]["after"]["slowest"]["micros_per_quarter"],
+        1_000_000
+    );
+    assert_eq!(tempos[0]["after"]["slowest_at"], 1440);
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path")
+        ]),
+        "tempo     bar 1 beat 3 onwards\n\
+         \x20 before  120\n\
+         \x20 after   150, down to 60 at bar 1 beat 4\n"
+    );
+}
+
+/// A span that moves both ways states both extremes, in the order they happened
+/// — the reason `TempoSide` carries two of them rather than one. Swapping the
+/// two verbs, or reporting either extreme alone, is a row that describes a
+/// different shape of tempo change from the one in the file.
+#[test]
+fn a_tempo_span_that_moves_both_ways_states_both_extremes() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = stating(dir.path(), "before", &[common::tempo(960, 250_000)]);
+    // 120 where the span opens, up to 180, down to 60, and back to 120 so that
+    // the span's ends agree and both excursions are what is left to report.
+    let after = stating(
+        dir.path(),
+        "after",
+        &[
+            common::tempo(960, 500_000),
+            common::tempo(1440, 333_333),
+            common::tempo(1920, 1_000_000),
+            common::tempo(2400, 500_000),
+        ],
+    );
+
+    let diff = diff_json(&before, &after, None);
+    let tempos = list(&diff, "tempos");
+    assert_eq!(tempos.len(), 1, "tempos: {tempos:?}");
+    assert_eq!(tempos[0]["after"]["fastest_at"], 1440);
+    assert_eq!(tempos[0]["after"]["slowest_at"], 1920);
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path")
+        ]),
+        "tempo     bar 1 beat 3 onwards\n\
+         \x20 before  240\n\
+         \x20 after   120, up to 180 at bar 1 beat 4, down to 60 at bar 2 beat 1\n"
+    );
+}
+
+/// Where a span leaves each Take is not where it found it, and both states say
+/// so: `at_end` was carried by `TempoSide` and `BendSide` and asserted by
+/// nothing, so either could have been the span's opening value instead. See #32.
+///
+/// One Take for both, because the clause is one sentence of the reading shared
+/// by every state compared as a span.
+#[test]
+fn a_span_that_ends_elsewhere_than_it_began_says_where_it_ends() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = stating(
+        dir.path(),
+        "before",
+        &[common::tempo(960, 250_000), common::pitch_bend(960, 100)],
+    );
+    // Each state opens the span at one reading, reaches an extreme, and settles
+    // on a third — so the value it ends at is neither the one it began at nor
+    // either extreme, and only `at_end` can report it.
+    let after = stating(
+        dir.path(),
+        "after",
+        &[
+            common::tempo(960, 500_000),
+            common::tempo(1440, 333_333),
+            common::tempo(1920, 400_000),
+            common::pitch_bend(960, 200),
+            common::pitch_bend(1440, 3000),
+            common::pitch_bend(1920, 1000),
+        ],
+    );
+
+    let diff = diff_json(&before, &after, None);
+    let tempos = list(&diff, "tempos");
+    assert_eq!(tempos.len(), 1, "tempos: {tempos:?}");
+    assert_eq!(tempos[0]["after"]["at_end"]["micros_per_quarter"], 400_000);
+    let bends = list(&diff, "bends");
+    assert_eq!(bends.len(), 1, "bends: {bends:?}");
+    assert_eq!(bends[0]["after"]["at_end"], 1000);
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path")
+        ]),
+        "tempo     bar 1 beat 3 onwards\n\
+         \x20 before  240\n\
+         \x20 after   120, up to 180 at bar 1 beat 4, ends at 150\n\
+         bend      bar 1 beat 3 onwards  channel 0\n\
+         \x20 before  100\n\
+         \x20 after   200, up to 3000 at bar 1 beat 4, ends at 1000\n"
+    );
+}
+
+/// A bend is channel state, and the channel it is on is 3 as readily as 0.
+/// Every bend the suite could build was on channel 0, so a comparison that
+/// looked at that channel alone answered every test correctly and the Piece
+/// wrongly.
+#[test]
+fn a_bend_on_a_channel_other_than_the_first_is_a_difference() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = stating(dir.path(), "before", &[]);
+    let after = stating(dir.path(), "after", &[common::pitch_bend_on(3, 960, -2048)]);
+
+    let diff = diff_json(&before, &after, None);
+    notes_agree(&diff);
+    let bends = list(&diff, "bends");
+    assert_eq!(bends.len(), 1, "bends: {bends:?}");
+    assert_eq!(bends[0]["channel"], 3);
+    assert_eq!(bends[0]["before"]["at_start"], Value::Null);
+    assert_eq!(bends[0]["after"]["at_start"], -2048);
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path")
+        ]),
+        "bend  bar 1 beat 3 onwards  channel 3  unstated -> -2048\n"
+    );
+}
+
+/// `mid diff --help`'s claim, tested: a Take that states no tempo and one that
+/// states 120 are different Pieces. Nothing could hold the first of them until
+/// `build_take_stating_no_tempo` existed, so defaulting a tempo-less Take to 120
+/// reversed the promise and broke no test.
+#[test]
+fn a_take_stating_no_tempo_differs_from_one_stating_120() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = stating_no_tempo(dir.path(), "before", &[]);
+    let after = stating(dir.path(), "after", &[]);
+
+    let diff = diff_json(&before, &after, None);
+    notes_agree(&diff);
+    let tempos = list(&diff, "tempos");
+    assert_eq!(tempos.len(), 1, "tempos: {tempos:?}");
+    assert_eq!(tempos[0]["from"], 0);
+    assert_eq!(tempos[0]["before"]["at_start"], Value::Null);
+    assert_eq!(
+        tempos[0]["after"]["at_start"]["micros_per_quarter"],
+        500_000
+    );
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path")
+        ]),
+        "tempo  bar 1 beat 1 onwards  unstated -> 120\n"
+    );
+}
+
+/// An `unstated` side is not a side with nothing to say. The span belongs to the
+/// other Take, and this one may move about inside it: where it began is unknown,
+/// and both extremes and where it ends are not.
+#[test]
+fn an_unstated_tempo_side_still_reports_the_interior_of_the_span() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = stating_no_tempo(
+        dir.path(),
+        "before",
+        &[common::tempo(960, 200_000), common::tempo(1440, 1_200_000)],
+    );
+    let after = stating(dir.path(), "after", &[]);
+
+    let diff = diff_json(&before, &after, None);
+    let tempos = list(&diff, "tempos");
+    assert_eq!(tempos.len(), 1, "tempos: {tempos:?}");
+    let side = &tempos[0]["before"];
+    assert_eq!(side["at_start"], Value::Null);
+    assert_eq!(side["fastest"]["micros_per_quarter"], 200_000);
+    assert_eq!(side["fastest_at"], 960);
+    assert_eq!(side["slowest"]["micros_per_quarter"], 1_200_000);
+    assert_eq!(side["slowest_at"], 1440);
+    assert_eq!(side["at_end"]["micros_per_quarter"], 1_200_000);
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path")
+        ]),
+        "tempo     bar 1 beat 1 onwards\n\
+         \x20 before  unstated, up to 300 at bar 1 beat 3, down to 50 at bar 1 beat 4, ends at 50\n\
+         \x20 after   120\n"
+    );
+}
+
+/// A row that asserts a difference and then prints the same number on both
+/// sides has told the reader nothing. Beats are a rounding, so two tempos four
+/// microseconds apart print as one number, and where that happens the
+/// microseconds go beside every tempo in the difference.
+#[test]
+fn two_tempos_that_print_as_the_same_beats_disclose_their_microseconds() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = stating(dir.path(), "before", &[]);
+    let after = stating(dir.path(), "after", &[common::tempo(960, 499_996)]);
+
+    let diff = diff_json(&before, &after, None);
+    let tempos = list(&diff, "tempos");
+    assert_eq!(tempos.len(), 1, "tempos: {tempos:?}");
+
+    let said = common::human_output(&[
+        "diff",
+        before.to_str().expect("a path"),
+        after.to_str().expect("a path"),
+    ]);
+    assert!(
+        !said.contains("120 -> 120"),
+        "the row shows the reader no difference: {said}"
+    );
+    assert_eq!(
+        said,
+        "tempo  bar 1 beat 3 onwards  120 (500000 us) -> 120 (499996 us)\n"
     );
 }
 

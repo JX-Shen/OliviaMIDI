@@ -308,10 +308,25 @@ impl Take {
             },
             tracks: smf.tracks.len(),
             ppq,
-            // The first tempo the Take states, which is what `info` has always
+            // The tempo the Take opens on, which is what `info` has always
             // reported: one line describing a Take, not the whole of a tempo
             // map. `stated_tempos` is where every statement is.
-            tempo: self.stated_tempos()?.first().map(|stated| stated.tempo),
+            //
+            // The *last* statement at the earliest Tick, not the first, because
+            // that is the one in force there — `stated_tempos` says so, and it
+            // is what `diff` reads. Two commands answering differently about one
+            // file is what #32 removed a second copy of this reading to prevent,
+            // and taking `.first()` was the copy surviving in another form. Which
+            // of two tempos at one Tick is in force at all is a question the file
+            // does not answer; see #42.
+            tempo: {
+                let stated = self.stated_tempos()?;
+                stated
+                    .first()
+                    .map(|first| first.tick)
+                    .and_then(|opening| stated.iter().rfind(|stated| stated.tick == opening))
+                    .map(|stated| stated.tempo)
+            },
             time_signature: self.time_signatures()?.first().map(|&(_, ts)| ts),
             length_ticks,
             // Every reason a Bar length cannot be derived means the same thing

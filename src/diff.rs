@@ -429,7 +429,16 @@ struct Stretch {
 }
 
 /// One Take's reading of one stretch: the value in force at each end, and the
-/// extremes it reaches inside, each with the Tick it is first reached at.
+/// extremes it reaches inside, each with the Tick *within the stretch* it is
+/// first reached at.
+///
+/// Within, and that is the part to read twice. Where an extreme is the value
+/// already in force when the stretch opens, its Tick is the stretch's own start
+/// and not wherever the statement that set it happens to be — which may be many
+/// Bars earlier, and is a place this stretch says nothing about. A reader
+/// addressing an Edit at the Tick reported here is addressing the stretch being
+/// described; a reader expecting the statement's own Tick is reading a field that
+/// was never offering one. `ControllerSide::peak_at` has always worked this way.
 struct Reading {
     at_start: Option<i64>,
     at_end: Option<i64>,
