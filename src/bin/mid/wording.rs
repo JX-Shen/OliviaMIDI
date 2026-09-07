@@ -257,6 +257,68 @@ pub fn controller(
     row
 }
 
+/// How far a channel is bent where the passage begins, and how far the passage
+/// takes it: `channel 0  bend  -2000 (down to -6000 at bar 2 beat 1)`.
+///
+/// `controller`'s row with the Controller's number left out, because a bend has
+/// none: nothing sub-addresses it, so `bend` is the whole of what it is. The
+/// word is still in the row rather than left implicit, so that a reader
+/// scanning the column meets the same kind of word the Controller rows put
+/// there.
+///
+/// Two excursions where a Controller has one. A Controller runs from nought
+/// upwards; a bend is signed about a centre, so the two directions are two
+/// facts and either alone can hide the other. Each is printed only where it
+/// went somewhere `value` does not already say — a bend that only rose says
+/// only that it rose.
+///
+/// The raw signed number and never semitones. How many semitones a bend is
+/// worth is the synthesiser's bend range, which is not in the file, so naming
+/// semitones would print a Rig fact from a command that reports the Piece.
+pub fn bend(lines: Option<BarLines>, held: &battuta::Bend, inside: bool) -> Vec<String> {
+    let mut cell = match held.value {
+        None => "unstated".to_string(),
+        Some(value) => value.to_string(),
+    };
+    if inside {
+        let mut went: Vec<String> = Vec::new();
+        if Some(held.furthest_down) != held.value {
+            went.push(format!(
+                "down to {} at {}",
+                held.furthest_down,
+                at(lines, held.furthest_down_at)
+            ));
+        }
+        if Some(held.furthest_up) != held.value {
+            went.push(format!(
+                "up to {} at {}",
+                held.furthest_up,
+                at(lines, held.furthest_up_at)
+            ));
+        }
+        if !went.is_empty() {
+            cell = format!("{cell} ({})", went.join(", "));
+        }
+    }
+    vec![channel(held.channel), "bend".to_string(), cell]
+}
+
+/// One place the passage bends a channel, as an event: where it happens, which
+/// track says it, and how far.
+///
+/// `stated_controller`'s row, and the track is here for its reason: this
+/// describes an event somebody can go and look at, where the state above
+/// describes what the channel is.
+pub fn stated_bend(lines: Option<BarLines>, stated: &battuta::StatedBend) -> Vec<String> {
+    vec![
+        at(lines, stated.tick),
+        format!("track {}", stated.track),
+        channel(stated.channel),
+        "bend".to_string(),
+        stated.value.to_string(),
+    ]
+}
+
 /// One place the passage states a Controller, as an event: where it happens,
 /// which track says it, and what it says.
 ///

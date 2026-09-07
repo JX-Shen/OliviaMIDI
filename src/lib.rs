@@ -25,7 +25,7 @@ mod track;
 pub mod unranked;
 
 pub use bars::{BarLines, BarRange, Position, TickSpan};
-pub use bend::StatedBend;
+pub use bend::{Bend, Bends, StatedBend};
 pub use controller::{spec_name, Controller, Controllers, StatedController, FIRST_CHANNEL_MODE};
 pub use diff::{
     BendDifference, BendSide, Change, ControllerDifference, ControllerSide, Diff, NoteChange,

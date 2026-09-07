@@ -19,6 +19,22 @@ use std::path::PathBuf;
 /// so, because which instrument that number *sounds* like depends on the bank,
 /// and the bank is the Rig.
 ///
+/// Under that, what each channel holds for a Controller, and how far each is
+/// bent — the same reading and for the same reason: a value that holds until
+/// something says otherwise is in force at the passage's first note whether or
+/// not the passage contains the event that set it. A channel bent back to the
+/// centre is not a channel never bent, as a Controller holding 0 is not one
+/// holding nothing. Where the passage bends a channel itself, the row says how
+/// far it goes each way and where: a bend is signed about a centre, so a phrase
+/// that dips and returns never rises above where it began, and one extreme
+/// would be blind to the dive. The number is MIDI's own signed reading and never
+/// semitones — how many semitones a bend is worth is the synthesiser's bend
+/// range, which is not in the file.
+///
+/// The Program and Controller blocks answer even when the answer is nothing,
+/// because a reader can name one and ask. Nothing addresses a bend, so a Take
+/// that bends nothing says nothing about bends.
+///
 /// The listing is in the order the music happens, so that reading down it reads
 /// down the passage: a chord's notes are adjacent and the Bar numbers only ever
 /// go forwards. `--json` keeps the Take's own order instead — track by track,
@@ -67,6 +83,12 @@ struct Listing {
     stated_programs: Vec<battuta::StatedProgram>,
     controllers: Vec<battuta::Controller>,
     stated_controllers: Vec<battuta::StatedController>,
+    /// How far each channel is bent where the passage begins, and where the
+    /// passage bends one. Appended, and nothing above moved: a consumer reading
+    /// the payload for the four lists before them still finds them where they
+    /// were.
+    bends: Vec<battuta::Bend>,
+    stated_bends: Vec<battuta::StatedBend>,
     /// Where the passage states no order between two of its tracks. Added, and
     /// nothing else moved: a consumer reading the payload for the four lists
     /// above still finds them exactly where they were.
@@ -79,6 +101,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
     let notes = take.notes_in(args.bars)?;
     let programs = take.programs_in(args.bars)?;
     let controllers = take.controllers_in(args.bars)?;
+    let bends = take.bends_in(args.bars)?;
     let unranked = take.unranked(args.bars)?;
 
     if args.json {
@@ -89,6 +112,8 @@ pub fn run(args: Args) -> battuta::Result<()> {
                 stated_programs: programs.stated,
                 controllers: controllers.controllers,
                 stated_controllers: controllers.stated,
+                bends: bends.bends,
+                stated_bends: bends.stated,
                 unranked,
                 notes,
             })
@@ -188,6 +213,48 @@ pub fn run(args: Args) -> battuta::Result<()> {
                 .stated
                 .iter()
                 .map(|stated| crate::wording::stated_controller(lines, stated))
+                .collect();
+            crate::wording::table(&rows);
+        }
+        println!();
+    }
+
+    // How far each channel is bent, under the Controllers, because it is the
+    // third of the same kind of thing: a value that holds until something says
+    // otherwise, and that reframes the notes under it — the same line played a
+    // semitone flat is a different passage. ADR-0007 names pitch bend as the
+    // next state to join its terms, and this is that half of it.
+    //
+    // Printed only where the Take bends something, unlike the two blocks above.
+    // Those answer what a reader asked about a channel — one Program, one
+    // Controller they can name — and so must answer even when the answer is
+    // nothing. A bend has no address a reader could have asked about, so there
+    // is no question here left unanswered by silence, and every Take that bends
+    // nothing would otherwise carry a line saying so.
+    if !bends.bends.is_empty() {
+        let rows: Vec<Vec<String>> = bends
+            .bends
+            .iter()
+            .map(|held| {
+                // The excursions earn their clause only where the passage bends
+                // this channel. Where it does not, the furthest each way is the
+                // value already beside it, and the clause would be one fact
+                // printed twice — `controller` withholds its peak on the same
+                // test.
+                let inside = bends
+                    .stated
+                    .iter()
+                    .any(|stated| stated.channel == held.channel);
+                crate::wording::bend(lines, held, inside)
+            })
+            .collect();
+        crate::wording::table(&rows);
+        if !bends.stated.is_empty() {
+            println!();
+            let rows: Vec<Vec<String>> = bends
+                .stated
+                .iter()
+                .map(|stated| crate::wording::stated_bend(lines, stated))
                 .collect();
             crate::wording::table(&rows);
         }
