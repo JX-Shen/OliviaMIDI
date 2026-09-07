@@ -208,6 +208,12 @@ one rule rather than by the Edit — because a Take gives every event a Rank
 whether anybody chose it or not, and a tool that let an Edit Set state one would
 be addressing below the Tick, one step from the selector `CHARTER.md` forbids.
 Two events at one Tick have one Position between them and a Rank each.
+
+Rank is also the oracle `mid diff` uses when comparing event ordering between
+two Takes. Only event pairs with a causal dependency — those the rule assigns a
+determinate Rank to — are compared for ordering; pairs the rule does not rank
+are compared by content alone. A site where two Takes carry differently-ranked
+causal pairs is a difference `is_empty()` answers for.
 _中文_: 次序
 _Avoid_: order, precedence, priority; 顺序、优先级
 

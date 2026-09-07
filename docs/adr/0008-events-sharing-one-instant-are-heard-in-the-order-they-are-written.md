@@ -88,3 +88,27 @@ discover it.
 **Carried-in order is the author's.** Where a Take was written with a release
 behind a strike at one Tick, that is a fact about the file and ADR-0003 keeps it.
 The rule places what an Edit puts there; it does not rearrange what arrived.
+
+## Amended: Rank is also the oracle for comparison
+
+The rule that decides which order is correct for writing also decides which
+order is correct for comparing. `mid diff` uses Rank to detect ordering
+differences between two Takes: where the two Takes place causally-dependent
+events in different orders at one Tick, that is a difference the diff reports
+and that `is_empty()` answers for.
+
+Only event pairs the rule assigns a determinate Rank to are compared for
+ordering. Two events the rule does not rank — two NoteOns on the same Tick,
+none governing the other — have no causal dependency, so their written order is
+not a claim about the music, and diff compares them by content alone. A `Diff`
+carries both the ranked-pair disagreements and, separately, any Unranked sites
+where cross-track events prevented a comparison the rule could not give; Unranked
+sites are reported for transparency but are not differences, and do not affect
+`is_empty()`.
+
+The option already considered and refused — normalising a Take's event order on
+read — remains refused. That changes the events; this reads their order. Reading
+an order the file states is not the same as rewriting it, and ADR-0003's
+guarantee ("same events in the same order") is intact: a round-trip through
+`apply` produces the same events in the same order, whether or not `diff` has
+compared those events' Ranks against another Take's.
