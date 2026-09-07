@@ -68,7 +68,7 @@ times again at the end from the Ticks.
 
 What the paragraph above was protecting survives intact, and is what the
 round-trip assertion still tests: an event no Edit named keeps the Tick it
-arrived with, its content, and its order relative to every other event that
+arrived with, its content, and its Rank relative to every other event that
 stayed put — so a track nothing touched re-encodes to exactly the events it came
 in as. What has gone is the *means*. Read "reaches the event it names and leaves
 the rest of the parsed Take untouched" as the promise it was making rather than
@@ -78,3 +78,11 @@ The option rejected above is untouched and still rejected. This rebuilds a track
 *event list*, out of that track's own events, and never a Take out of its notes.
 Every event the note model does not carry is still carried through, because it was
 never taken out in the first place.
+
+## Amended: the third quantity has a name
+
+This record said *order* where `CONTEXT.md` now says **Rank** — where an event
+falls among the events sharing its Tick. Nothing it claims has changed; the word
+had to, because `order` is spent loosely across this repository and cannot also
+be a term. ADR-0008 is what named it, and states the rule this record has always
+depended on: what an event's Rank is, and who decides it.

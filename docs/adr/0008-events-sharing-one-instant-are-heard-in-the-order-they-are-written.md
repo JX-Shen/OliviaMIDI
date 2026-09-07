@@ -59,8 +59,12 @@ more than a table that is right more often.
 
 **One rule, applied in one place.** A branch that adds an event says what kind
 of thing it is placing; it does not choose a number. The placement is decided
-once, when the track is re-encoded — which it must be, because an Edit that runs
-later can still move a note onto the Tick in question.
+where the Edit runs, against the Tick as it stands then — and that is enough,
+which is not obvious. An Edit running later can still carry a note onto the same
+Tick, but a strike is placed behind everything already there, so it arrives
+behind anything an earlier Edit put in front of the strikes. The one case that
+could have forced the decision to be deferred to re-encoding is closed by the
+rule for strikes, not by timing.
 
 **Every lookup asks the same question the rule answers.** Where a Take states
 one thing twice at an address, *the one in force* means the last by Rank. A
