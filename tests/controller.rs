@@ -940,21 +940,94 @@ fn a_statement_carried_in_behind_a_strike_is_re_placed_by_a_set() {
 }
 
 /// A Controller moved onto a Tick that still states its address lands after that
-/// statement, and is the one in force there.
+/// statement and in front of the strikes, and is the one in force there.
 ///
-/// Clause 1, and the clause that is invisible until a duplicate survives the
-/// move. `move_controller` takes over from the statement in force at its
-/// destination and leaves the other where it is, so a destination stating the
-/// address twice still states it once when the mover arrives. Placed by clause 2
-/// alone, the mover would go in front of the first strike — and in a Take whose
-/// surviving statement is written *behind* that strike, in front of the
-/// survivor too, which would leave the channel holding the value the Edit Set
-/// did not ask for. That is #19 with a new cause.
+/// The clause that is invisible until a duplicate survives the move.
+/// `move_controller` takes over from the statement in force at its destination
+/// and leaves the other where it is, so a destination stating the address twice
+/// still states it once when the mover arrives. That is #19 with a new cause.
+///
+/// The destination writes both statements *in front of* its strike, so clause 2
+/// has a strike to search forward to and the mover is placed by it rather than
+/// by clause 3. What that costs is clause 1: "immediately before the strike" is
+/// already past every Rank below the strike, the survivor's included, so the
+/// answer here is the same with clause 1 and without it. The sibling below is
+/// where clause 1 is load bearing, and the two fixtures are the same Take
+/// written in the two orders on purpose. See #41.
 #[test]
 fn a_move_onto_a_surviving_duplicate_lands_after_it() {
     let dir = tempfile::tempdir().expect("temp dir");
     let take = common::build_take_setting(
         &dir.path().join("survivor.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[
+            common::strike(0, 69),
+            common::release(480, 69),
+            common::control_change(240, 11, 99),
+            common::control_change(960, 11, 30),
+            common::control_change(960, 11, 40),
+            common::strike(960, 71),
+            common::release(1440, 71),
+        ],
+        &[],
+    );
+    let output = dir.path().join("out.mid");
+    let edits = common::edit_set(
+        dir.path(),
+        "carry-it",
+        r#"{"kind": "move_controller", "track": 1, "channel": 0, "controller": 11, "tick": 240, "delta_ticks": 720}"#,
+    );
+
+    common::mid()
+        .arg("apply")
+        .arg(&take)
+        .arg(&edits)
+        .arg("--output")
+        .arg(&output)
+        .assert()
+        .success();
+
+    assert_eq!(
+        stated_controller(&output, 1, 0, 11, 960),
+        vec![30, 99],
+        "the 40 was in force and gave way; the mover has to outrank the 30 that \
+         stayed, or the channel holds 30 where the Edit Set asked for 99"
+    );
+    assert_eq!(
+        common::events_of_track(&output, 1),
+        vec![
+            (0, "strikes"),
+            (480, "releases"),
+            (960, "controller"),
+            (960, "controller"),
+            (960, "strikes"),
+            (1440, "releases"),
+        ],
+        "clause 2 has a strike to search forward to, and the mover goes in \
+         front of it rather than at the end of the Tick"
+    );
+}
+
+/// The same move onto the same Tick, written with the survivor *behind* the
+/// strike: the mover still lands after the survivor, at the end of the Tick.
+///
+/// Clause 1, and the only place it is load bearing. Here the strike is in front
+/// of the surviving statement, so clause 1's position is past it and clause 2
+/// finds no strike beyond that — the search hands off to clause 3, and the
+/// mover goes last, which is after the survivor. Without clause 1 there is
+/// nothing to filter the strike out, clause 2 puts the mover in front of it and
+/// therefore in front of the survivor, and the channel holds the 30 the Edit
+/// Set did not ask for. That is the defect #19 was, reached by a different
+/// route.
+///
+/// Nothing else in the suite fails when clause 1 is removed, which is why this
+/// exists as a second fixture rather than as a rewrite of the first. See #41.
+#[test]
+fn a_move_onto_a_survivor_written_behind_a_strike_lands_after_it_too() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_setting(
+        &dir.path().join("survivor-behind.mid"),
         480,
         &[(0, 3, 4)],
         &[
@@ -987,8 +1060,21 @@ fn a_move_onto_a_surviving_duplicate_lands_after_it() {
     assert_eq!(
         stated_controller(&output, 1, 0, 11, 960),
         vec![30, 99],
-        "the 40 was in force and gave way; the mover has to outrank the 30 that \
-         stayed, or the channel holds 30 where the Edit Set asked for 99"
+        "the mover has to outrank the 30 that stayed, or the channel holds 30 \
+         where the Edit Set asked for 99"
+    );
+    assert_eq!(
+        common::events_of_track(&output, 1),
+        vec![
+            (0, "strikes"),
+            (480, "releases"),
+            (960, "strikes"),
+            (960, "controller"),
+            (960, "controller"),
+            (1440, "releases"),
+        ],
+        "clause 1 puts the mover past the survivor, which is past the strike, \
+         so clause 2 has nothing left to search and clause 3 answers"
     );
 }
 
@@ -999,6 +1085,14 @@ fn a_move_onto_a_surviving_duplicate_lands_after_it() {
 /// strikes two notes of channel 1 at Tick 960 of track 2 and none of channel 2,
 /// so there is no strike for the state to go in front of. It goes last, where a
 /// synthesiser meets it having met everything else that instant.
+///
+/// It is also the only place the channel scoping in clause 2 is visible.
+/// Everywhere else the suite strikes one channel, where scoped and unscoped
+/// give the same answer; here they do not, because dropping the channel filter
+/// makes those two channel-1 strikes count and the state lands in front of them
+/// instead of last. #41 read this test as guarding nothing and it guards two
+/// things — the position clause 3 gives, and whose notes clause 2 is looking
+/// for. Both are load bearing, shown by mutation.
 #[test]
 fn a_tick_that_strikes_nothing_on_the_channel_takes_the_state_at_its_end() {
     let dir = tempfile::tempdir().expect("temp dir");

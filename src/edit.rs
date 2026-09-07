@@ -2,7 +2,7 @@ use crate::controller::FIRST_CHANNEL_MODE;
 use crate::error::{Error, Result};
 use crate::note::{Note, NoteId};
 use crate::take::Take;
-use crate::track::{ChannelState, Placement, Rewrite, Statement};
+use crate::track::{Placement, Rewrite, Statement};
 use midly::num::{u4, u7};
 use midly::{MidiMessage, TrackEventKind};
 use serde::Deserialize;
@@ -828,10 +828,7 @@ fn set_program(tracks: &mut [Rewrite], new: NewProgram) -> Result<()> {
     let tick = u32::try_from(new.tick).map_err(|_| Error::ProgramTickOutOfRange(new.tick))?;
 
     let track = &mut tracks[index];
-    let placement = Placement::State(Statement {
-        channel,
-        state: ChannelState::Program,
-    });
+    let placement = Placement::State(Statement::program(channel));
     match track.program_at(channel, tick) {
         Some(statement) => {
             // `program_at` found a program change, so the setter cannot decline
@@ -883,10 +880,7 @@ fn state_controller(tracks: &mut [Rewrite], new: NewController) -> Result<()> {
     let value = midi_value(new.value, 127).ok_or(Error::ControllerValueOutOfRange(new.value))?;
 
     let track = &mut tracks[index];
-    let placement = Placement::State(Statement {
-        channel,
-        state: ChannelState::Controller(controller),
-    });
+    let placement = Placement::State(Statement::controller(channel, controller));
     match track.controller_at(channel, controller, tick) {
         Some(held) => {
             // `controller_at` found a control change, so the setter cannot
@@ -964,10 +958,7 @@ fn change_controller(
             track.set_tick(named.event, moved);
             track.place_again(
                 named.event,
-                Placement::State(Statement {
-                    channel: stated.channel,
-                    state: ChannelState::Controller(stated.controller),
-                }),
+                Placement::State(Statement::controller(stated.channel, stated.controller)),
             );
         }
     }

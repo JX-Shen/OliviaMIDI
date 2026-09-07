@@ -88,9 +88,9 @@ use std::path::PathBuf;
 /// was already there — and where the Take states an address twice, the value the
 /// Edit asked for is the one left in force.
 ///
-/// Every event no Edit named or landed on keeps the Tick, the content, and the
-/// Rank — its place among the events sharing its Tick — relative to every event
-/// that stayed put, that it arrived with.
+/// Every event no Edit named or landed on keeps the Tick it arrived with, its
+/// content, and its Rank — its place among the events sharing its Tick —
+/// relative to every other event that stayed put.
 ///
 /// The limit, which is stated rather than hidden: where a track writes a release
 /// behind a strike at one Tick, the position above falls before that release, so

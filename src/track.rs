@@ -131,6 +131,29 @@ impl ChannelState {
 }
 
 impl Statement {
+    /// The address a channel's Program is stated at.
+    pub(crate) fn program(channel: u8) -> Self {
+        Statement {
+            channel,
+            state: ChannelState::Program,
+        }
+    }
+
+    /// The address one Controller of a channel is stated at.
+    pub(crate) fn controller(channel: u8, number: u8) -> Self {
+        Statement {
+            channel,
+            state: ChannelState::Controller(number),
+        }
+    }
+
+    /// Whether this event strikes a note this statement governs: a strike of
+    /// its own channel. The address is not asked about — a Program and a
+    /// Controller are both set for the same notes.
+    fn governs(self, kind: &TrackEventKind) -> bool {
+        strikes(kind, self.channel)
+    }
+
     /// Whether this event states exactly this address.
     fn is_stated_by(self, kind: &TrackEventKind) -> bool {
         let TrackEventKind::Midi {
@@ -280,13 +303,7 @@ impl<'a> Rewrite<'a> {
     /// answers "which of these was written first", not "which is in force" —
     /// the two agree only while nothing has been re-placed. See #24.
     pub(crate) fn program_at(&self, channel: u8, tick: u32) -> Option<usize> {
-        self.in_force_at(
-            tick,
-            Statement {
-                channel,
-                state: ChannelState::Program,
-            },
-        )
+        self.in_force_at(tick, Statement::program(channel))
     }
 
     /// Put a program change on another Program, reporting the one it carried.
@@ -320,13 +337,7 @@ impl<'a> Rewrite<'a> {
     /// moment — the mover keeps the slot index it arrived with, which need not
     /// be the highest of the two. See #24.
     pub(crate) fn controller_at(&self, channel: u8, controller: u8, tick: u32) -> Option<usize> {
-        self.in_force_at(
-            tick,
-            Statement {
-                channel,
-                state: ChannelState::Controller(controller),
-            },
-        )
+        self.in_force_at(tick, Statement::controller(channel, controller))
     }
 
     /// The alive slot stating this channel state at this Tick, last by Rank —
@@ -436,11 +447,10 @@ impl<'a> Rewrite<'a> {
     /// answer — for as many placements at one position as `RANK_SPACING` leaves
     /// room for.
     pub(crate) fn place_again(&mut self, index: usize, placement: Placement) {
-        let tick = self.slots[index].tick;
         let rank = match placement {
-            Placement::Strike => self.after_everything(index, tick),
-            Placement::Release => self.before_everything(index, tick),
-            Placement::State(statement) => self.before_the_strikes(index, tick, statement),
+            Placement::Strike => self.after_everything(index),
+            Placement::Release => self.before_everything(index),
+            Placement::State(statement) => self.before_the_strikes(index, statement),
         };
         self.slots[index].rank = rank;
         self.wrote(index);
@@ -463,7 +473,12 @@ impl<'a> Rewrite<'a> {
     /// Never the slot itself: it is alive and at that Tick already, carrying the
     /// stale Rank this placement is about to replace, and counting it would let
     /// an event be placed relative to where it used to be.
-    fn sharing(&self, placing: usize, tick: u32) -> impl Iterator<Item = &Slot<'a>> + '_ {
+    ///
+    /// The Tick is read here rather than asked for. Every caller was passing
+    /// the placed slot's own — an argument that cannot disagree with its
+    /// sibling and would be a defect if it ever did. See #41.
+    fn sharing(&self, placing: usize) -> impl Iterator<Item = &Slot<'a>> + '_ {
+        let tick = self.slots[placing].tick;
         self.slots
             .iter()
             .enumerate()
@@ -472,16 +487,16 @@ impl<'a> Rewrite<'a> {
     }
 
     /// Behind every event already at the Tick.
-    fn after_everything(&self, placing: usize, tick: u32) -> i64 {
-        self.sharing(placing, tick)
+    fn after_everything(&self, placing: usize) -> i64 {
+        self.sharing(placing)
             .map(|slot| slot.rank)
             .max()
             .map_or(0, |last| last + RANK_SPACING)
     }
 
     /// In front of every event already at the Tick.
-    fn before_everything(&self, placing: usize, tick: u32) -> i64 {
-        self.sharing(placing, tick)
+    fn before_everything(&self, placing: usize) -> i64 {
+        self.sharing(placing)
             .map(|slot| slot.rank)
             .min()
             .map_or(0, |first| first - RANK_SPACING)
@@ -493,13 +508,13 @@ impl<'a> Rewrite<'a> {
     /// these are the three clauses #20 settled from it. Each is load bearing,
     /// and `mid apply --help` states all three so that an agent can predict a
     /// placement rather than discover it.
-    fn before_the_strikes(&self, placing: usize, tick: u32, statement: Statement) -> i64 {
+    fn before_the_strikes(&self, placing: usize, statement: Statement) -> i64 {
         // 1. After every other statement of its own address that remains here.
         //    Without this, a statement moved onto a Tick that already states its
         //    address can land behind the one it was meant to replace, and the
         //    Edit's value is not the one in force.
         let after = self
-            .sharing(placing, tick)
+            .sharing(placing)
             .filter(|slot| statement.is_stated_by(&slot.kind))
             .map(|slot| slot.rank)
             .max();
@@ -508,8 +523,8 @@ impl<'a> Rewrite<'a> {
         //    forward from clause 1 is what keeps the two from contradicting each
         //    other: clause 1 fixes a position, clause 2 searches on from it.
         let strike = self
-            .sharing(placing, tick)
-            .filter(|slot| strikes(&slot.kind, statement.channel))
+            .sharing(placing)
+            .filter(|slot| statement.governs(&slot.kind))
             .map(|slot| slot.rank)
             .filter(|rank| after.is_none_or(|already| *rank > already))
             .min();
@@ -517,13 +532,13 @@ impl<'a> Rewrite<'a> {
         //    this the placement is undefined wherever a Tick strikes nothing on
         //    the channel.
         let Some(strike) = strike else {
-            return self.after_everything(placing, tick);
+            return self.after_everything(placing);
         };
         // "Immediately before" is past everything that strike is already behind,
         // which is also what keeps several placed here in the order the Edit Set
         // asked for: each one becomes the last the next has to clear. A Rank is
         // free there because `RANK_SPACING` leaves room between any two.
-        self.sharing(placing, tick)
+        self.sharing(placing)
             .map(|slot| slot.rank)
             .filter(|rank| *rank < strike)
             .max()
@@ -592,7 +607,7 @@ impl<'a> Rewrite<'a> {
         let Some((channel, pitch)) = released(&slot.kind) else {
             return Ok(());
         };
-        for behind in self.sharing(index, slot.tick) {
+        for behind in self.sharing(index) {
             if behind.rank < slot.rank
                 && strikes(&behind.kind, channel)
                 && key(&behind.kind) == Some(pitch)
@@ -623,13 +638,13 @@ impl<'a> Rewrite<'a> {
         statement: Statement,
     ) -> Result<()> {
         let governs_from = self
-            .sharing(index, slot.tick)
+            .sharing(index)
             .filter(|other| other.rank < slot.rank && statement.is_stated_by(&other.kind))
             .map(|other| other.rank)
             .max();
-        for behind in self.sharing(index, slot.tick) {
+        for behind in self.sharing(index) {
             if behind.rank < slot.rank
-                && strikes(&behind.kind, statement.channel)
+                && statement.governs(&behind.kind)
                 && governs_from.is_none_or(|from| behind.rank > from)
             {
                 return Err(Error::StateBehindItsStrikes {
@@ -669,7 +684,7 @@ impl<'a> Rewrite<'a> {
                 continue;
             }
             if later.rank > slot.rank
-                || self.strikes_between(index, slot.tick, statement.channel, later.rank, slot.rank)
+                || self.strikes_between(index, statement.channel, later.rank, slot.rank)
             {
                 continue;
             }
@@ -685,8 +700,8 @@ impl<'a> Rewrite<'a> {
     }
 
     /// Whether a strike of this channel falls between two Ranks at a Tick.
-    fn strikes_between(&self, placing: usize, tick: u32, channel: u8, low: i64, high: i64) -> bool {
-        self.sharing(placing, tick)
+    fn strikes_between(&self, placing: usize, channel: u8, low: i64, high: i64) -> bool {
+        self.sharing(placing)
             .any(|slot| slot.rank > low && slot.rank < high && strikes(&slot.kind, channel))
     }
 
@@ -971,10 +986,7 @@ mod tests {
 
     /// The address a control change on channel 0 states.
     fn holding(number: u8) -> Placement {
-        Placement::State(Statement {
-            channel: 0,
-            state: ChannelState::Controller(number),
-        })
+        Placement::State(Statement::controller(0, number))
     }
 
     /// #25's defect, in the smallest shape that produces it: a release carried

@@ -495,8 +495,21 @@ pub fn build_take_with_controllers(
 /// *behind* a strike cannot be asked for that way. These hand the whole voice
 /// track to `build_take_setting` in the order it is to be written in, which is
 /// stable through that builder's sort.
+///
+/// All four are on channel 0, which is where a test that is not about channels
+/// wants them. `strike_on` is for the one that is: a Tick holding a strike of
+/// another channel is the only place the channel scoping in clause 2 of the
+/// placement rule is visible, because everywhere else scoped and unscoped give
+/// the same answer.
 pub fn strike(tick: u32, key: u8) -> (u32, midly::TrackEventKind<'static>) {
-    on_channel_zero(
+    strike_on(0, tick, key)
+}
+
+/// A strike of a named channel, for a test about which channel's notes a state
+/// event is placed for.
+pub fn strike_on(channel: u8, tick: u32, key: u8) -> (u32, midly::TrackEventKind<'static>) {
+    on_channel(
+        channel,
         tick,
         midly::MidiMessage::NoteOn {
             key: midly::num::u7::new(key),
@@ -505,8 +518,16 @@ pub fn strike(tick: u32, key: u8) -> (u32, midly::TrackEventKind<'static>) {
     )
 }
 
+/// A release, spelled as a note-off. `a_note_on_at_velocity_zero_is_a_release`
+/// covers the format's other spelling, which `fixtures/stacked.mid` carries.
 pub fn release(tick: u32, key: u8) -> (u32, midly::TrackEventKind<'static>) {
-    on_channel_zero(
+    release_on(0, tick, key)
+}
+
+/// A release of a named channel. See `strike_on`.
+pub fn release_on(channel: u8, tick: u32, key: u8) -> (u32, midly::TrackEventKind<'static>) {
+    on_channel(
+        channel,
         tick,
         midly::MidiMessage::NoteOff {
             key: midly::num::u7::new(key),
@@ -515,12 +536,14 @@ pub fn release(tick: u32, key: u8) -> (u32, midly::TrackEventKind<'static>) {
     )
 }
 
+/// A statement of what a Controller holds, written where the test puts it.
 pub fn control_change(
     tick: u32,
     controller: u8,
     value: u8,
 ) -> (u32, midly::TrackEventKind<'static>) {
-    on_channel_zero(
+    on_channel(
+        0,
         tick,
         midly::MidiMessage::Controller {
             controller: midly::num::u7::new(controller),
@@ -529,8 +552,10 @@ pub fn control_change(
     )
 }
 
+/// A statement of what a channel is on, written where the test puts it.
 pub fn program_change(tick: u32, program: u8) -> (u32, midly::TrackEventKind<'static>) {
-    on_channel_zero(
+    on_channel(
+        0,
         tick,
         midly::MidiMessage::ProgramChange {
             program: midly::num::u7::new(program),
@@ -538,14 +563,15 @@ pub fn program_change(tick: u32, program: u8) -> (u32, midly::TrackEventKind<'st
     )
 }
 
-fn on_channel_zero(
+fn on_channel(
+    channel: u8,
     tick: u32,
     message: midly::MidiMessage,
 ) -> (u32, midly::TrackEventKind<'static>) {
     (
         tick,
         midly::TrackEventKind::Midi {
-            channel: midly::num::u4::new(0),
+            channel: midly::num::u4::new(channel),
             message,
         },
     )
