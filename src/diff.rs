@@ -3,7 +3,7 @@ use crate::error::{Error, Result};
 use crate::note::{Note, NoteId};
 use crate::program::StatedProgram;
 use crate::rank::{RankDisagreement, UnrankedSite};
-use crate::take::Take;
+use crate::take::{Take, Tempo};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -48,6 +48,96 @@ pub struct Diff {
     /// reason `tolerance_ticks` is: a reader told two Takes agree about ordering
     /// is owed the sites where the question could not be put.
     pub unranked_sites: Vec<UnrankedSite>,
+    /// Where the two Takes are at different tempos. Read the same way, and
+    /// added for the same reason: until it existed, a Take whose only change was
+    /// its tempo made `is_empty` true, so `mid diff` printed "no differences"
+    /// and exited 0 about two Takes nobody would mistake for each other by ear.
+    /// See #32.
+    pub tempos: Vec<TempoDifference>,
+
+    /// Where the two Takes bend a channel differently. The state ADR-0007's
+    /// Consequences name as the next one to join, joining. Same hole as tempo
+    /// until it existed.
+    pub bends: Vec<BendDifference>,
+}
+
+/// One stretch of the Piece and what tempo each Take is at across it.
+///
+/// A span rather than a row per statement, for the reason a Controller
+/// difference is one: an accelerando is written as a run of tempo statements,
+/// and reporting forty of them as forty differences is the failure ADR-0007
+/// exists to prevent. `from` and `until` read as a half-open stretch, `None`
+/// where the two never agree again.
+///
+/// No channel, because tempo has none: one tempo governs the whole Take.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct TempoDifference {
+    pub from: u32,
+    pub until: Option<u32>,
+    pub before: TempoSide,
+    pub after: TempoSide,
+}
+
+/// What one Take is doing with the tempo across a span: at its start, at its
+/// end, and the extremes it reaches anywhere in it.
+///
+/// Both extremes, where `ControllerSide` carries only a peak. A Controller runs
+/// from nought upwards, so *the highest* is the whole of what a reader wants;
+/// a tempo has no such floor, and a span whose two sides agree at both ends
+/// would otherwise print two identical readings under a row asserting they
+/// differ. Named in the music's terms rather than the file's — `fastest` is the
+/// *smallest* number of microseconds per quarter note, and a field called
+/// `lowest` would be read as the opposite of what it holds.
+///
+/// Every field is optional together, because a Take may state no tempo at all
+/// across the span — the case a Take stating 120 must never be confused with.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct TempoSide {
+    pub at_start: Option<Tempo>,
+    pub at_end: Option<Tempo>,
+    pub fastest: Option<Tempo>,
+    pub fastest_at: Option<u32>,
+    pub slowest: Option<Tempo>,
+    pub slowest_at: Option<u32>,
+}
+
+/// One channel, one stretch of the Piece, and how far each Take bends it there.
+///
+/// The Controller span shape, for the state that is not a Controller. See
+/// `BendSide` for what each side carries and `StatedBend::value` for what the
+/// numbers mean.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct BendDifference {
+    pub channel: u8,
+    pub from: u32,
+    pub until: Option<u32>,
+    pub before: BendSide,
+    pub after: BendSide,
+}
+
+/// How far one Take bends one channel across a span: at its start, at its end,
+/// and the furthest each way anywhere in it.
+///
+/// Both directions, and here it is not a refinement but the only reading that
+/// works. A span opens where the two Takes first differ, so `at_start` always
+/// differs and always reveals *something*; what the extremes answer for is the
+/// rest of the span. A bend is signed about a centre MIDI fixes, so a phrase
+/// that dips below the note and returns never rises above where it began: a
+/// single *peak* is equal to `at_start` for the whole of it and prints nothing,
+/// and a span that opens on a difference of one unit reads as one unit while
+/// containing a dive of four thousand. That is the reading this prevents.
+///
+/// Nought is a real value and is not `None`. A channel bent back to the centre
+/// and a channel never bent are two different Pieces, the same distinction
+/// `ControllerSide` draws between holding 0 and holding nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct BendSide {
+    pub at_start: Option<i16>,
+    pub at_end: Option<i16>,
+    pub furthest_down: Option<i16>,
+    pub furthest_down_at: Option<u32>,
+    pub furthest_up: Option<i16>,
+    pub furthest_up_at: Option<u32>,
 }
 
 /// One Controller, one stretch of the Piece, and what each Take holds for it
@@ -153,6 +243,8 @@ impl Diff {
             && self.programs.is_empty()
             && self.controllers.is_empty()
             && self.rank_disagreements.is_empty()
+            && self.tempos.is_empty()
+            && self.bends.is_empty()
     }
 }
 
@@ -310,7 +402,236 @@ pub fn diff(before: &Take, after: &Take, tolerance: Option<u32>) -> Result<Diff>
         controllers: controller_differences(before, after)?,
         rank_disagreements,
         unranked_sites,
+        tempos: tempo_differences(before, after)?,
+        bends: bend_differences(before, after)?,
     })
+}
+
+/// One stretch two readings of one state disagree over, each side read as
+/// scalars.
+///
+/// `Stretch` and the two functions below it are the state comparison ADR-0007
+/// asks for, with the state itself taken out: what is left is one algorithm over
+/// a list of `(Tick, number)` pairs, which is what a Program, a Controller, a
+/// tempo and a bend all reduce to. `i64` holds every one of them — a Controller's
+/// seven bits, a bend's signed fourteen, a tempo's microseconds — so no caller
+/// has to widen or lose anything to be compared here.
+///
+/// `controller_differences` predates this and still has its own copy of the
+/// algorithm. Moving it over would mean either renaming its shipped `peak`
+/// field or reading `highest` back into it, and #29's compatibility constraint
+/// says not this release.
+struct Stretch {
+    from: u32,
+    until: Option<u32>,
+    before: Reading,
+    after: Reading,
+}
+
+/// One Take's reading of one stretch: the value in force at each end, and the
+/// extremes it reaches inside, each with the Tick it is first reached at.
+struct Reading {
+    at_start: Option<i64>,
+    at_end: Option<i64>,
+    lowest: Option<(i64, u32)>,
+    highest: Option<(i64, u32)>,
+}
+
+/// Every stretch two readings of one state disagree over.
+///
+/// Compared at every Tick either reading says anything, plus Tick 0, because a
+/// Take that opens holding a value and one that holds nothing differ from the
+/// first note. A run of moments that disagree collapses into the one span that
+/// states it, and `until` is the Tick they agree again rather than the last one
+/// they were apart — half-open, as `ControllerDifference` documents.
+///
+/// Each list must be sorted by Tick, with the last statement at a Tick the one
+/// in force there. Every `stated_*` reading on `Take` fixes that.
+fn stretches(before: &[(u32, i64)], after: &[(u32, i64)]) -> Vec<Stretch> {
+    let mut moments: Vec<u32> = std::iter::once(0)
+        .chain(before.iter().chain(after.iter()).map(|&(tick, _)| tick))
+        .collect();
+    moments.sort_unstable();
+    moments.dedup();
+
+    let mut found = Vec::new();
+    let mut open: Option<u32> = None;
+    for &at in &moments {
+        let differs = scalar_in_force(before, at) != scalar_in_force(after, at);
+        match (open, differs) {
+            (None, true) => open = Some(at),
+            (Some(from), false) => {
+                found.push(Stretch {
+                    from,
+                    until: Some(at),
+                    before: reading(before, from, Some(at), &moments),
+                    after: reading(after, from, Some(at), &moments),
+                });
+                open = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(from) = open {
+        found.push(Stretch {
+            from,
+            until: None,
+            before: reading(before, from, None, &moments),
+            after: reading(after, from, None, &moments),
+        });
+    }
+    found
+}
+
+/// What one reading holds across a stretch.
+///
+/// The extremes consider the value in force at `from` as well as everything
+/// stated inside: that value is in force during the stretch like any other, and
+/// a stretch the reading says nothing new in still holds something. Strictly
+/// beyond, so a value reached twice is reported at the first of the two — the
+/// rule `ControllerSide`'s peak already follows.
+fn reading(stated: &[(u32, i64)], from: u32, until: Option<u32>, moments: &[u32]) -> Reading {
+    let at_start = scalar_in_force(stated, from);
+    let last = moments
+        .iter()
+        .copied()
+        .rfind(|&at| until.map(|until| at < until).unwrap_or(true))
+        .unwrap_or(from);
+
+    let mut lowest = at_start.map(|value| (value, from));
+    let mut highest = lowest;
+    for &(tick, value) in stated
+        .iter()
+        .filter(|&&(tick, _)| from < tick && until.map(|until| tick < until).unwrap_or(true))
+    {
+        if lowest.map(|(low, _)| value < low).unwrap_or(true) {
+            lowest = Some((value, tick));
+        }
+        if highest.map(|(high, _)| value > high).unwrap_or(true) {
+            highest = Some((value, tick));
+        }
+    }
+
+    Reading {
+        at_start,
+        at_end: scalar_in_force(stated, last),
+        lowest,
+        highest,
+    }
+}
+
+/// The value in force at a Tick: the last thing said at or before it, in the
+/// order the list arrived in.
+fn scalar_in_force(stated: &[(u32, i64)], at: u32) -> Option<i64> {
+    stated
+        .iter()
+        .filter(|&&(tick, _)| tick <= at)
+        .map(|&(_, value)| value)
+        .next_back()
+}
+
+/// Where the two Takes are at different tempos.
+///
+/// One comparison rather than one per channel, because a tempo governs the whole
+/// Take: `stated_tempos` reads every statement wherever it was written, and the
+/// last at or before a moment is the one in force there.
+fn tempo_differences(before: &Take, after: &Take) -> Result<Vec<TempoDifference>> {
+    let scalars = |take: &Take| -> Result<Vec<(u32, i64)>> {
+        Ok(take
+            .stated_tempos()?
+            .into_iter()
+            .map(|stated| (stated.tick, i64::from(stated.tempo.micros_per_quarter)))
+            .collect())
+    };
+    let before_stated = scalars(before)?;
+    let after_stated = scalars(after)?;
+
+    // The extremes swap names on the way out. Fewer microseconds to the quarter
+    // note is a faster tempo, so the lowest number is the fastest reading —
+    // which is why `TempoSide` names them the way a musician would and this is
+    // the one place the inversion is written.
+    let side = |reading: Reading| TempoSide {
+        at_start: reading.at_start.map(as_tempo),
+        at_end: reading.at_end.map(as_tempo),
+        fastest: reading.lowest.map(|(micros, _)| as_tempo(micros)),
+        fastest_at: reading.lowest.map(|(_, tick)| tick),
+        slowest: reading.highest.map(|(micros, _)| as_tempo(micros)),
+        slowest_at: reading.highest.map(|(_, tick)| tick),
+    };
+
+    Ok(stretches(&before_stated, &after_stated)
+        .into_iter()
+        .map(|stretch| TempoDifference {
+            from: stretch.from,
+            until: stretch.until,
+            before: side(stretch.before),
+            after: side(stretch.after),
+        })
+        .collect())
+}
+
+/// A tempo back from the scalar it was compared as.
+///
+/// Every number here came out of `stated_tempos`, so it is a microseconds count
+/// that fitted a `u32` before it was widened, and fits one again.
+fn as_tempo(micros: i64) -> Tempo {
+    Tempo::from_micros_per_quarter(micros as u32)
+}
+
+/// Where the two Takes bend a channel differently.
+///
+/// Per channel, because a bend is channel state: bending one channel says
+/// nothing about any other. A channel neither Take ever bends cannot differ and
+/// is not considered.
+fn bend_differences(before: &Take, after: &Take) -> Result<Vec<BendDifference>> {
+    let before_stated = before.stated_bends()?;
+    let after_stated = after.stated_bends()?;
+
+    let mut channels: Vec<u8> = before_stated
+        .iter()
+        .chain(after_stated.iter())
+        .map(|stated| stated.channel)
+        .collect();
+    channels.sort_unstable();
+    channels.dedup();
+
+    let side = |reading: Reading| BendSide {
+        at_start: reading.at_start.map(as_bend),
+        at_end: reading.at_end.map(as_bend),
+        furthest_down: reading.lowest.map(|(value, _)| as_bend(value)),
+        furthest_down_at: reading.lowest.map(|(_, tick)| tick),
+        furthest_up: reading.highest.map(|(value, _)| as_bend(value)),
+        furthest_up_at: reading.highest.map(|(_, tick)| tick),
+    };
+
+    let mut differences = Vec::new();
+    for channel in channels {
+        let on = |stated: &[crate::bend::StatedBend]| -> Vec<(u32, i64)> {
+            stated
+                .iter()
+                .filter(|stated| stated.channel == channel)
+                .map(|stated| (stated.tick, i64::from(stated.value)))
+                .collect()
+        };
+        differences.extend(
+            stretches(&on(&before_stated), &on(&after_stated))
+                .into_iter()
+                .map(|stretch| BendDifference {
+                    channel,
+                    from: stretch.from,
+                    until: stretch.until,
+                    before: side(stretch.before),
+                    after: side(stretch.after),
+                }),
+        );
+    }
+    Ok(differences)
+}
+
+/// A bend back from the scalar it was compared as. `stated_bends` is where the
+/// number came from, and it is `midly`'s signed reading of fourteen bits.
+fn as_bend(value: i64) -> i16 {
+    value as i16
 }
 
 /// Where the two Takes have a channel on different Programs.

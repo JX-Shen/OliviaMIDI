@@ -18,8 +18,8 @@
 //! what this does.
 
 use battuta::{
-    BarLines, Controller, ControllerDifference, ControllerSide, Note, Program, ProgramDifference,
-    StatedController, StatedProgram,
+    BarLines, BendDifference, BendSide, Controller, ControllerDifference, ControllerSide, Note,
+    Program, ProgramDifference, StatedController, StatedProgram, TempoDifference, TempoSide,
 };
 
 /// Where a Tick is: musically if the Take says enough to tell, and in Ticks
@@ -347,9 +347,20 @@ pub fn stated_controller(lines: Option<BarLines>, stated: &StatedController) -> 
 /// says so in words rather than borrowing the last Tick either Take happens to
 /// hold, which would read as a moment the two came back together.
 pub fn controller_span(lines: Option<BarLines>, difference: &ControllerDifference) -> String {
-    match difference.until {
-        None => format!("{} onwards", at(lines, difference.from)),
-        Some(until) => format!("{} until {}", at(lines, difference.from), at(lines, until)),
+    span(lines, difference.from, difference.until)
+}
+
+/// Where a stretch of the Piece two Takes disagree over begins and ends.
+///
+/// One sentence for every state compared as a span — a Controller, a tempo, a
+/// bend — because a reader who has learnt to read one row has learnt to read
+/// all three, and three spellings of *until* would be three things to learn for
+/// nothing. `until` is exclusive, so a stretch that never closes reads
+/// *onwards* rather than naming a Tick it does not reach.
+pub fn span(lines: Option<BarLines>, from: u32, until: Option<u32>) -> String {
+    match until {
+        None => format!("{} onwards", at(lines, from)),
+        Some(until) => format!("{} until {}", at(lines, from), at(lines, until)),
     }
 }
 
@@ -376,6 +387,120 @@ pub fn controller_difference(
             }
             _ => value.to_string(),
         },
+    };
+    format!(
+        "{} -> {}",
+        side(before_lines, &difference.before),
+        side(after_lines, &difference.after)
+    )
+}
+
+/// What tempo the two Takes are at across a span: `120 -> 132`.
+///
+/// Beats per minute, because that is the number a musician holds and the one
+/// `mid info` already prints; the microseconds the file carries are in `--json`
+/// for anyone who needs them. Rounded to a whole beat where it is one, because a
+/// tempo written as 120 comes back as 120.000001 through the microseconds and a
+/// diff that says so is reporting the arithmetic rather than the Piece.
+///
+/// Where a side reaches a different tempo inside the span it says the extreme
+/// that moved furthest from where the span began — `120 (up to 144 at bar 6
+/// beat 1) -> 132`. Where it holds one tempo throughout, the clause is left off
+/// rather than restating the number beside it.
+///
+/// `unstated` on either side, in the same shape as the numbers, for the reason
+/// `program_difference` prints it: a Take that names no tempo is not a Take at
+/// 120.
+pub fn tempo_difference(
+    before_lines: Option<BarLines>,
+    after_lines: Option<BarLines>,
+    difference: &TempoDifference,
+) -> String {
+    let side = |lines, side: &TempoSide| match side.at_start {
+        None => "unstated".to_string(),
+        Some(start) => {
+            let excursion = [
+                (side.fastest, side.fastest_at, "up to"),
+                (side.slowest, side.slowest_at, "down to"),
+            ]
+            .into_iter()
+            .filter_map(|(reached, reached_at, verb)| match (reached, reached_at) {
+                (Some(reached), Some(reached_at))
+                    if reached.micros_per_quarter != start.micros_per_quarter =>
+                {
+                    Some((
+                        (reached.bpm - start.bpm).abs(),
+                        format!("{verb} {} at {}", bpm(reached.bpm), at(lines, reached_at)),
+                    ))
+                }
+                _ => None,
+            })
+            .max_by(|(one, _), (two, _)| one.total_cmp(two))
+            .map(|(_, said)| said);
+            match excursion {
+                Some(said) => format!("{} ({said})", bpm(start.bpm)),
+                None => bpm(start.bpm),
+            }
+        }
+    };
+    format!(
+        "{} -> {}",
+        side(before_lines, &difference.before),
+        side(after_lines, &difference.after)
+    )
+}
+
+/// A tempo as a musician says it. Whole beats where the file means whole beats:
+/// the microseconds a tempo is stored as do not divide evenly into a minute, so
+/// 120 arrives back as 120.00000000000001 and printing that would be reporting
+/// the encoding.
+fn bpm(bpm: f64) -> String {
+    if (bpm - bpm.round()).abs() < 0.005 {
+        format!("{}", bpm.round() as i64)
+    } else {
+        format!("{bpm:.2}")
+    }
+}
+
+/// How far the two Takes bend a channel across a span: `0 -> -2048`.
+///
+/// The raw signed number, not semitones. How many semitones a bend is worth is
+/// the synthesiser's bend range and is not in the file, so naming semitones here
+/// would be reporting a Rig fact as a Piece one. `0` is the centre and is a
+/// value: a channel bent back to nought is not a channel never bent, which is
+/// what `unstated` says.
+///
+/// Where a side goes further inside the span it says the furthest excursion from
+/// where the span began — `0 (down to -4096 at bar 6 beat 1) -> -2048`. Both
+/// directions are considered, which is the whole reason `BendSide` carries two:
+/// a dip below the centre is invisible to anything looking for a peak.
+pub fn bend_difference(
+    before_lines: Option<BarLines>,
+    after_lines: Option<BarLines>,
+    difference: &BendDifference,
+) -> String {
+    let side = |lines, side: &BendSide| match side.at_start {
+        None => "unstated".to_string(),
+        Some(start) => {
+            let excursion = [
+                (side.furthest_up, side.furthest_up_at, "up to"),
+                (side.furthest_down, side.furthest_down_at, "down to"),
+            ]
+            .into_iter()
+            .filter_map(|(reached, reached_at, verb)| match (reached, reached_at) {
+                (Some(reached), Some(reached_at)) if reached != start => Some((
+                    reached.abs_diff(start),
+                    format!("{verb} {reached} at {}", at(lines, reached_at)),
+                )),
+                _ => None,
+            })
+            .max_by_key(|&(distance, _)| distance)
+            .map(|(_, said)| said);
+            match excursion {
+                Some(said) => format!("{start} ({said})"),
+                None => start.to_string(),
+            }
+        }
     };
     format!(
         "{} -> {}",

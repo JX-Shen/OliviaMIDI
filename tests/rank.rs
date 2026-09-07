@@ -365,11 +365,16 @@ fn the_two_new_payload_fields_are_additive() {
         keys,
         vec![
             "added",
+            // #32's two, which joined the inventory the same way and are
+            // asserted here for the same reason: this list is the whole of the
+            // payload, so a field added anywhere has to be added here too.
+            "bends",
             "changed",
             "controllers",
             "programs",
             "rank_disagreements",
             "removed",
+            "tempos",
             "tolerance_ticks",
             "unranked_sites",
         ]

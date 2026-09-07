@@ -553,7 +553,13 @@ pub fn control_change(
 }
 
 /// A statement of what a channel is on, written where the test puts it.
-/// A tempo, in the MIDI meta event's own units: microseconds to the quarter.
+/// A tempo statement, in microseconds per quarter note — 500000 is 120 to the
+/// minute, 428571 is 140.
+///
+/// A meta event rather than a channel one, so it carries no channel: one tempo
+/// governs the whole Take from where it is stated. `build_take_setting` already
+/// puts 120 at Tick 0 on the conductor track, so a Take built with these states
+/// 120 first and then whatever they say.
 pub fn tempo(tick: u32, micros_per_quarter: u32) -> (u32, midly::TrackEventKind<'static>) {
     (
         tick,
@@ -570,6 +576,10 @@ pub fn pitch_bend(tick: u32, value: i16) -> (u32, midly::TrackEventKind<'static>
 }
 
 /// The same, on whichever channel the test names.
+///
+/// A bend is channel state, so which channel it is on is part of the fact — and
+/// every other builder here routes through channel 0, which left "the diff finds
+/// a bend wherever it is" unreachable from this suite.
 pub fn pitch_bend_on(channel: u8, tick: u32, value: i16) -> (u32, midly::TrackEventKind<'static>) {
     (
         tick,

@@ -628,3 +628,252 @@ fn says_when_two_takes_differ_in_nothing() {
         "no differences\n"
     );
 }
+
+/// A Take with a bar of notes and whatever else the test puts on its voice
+/// track, so that a comparison can be about one state and nothing else.
+///
+/// 480 Ticks to the quarter note and 4/4 throughout, which makes Bar 2 Tick
+/// 1920 and every position in these tests readable. `build_take_setting`
+/// already states 120 to the minute at Tick 0, so two Takes built this way
+/// agree about the tempo until one of them says otherwise.
+fn stating(dir: &Path, name: &str, setting: &[(u32, midly::TrackEventKind<'static>)]) -> PathBuf {
+    common::build_take_setting(
+        &dir.join(format!("{name}.mid")),
+        480,
+        &[(0, 4, 4)],
+        setting,
+        &[
+            (0, 480, 60),
+            (480, 480, 62),
+            (960, 480, 64),
+            (1440, 480, 65),
+        ],
+    )
+}
+
+/// Every note-level list of a diff, so a test about one state can say that the
+/// notes are not what it found.
+fn notes_agree(diff: &Value) {
+    assert!(list(diff, "added").is_empty(), "added: {:?}", diff["added"]);
+    assert!(
+        list(diff, "removed").is_empty(),
+        "removed: {:?}",
+        diff["removed"]
+    );
+    assert!(
+        list(diff, "changed").is_empty(),
+        "changed: {:?}",
+        diff["changed"]
+    );
+}
+
+/// The hole #32 names: until tempo was compared, `mid diff` answered "no
+/// differences" and exited 0 about two Takes at different tempos.
+#[test]
+fn a_tempo_only_change_is_a_difference() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = stating(dir.path(), "before", &[]);
+    let after = stating(dir.path(), "after", &[common::tempo(1920, 428_571)]);
+
+    let diff = diff_json(&before, &after, None);
+    notes_agree(&diff);
+    let tempos = list(&diff, "tempos");
+    assert_eq!(tempos.len(), 1, "tempos: {tempos:?}");
+    assert_eq!(tempos[0]["from"], 1920);
+    assert_eq!(tempos[0]["until"], Value::Null);
+    assert_eq!(
+        tempos[0]["before"]["at_start"]["micros_per_quarter"],
+        500_000
+    );
+    assert_eq!(
+        tempos[0]["after"]["at_start"]["micros_per_quarter"],
+        428_571
+    );
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path")
+        ]),
+        "tempo  bar 2 beat 1 onwards  120 -> 140\n"
+    );
+}
+
+/// The same hole for the other state ADR-0007's Consequences name.
+#[test]
+fn a_pitch_bend_only_change_is_a_difference() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = stating(dir.path(), "before", &[common::pitch_bend(960, 0)]);
+    let after = stating(dir.path(), "after", &[common::pitch_bend(960, -2048)]);
+
+    let diff = diff_json(&before, &after, None);
+    notes_agree(&diff);
+    let bends = list(&diff, "bends");
+    assert_eq!(bends.len(), 1, "bends: {bends:?}");
+    assert_eq!(bends[0]["channel"], 0);
+    assert_eq!(bends[0]["from"], 960);
+    assert_eq!(bends[0]["before"]["at_start"], 0);
+    assert_eq!(bends[0]["after"]["at_start"], -2048);
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path")
+        ]),
+        "bend  bar 1 beat 3 onwards  channel 0  0 -> -2048\n"
+    );
+}
+
+/// What `BendSide` carries two extremes for. The span opens on a difference of
+/// one unit and contains a dive of four thousand; a side reporting only a peak
+/// would print nothing about the dive, because a bend below where the span
+/// began never rises above it.
+#[test]
+fn a_dive_inside_a_bend_span_is_reported_although_it_is_no_peak() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = stating(
+        dir.path(),
+        "before",
+        &[
+            common::pitch_bend(0, 0),
+            common::pitch_bend(480, 100),
+            common::pitch_bend(1920, 0),
+        ],
+    );
+    let after = stating(
+        dir.path(),
+        "after",
+        &[
+            common::pitch_bend(0, 0),
+            common::pitch_bend(480, 101),
+            common::pitch_bend(960, -4096),
+            common::pitch_bend(1440, 101),
+            common::pitch_bend(1920, 0),
+        ],
+    );
+
+    let diff = diff_json(&before, &after, None);
+    let bends = list(&diff, "bends");
+    assert_eq!(bends.len(), 1, "bends: {bends:?}");
+    let side = &bends[0]["after"];
+    assert_eq!(side["at_start"], 101);
+    assert_eq!(side["furthest_up"], 101);
+    assert_eq!(side["furthest_down"], -4096);
+    assert_eq!(side["furthest_down_at"], 960);
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path")
+        ]),
+        "bend  bar 1 beat 2 until bar 2 beat 1  channel 0  \
+         100 -> 101 (down to -4096 at bar 1 beat 3)\n"
+    );
+}
+
+/// #13's difficulty, in the tempo's terms: an accelerando is written as a run
+/// of statements and is one difference, not forty.
+#[test]
+fn an_accelerando_is_one_difference_and_not_one_per_statement() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let ramp: Vec<_> = (0..40)
+        .map(|step| common::tempo(1920 + step * 24, 500_000 - step * 1_800))
+        .collect();
+    let before = stating(dir.path(), "before", &[]);
+    let after = stating(dir.path(), "after", &ramp);
+
+    let diff = diff_json(&before, &after, None);
+    let tempos = list(&diff, "tempos");
+    assert_eq!(tempos.len(), 1, "tempos: {tempos:?}");
+    // Not 1920, where the ramp begins: its first statement restates the 120 the
+    // Take was already at, and restating what is in force is not a difference.
+    // The two Takes stop agreeing at the second statement.
+    assert_eq!(tempos[0]["from"], 1944);
+    // The fastest the ramp reaches, which is the smallest number of
+    // microseconds in it — the one field that says the accelerando happened
+    // rather than that the tempo changed once.
+    assert_eq!(
+        tempos[0]["after"]["fastest"]["micros_per_quarter"],
+        500_000 - 39 * 1_800
+    );
+    assert_eq!(tempos[0]["after"]["fastest_at"], 1920 + 39 * 24);
+}
+
+/// Nought is a value. A channel bent back to the centre and a channel never
+/// bent are two different Pieces, the distinction #12's sixth criterion draws
+/// for a Controller.
+#[test]
+fn a_channel_bent_to_the_centre_differs_from_one_never_bent() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = stating(dir.path(), "before", &[]);
+    let after = stating(dir.path(), "after", &[common::pitch_bend(960, 0)]);
+
+    let diff = diff_json(&before, &after, None);
+    let bends = list(&diff, "bends");
+    assert_eq!(bends.len(), 1, "bends: {bends:?}");
+    assert_eq!(bends[0]["before"]["at_start"], Value::Null);
+    assert_eq!(bends[0]["after"]["at_start"], 0);
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path")
+        ]),
+        "bend  bar 1 beat 3 onwards  channel 0  unstated -> 0\n"
+    );
+}
+
+/// The other side of the boundary: a Take carrying both new states still does
+/// not differ from itself.
+#[test]
+fn a_take_stating_a_tempo_and_a_bend_does_not_differ_from_itself() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = stating(
+        dir.path(),
+        "take",
+        &[common::tempo(960, 428_571), common::pitch_bend(1440, -3000)],
+    );
+    let path = take.to_str().expect("a path");
+
+    let diff = diff_json(&take, &take, None);
+    assert!(list(&diff, "tempos").is_empty(), "{:?}", diff["tempos"]);
+    assert!(list(&diff, "bends").is_empty(), "{:?}", diff["bends"]);
+    assert_eq!(
+        common::human_output(&["diff", path, path]),
+        "no differences\n"
+    );
+}
+
+/// A change to one state is not read as a change to the other, and both reach
+/// the caller when both moved.
+#[test]
+fn a_tempo_and_a_bend_that_both_changed_are_two_rows() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = stating(dir.path(), "before", &[common::pitch_bend(960, 0)]);
+    let after = stating(
+        dir.path(),
+        "after",
+        &[common::pitch_bend(960, 4096), common::tempo(1920, 400_000)],
+    );
+
+    let diff = diff_json(&before, &after, None);
+    notes_agree(&diff);
+    assert_eq!(list(&diff, "tempos").len(), 1);
+    assert_eq!(list(&diff, "bends").len(), 1);
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path")
+        ]),
+        "\
+tempo  bar 2 beat 1 onwards  120 -> 150
+bend   bar 1 beat 3 onwards  channel 0  0 -> 4096
+"
+    );
+}

@@ -26,6 +26,15 @@ use std::path::PathBuf;
 /// bank. Which Program is selected is in the file and so is the Piece; what it
 /// sounds like is the Rig, and is not compared.
 ///
+/// Tempo and pitch bend are compared the same way, as what is in force rather
+/// than as the events that set it. A tempo row covers the stretch the two Takes
+/// are at different tempos and says the extreme each reaches inside it, so an
+/// accelerando written as forty tempo events is one row and not forty. A bend
+/// row is the same for one channel, in the raw signed units the file carries:
+/// how many semitones a bend is worth is the synthesiser's bend range, which is
+/// the Rig and is not compared. A Take that states no tempo and one that states
+/// 120 are different Pieces here, as are a channel bent back to the centre and a
+/// channel never bent.
 /// Same-Tick ordering is compared too, and it is a layer under both of those.
 /// A file is a sequence, so *the same Tick* means *no time between* rather than
 /// *at once*, and two Takes holding the same events at the same Ticks can still
@@ -111,6 +120,16 @@ pub fn run(args: Args) -> battuta::Result<()> {
     }
 
     let mut rows = Vec::new();
+    // Tempo above everything, because it is the only row that is about the whole
+    // Take rather than a channel or a note. A Take that got faster reframes every
+    // row beneath it, orchestration included.
+    for difference in &diff.tempos {
+        rows.push(vec![
+            "tempo".to_string(),
+            crate::wording::span(before_lines, difference.from, difference.until),
+            crate::wording::tempo_difference(before_lines, after_lines, difference),
+        ]);
+    }
     // Orchestration first. A channel that changed instrument reframes every note
     // row under it — the same notes on a horn are a different passage — so it is
     // read before them rather than after.
@@ -135,6 +154,17 @@ pub fn run(args: Args) -> battuta::Result<()> {
             crate::wording::channel(difference.channel),
             crate::wording::controller_number(difference.controller),
             crate::wording::controller_difference(before_lines, after_lines, difference),
+        ]);
+    }
+    // Bends beside the Controller rows, because they are the same kind of fact
+    // about the same channel — what the expression is doing — and a reader
+    // looking for it should not have to find it in two places.
+    for difference in &diff.bends {
+        rows.push(vec![
+            "bend".to_string(),
+            crate::wording::span(before_lines, difference.from, difference.until),
+            crate::wording::channel(difference.channel),
+            crate::wording::bend_difference(before_lines, after_lines, difference),
         ]);
     }
     // Then the ordering, which is the layer under both of those: the same

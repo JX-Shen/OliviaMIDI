@@ -53,6 +53,37 @@ pub struct Tempo {
     pub bpm: f64,
 }
 
+impl Tempo {
+    /// A Tempo from what the MIDI tempo meta event carries.
+    ///
+    /// The two fields are one fact, and this is the only place the arithmetic
+    /// between them is written: a beats-per-minute computed at a second call
+    /// site is a second writer of a derived number, which `AGENTS.md` puts one
+    /// step below deleting the copy and one above gating it.
+    pub fn from_micros_per_quarter(micros_per_quarter: u32) -> Tempo {
+        Tempo {
+            micros_per_quarter,
+            bpm: 60_000_000.0 / micros_per_quarter as f64,
+        }
+    }
+}
+
+/// One place a Take states a tempo: which track says it, at which Tick, and
+/// what it says.
+///
+/// Not per channel, because tempo is not channel state: one tempo governs the
+/// whole Take from the moment it is stated, wherever it was written. Otherwise
+/// it is read exactly as a Program or a Controller is (ADR-0007) — what is in
+/// force is the last statement at or before a moment.
+///
+/// Not `TempoChange`, for the reason `StatedController` is not `ControlChange`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct StatedTempo {
+    pub track: usize,
+    pub tick: u32,
+    pub tempo: Tempo,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct TimeSignature {
     pub numerator: u8,
@@ -226,25 +257,45 @@ impl Take {
         Ok(ppq)
     }
 
+    /// Every place the Take states a tempo, earliest Tick first, ties broken by
+    /// track order.
+    ///
+    /// Read from wherever they are rather than from the notes' track: an
+    /// ordinary export puts tempo on a conductor track of its own.
+    pub fn stated_tempos(&self) -> Result<Vec<StatedTempo>> {
+        let smf = self.smf()?;
+        let mut found = Vec::new();
+
+        for (track, events) in smf.tracks.iter().enumerate() {
+            let mut tick = 0u32;
+            for event in events {
+                tick += event.delta.as_int();
+                if let TrackEventKind::Meta(MetaMessage::Tempo(micros)) = event.kind {
+                    found.push(StatedTempo {
+                        track,
+                        tick,
+                        tempo: Tempo::from_micros_per_quarter(micros.as_int()),
+                    });
+                }
+            }
+        }
+
+        // Stable, so statements sharing a Tick keep track order among
+        // themselves, and the last of them is the one in force — as it is for
+        // the synthesiser, and as `stated_controllers` fixes for a Controller.
+        found.sort_by_key(|found| found.tick);
+        Ok(found)
+    }
+
     pub fn info(&self) -> Result<Info> {
         let ppq = self.ppq()?;
         let smf = self.smf()?;
 
-        let mut tempo: Option<(u32, u32)> = None; // (tick, micros per quarter)
         let mut length_ticks = 0u32;
-
         for track in &smf.tracks {
             let mut tick = 0u32;
             for event in track {
                 tick += event.delta.as_int();
-                // Tempo is read wherever it is, not where the notes are: an
-                // ordinary export puts it on a conductor track of its own.
-                // Earliest tick wins, ties broken by track order.
-                if let TrackEventKind::Meta(MetaMessage::Tempo(micros)) = event.kind {
-                    if tempo.is_none_or(|(at, _)| tick < at) {
-                        tempo = Some((tick, micros.as_int()));
-                    }
-                }
             }
             length_ticks = length_ticks.max(tick);
         }
@@ -257,10 +308,10 @@ impl Take {
             },
             tracks: smf.tracks.len(),
             ppq,
-            tempo: tempo.map(|(_, micros)| Tempo {
-                micros_per_quarter: micros,
-                bpm: 60_000_000.0 / micros as f64,
-            }),
+            // The first tempo the Take states, which is what `info` has always
+            // reported: one line describing a Take, not the whole of a tempo
+            // map. `stated_tempos` is where every statement is.
+            tempo: self.stated_tempos()?.first().map(|stated| stated.tempo),
             time_signature: self.time_signatures()?.first().map(|&(_, ts)| ts),
             length_ticks,
             // Every reason a Bar length cannot be derived means the same thing
