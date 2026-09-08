@@ -8,11 +8,12 @@
 
 use crate::bars::{BarRange, TickSpan};
 use crate::error::{Error, Result};
-use crate::rank::{role, Role};
+use crate::rank::{role, RankedPairKind, Role};
 use crate::take::Take;
 use crate::track::with_delta_times;
+use crate::unranked::State;
 use midly::{MetaMessage, MidiMessage, TrackEvent, TrackEventKind};
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 impl Take {
     /// The Take restricted to a Bar range: that passage, and nothing else.
@@ -53,13 +54,14 @@ impl Take {
 
 /// One event the passage puts at its first Tick, and the Tick it held before.
 ///
-/// Only the events that take part in an ordering claim — ADR-0008's ranked
-/// pairs — because they are the only ones whose order says anything about the
-/// music. Two notes arriving at Tick 0 from two Ticks is what a passage *is*.
+/// Carries both the ranked-pair role and the state address/value. Passage
+/// safety also checks relations outside the pairs compared by diff. See #34.
 struct Landing {
     track: usize,
-    channel: u8,
-    role: Role,
+    channel: Option<u8>,
+    role: Option<Role>,
+    /// State kind, Controller number where applicable, and value in its own units.
+    state: Option<(State, Option<u8>, i32)>,
     /// The Tick this event held in the Take the passage was cut from.
     from: u32,
 }
@@ -85,24 +87,79 @@ struct Landing {
 /// A pair that shared a Tick in the Take already is left alone: it arrived
 /// unranked and the passage has taken nothing away.
 fn keeps_the_orders_the_take_stated(landings: &[Landing]) -> Result<()> {
-    for state in landings.iter().filter(|landing| landing.role.governing) {
-        for note in landings.iter().filter(|landing| !landing.role.governing) {
-            if state.role.pair != note.role.pair
-                || state.channel != note.channel
-                || state.track == note.track
-                || state.from == note.from
-            {
+    let mut by_channel: BTreeMap<Option<u8>, BTreeMap<usize, Vec<&Landing>>> = BTreeMap::new();
+    for landing in landings {
+        by_channel
+            .entry(landing.channel)
+            .or_default()
+            .entry(landing.track)
+            .or_default()
+            .push(landing);
+    }
+    for state in landings {
+        let others = by_channel[&state.channel]
+            .iter()
+            .filter(|(track, _)| **track != state.track)
+            .flat_map(|(_, events)| events);
+        for other in others {
+            if state.from == other.from {
                 continue;
             }
-            return Err(Error::PassageWouldLoseAnOrder {
-                stating: state.track,
-                sounding: note.track,
-                from: state.from,
-                at: note.from,
-                channel: state.channel,
-                state: state.role.pair.governing_named(),
-                against: state.role.pair.governed_named(),
-            });
+            if let (Some(left), Some(right)) = (state.role, other.role) {
+                if left.governing && !right.governing && left.pair == right.pair {
+                    return Err(Error::PassageWouldLoseAnOrder {
+                        stating: state.track,
+                        sounding: other.track,
+                        from: state.from,
+                        at: other.from,
+                        channel: state.channel.expect("a ranked channel event"),
+                        state: left.pair.governing_named(),
+                        against: left.pair.governed_named(),
+                    });
+                }
+            }
+            let Some((kind, controller, value)) = state.state else {
+                continue;
+            };
+            let name = match kind {
+                State::Program => "program change",
+                State::Controller => "controller",
+                State::Bend => "bend",
+                State::Tempo => "tempo",
+            };
+            if let Some((other_kind, other_controller, other_value)) = other.state {
+                if kind == other_kind && controller == other_controller && value != other_value {
+                    let mut address = name.to_string();
+                    if let Some(controller) = controller {
+                        address.push_str(&format!(" CC{controller}"));
+                    }
+                    if let Some(channel) = state.channel {
+                        address.push_str(&format!(" on channel {channel}"));
+                    }
+                    return Err(Error::PassageWouldLoseStateOrder {
+                        state: address,
+                        first_track: state.track,
+                        first_tick: state.from,
+                        first_value: value,
+                        second_track: other.track,
+                        second_tick: other.from,
+                        second_value: other_value,
+                    });
+                }
+            }
+            if other.role.is_some_and(|role| {
+                !role.governing && role.pair == RankedPairKind::ProgramBeforeStrike
+            }) {
+                return Err(Error::PassageWouldLoseAnOrder {
+                    stating: state.track,
+                    sounding: other.track,
+                    from: state.from,
+                    at: other.from,
+                    channel: state.channel.expect("a state of the struck channel"),
+                    state: name,
+                    against: "strikes",
+                });
+            }
         }
     }
     Ok(())
@@ -136,14 +193,39 @@ fn restricted<'a>(
         if at != 0 {
             return;
         }
-        let TrackEventKind::Midi { channel, message } = kind else {
-            return;
+        let (channel, role, state) = match kind {
+            TrackEventKind::Meta(MetaMessage::Tempo(value)) => (
+                None,
+                None,
+                Some((State::Tempo, None, value.as_int() as i32)),
+            ),
+            TrackEventKind::Midi { channel, message } => {
+                let state = match message {
+                    MidiMessage::ProgramChange { program } => {
+                        Some((State::Program, None, i32::from(program.as_int())))
+                    }
+                    MidiMessage::Controller { controller, value } if controller.as_int() < 120 => {
+                        Some((
+                            State::Controller,
+                            Some(controller.as_int()),
+                            i32::from(value.as_int()),
+                        ))
+                    }
+                    MidiMessage::PitchBend { bend } => {
+                        Some((State::Bend, None, i32::from(bend.as_int())))
+                    }
+                    _ => None,
+                };
+                (Some(channel.as_int()), role(message), state)
+            }
+            _ => return,
         };
-        if let Some(role) = role(message) {
+        if role.is_some() || state.is_some() {
             landings.push(Landing {
                 track: index_of_track,
-                channel: channel.as_int(),
+                channel,
                 role,
+                state,
                 from,
             });
         }

@@ -346,6 +346,25 @@ pub enum Error {
     },
 
     #[error(
+        "this passage would put {state} value {first_value} from tick {first_tick} on track \
+         {first_track} and value {second_value} from tick {second_tick} on track {second_track} \
+         at its first Tick. The Take orders those statements by Tick. On different tracks the \
+         passage would state no order between them, leaving different values possible. \
+         Nothing has been written.\n\
+         \n\
+         Play the whole Take, or choose a passage that does not collapse these statements."
+    )]
+    PassageWouldLoseStateOrder {
+        state: String,
+        first_track: usize,
+        first_tick: u32,
+        first_value: i32,
+        second_track: usize,
+        second_tick: u32,
+        second_value: i32,
+    },
+
+    #[error(
         "--allow-unranked {0} is not a site. A site is a track, a channel and a tick, in that \
          order and spelled as a note's identity spells them: t2:c0:s1920."
     )]

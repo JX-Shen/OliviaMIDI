@@ -17,6 +17,7 @@
 mod common;
 
 use common::{fake_fluidsynth, mid};
+use midly::{MetaMessage, MidiMessage, TrackEventKind};
 
 /// One track's events in file order, program changes included.
 ///
@@ -324,4 +325,288 @@ fn a_state_for_a_channel_the_first_tick_does_not_strike_is_not_a_hazard() {
         output.status.success(),
         "a Program for a channel the first Tick does not strike was refused: {output:?}"
     );
+}
+
+type Event = (u32, TrackEventKind<'static>);
+
+fn state(tick: u32, channel: u8, which: &str, value: u32) -> Event {
+    let message = match which {
+        "program" => MidiMessage::ProgramChange {
+            program: (value as u8).into(),
+        },
+        "controller" => MidiMessage::Controller {
+            controller: 11.into(),
+            value: (value as u8).into(),
+        },
+        "bend" => MidiMessage::PitchBend {
+            bend: midly::PitchBend::from_int(value as i16),
+        },
+        "tempo" => return common::tempo(tick, value),
+        _ => panic!("unknown test state"),
+    };
+    (
+        tick,
+        TrackEventKind::Midi {
+            channel: channel.into(),
+            message,
+        },
+    )
+}
+
+/// The conductor states only the meter, so tempo cases have no hidden default.
+fn passage_case(path: &std::path::Path, tracks: &[Vec<Event>]) -> std::path::PathBuf {
+    let mut all = vec![vec![(
+        0,
+        TrackEventKind::Meta(MetaMessage::TimeSignature(2, 2, 24, 8)),
+    )]];
+    all.extend_from_slice(tracks);
+    let tracks = all
+        .into_iter()
+        .map(|mut events| {
+            events.push((2 * BAR_2, TrackEventKind::Meta(MetaMessage::EndOfTrack)));
+            events.sort_by_key(|(tick, _)| *tick);
+            let mut previous = 0;
+            events
+                .into_iter()
+                .map(|(tick, kind)| {
+                    let delta = (tick - previous).into();
+                    previous = tick;
+                    midly::TrackEvent { delta, kind }
+                })
+                .collect()
+        })
+        .collect();
+    midly::Smf {
+        header: midly::Header::new(midly::Format::Parallel, midly::Timing::Metrical(PPQ.into())),
+        tracks,
+    }
+    .save(path)
+    .expect("write test Take");
+    path.to_path_buf()
+}
+
+fn assert_refused_before_output(take: &std::path::Path, dir: &std::path::Path, named: &str) {
+    let original = std::fs::read(take).unwrap();
+    let result = battuta::Take::read(take)
+        .unwrap()
+        .passage("2:2".parse().unwrap());
+    assert!(result.is_err(), "{named}: unsafe passage succeeded");
+    assert!(matches!(
+        result.unwrap_err(),
+        battuta::Error::PassageWouldLoseAnOrder { .. }
+            | battuta::Error::PassageWouldLoseStateOrder { .. }
+    ));
+    let fake = fake_fluidsynth(dir);
+    let rig = common::fake_soundfont(&dir.join("rig.sf2"));
+    // A file cannot hold a temporary Take. The safety error must win over this
+    // failure, proving preparation is refused before temporary-file creation.
+    let blocked_temp = dir.join("not-a-directory");
+    std::fs::write(&blocked_temp, b"sentinel").unwrap();
+    let output = mid()
+        .arg("play")
+        .arg(take)
+        .args(["--bars", "2:2", "--rig"])
+        .arg(rig)
+        .env("PATH", &fake.dir)
+        .env("TMPDIR", &blocked_temp)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.code(), Some(1), "{named}: {stderr}");
+    assert!(stderr.contains(named), "{named}: {stderr}");
+    assert!(
+        stderr.contains("would state no order between them"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("Nothing has been written"), "{stderr}");
+    assert!(
+        !fake.log.exists() && !fake.handed.exists(),
+        "synth was invoked"
+    );
+    assert_eq!(std::fs::read(take).unwrap(), original);
+    assert_eq!(std::fs::read(blocked_temp).unwrap(), b"sentinel");
+}
+
+#[test]
+fn inherited_conflicting_states_are_refused_even_without_a_boundary_note() {
+    for which in ["program", "controller", "bend", "tempo"] {
+        for later_tick in [480, BAR_2] {
+            for reverse_tracks in [false, true] {
+                let dir = tempfile::tempdir().unwrap();
+                let mut tracks = vec![
+                    vec![state(0, 0, which, 40)],
+                    vec![
+                        state(later_tick, 0, which, 80),
+                        common::strike(BAR_2 + 1, 60),
+                        common::release(BAR_2 + 240, 60),
+                    ],
+                ];
+                if reverse_tracks {
+                    tracks.reverse();
+                }
+                let take = passage_case(&dir.path().join("conflict.mid"), &tracks);
+                assert_refused_before_output(&take, dir.path(), which);
+            }
+        }
+    }
+}
+
+#[test]
+fn inherited_bend_and_general_controller_cannot_collide_with_a_strike() {
+    for which in ["bend", "controller"] {
+        let dir = tempfile::tempdir().unwrap();
+        let take = passage_case(
+            &dir.path().join("strike.mid"),
+            &[
+                vec![state(480, 0, which, 40)],
+                vec![common::strike(BAR_2, 60), common::release(BAR_2 + 240, 60)],
+            ],
+        );
+        assert_refused_before_output(&take, dir.path(), which);
+    }
+}
+
+#[test]
+fn safe_state_landings_remain_playable() {
+    for which in ["program", "controller", "bend", "tempo"] {
+        for shape in [
+            "same value",
+            "same track",
+            "already unranked",
+            "later statement",
+            "different channel",
+        ] {
+            if which == "tempo" && shape == "different channel" {
+                continue;
+            }
+            let dir = tempfile::tempdir().unwrap();
+            let (first_tick, second_tick, second_channel, second_value) = match shape {
+                "same value" => (0, 480, 0, 40),
+                "already unranked" => (480, 480, 0, 80),
+                "later statement" => (0, BAR_2 + 1, 0, 80),
+                "different channel" => (0, 480, 1, 80),
+                _ => (0, 480, 0, 80),
+            };
+            let first = state(first_tick, 0, which, 40);
+            let second = state(second_tick, second_channel, which, second_value);
+            let notes = vec![
+                common::strike(BAR_2 + 2, 60),
+                common::release(BAR_2 + 240, 60),
+            ];
+            let tracks = if shape == "same track" {
+                vec![vec![first, second], notes]
+            } else {
+                vec![vec![first], vec![second], notes]
+            };
+            let take = passage_case(&dir.path().join("safe.mid"), &tracks);
+            let fake = fake_fluidsynth(dir.path());
+            let rig = common::fake_soundfont(&dir.path().join("rig.sf2"));
+            let output = mid()
+                .arg("play")
+                .arg(&take)
+                .args(["--bars", "2:2", "--rig"])
+                .arg(rig)
+                .env("PATH", &fake.dir)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{which}, {shape}: {output:?}");
+            assert!(fake.log.exists() && fake.handed.exists());
+            let bytes = std::fs::read(&fake.handed).unwrap();
+            let smf = midly::Smf::parse(&bytes).unwrap();
+            // Check the carried events directly, including duplicate values
+            // and source-track order, rather than trusting mid diff as oracle.
+            for (source, output) in tracks.iter().zip(&smf.tracks[1..]) {
+                let mut tick = 0;
+                let actual: Vec<_> = output
+                    .iter()
+                    .filter_map(|event| {
+                        tick += event.delta.as_int();
+                        (!matches!(event.kind, TrackEventKind::Meta(MetaMessage::EndOfTrack)))
+                            .then_some((tick, event.kind))
+                    })
+                    .collect();
+                let expected: Vec<_> = source
+                    .iter()
+                    .map(|(tick, kind)| (tick.saturating_sub(BAR_2), *kind))
+                    .collect();
+                assert_eq!(actual, expected, "{which}, {shape}");
+            }
+        }
+    }
+}
+
+#[test]
+fn channel_states_keep_their_safe_relations_with_boundary_notes() {
+    for which in ["program", "controller", "bend"] {
+        for shape in ["same track", "different channel", "already unranked"] {
+            let dir = tempfile::tempdir().unwrap();
+            let channel = u8::from(shape == "different channel");
+            let tick = if shape == "already unranked" {
+                BAR_2
+            } else {
+                480
+            };
+            let statement = state(tick, channel, which, 40);
+            let notes = vec![common::strike(BAR_2, 60), common::release(BAR_2 + 240, 60)];
+            let tracks = if shape == "same track" {
+                vec![[vec![statement], notes].concat()]
+            } else {
+                vec![vec![statement], notes]
+            };
+            let take = passage_case(&dir.path().join("safe.mid"), &tracks);
+            let fake = fake_fluidsynth(dir.path());
+            let rig = common::fake_soundfont(&dir.path().join("rig.sf2"));
+            let output = mid()
+                .arg("play")
+                .arg(take)
+                .args(["--bars", "2:2", "--rig"])
+                .arg(rig)
+                .env("PATH", &fake.dir)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{which}, {shape}: {output:?}");
+            assert!(fake.log.exists() && fake.handed.exists());
+        }
+    }
+}
+
+#[test]
+fn distinct_state_addresses_do_not_conflict_and_the_temp_failure_probe_is_live() {
+    let dir = tempfile::tempdir().unwrap();
+    let take = passage_case(
+        &dir.path().join("safe.mid"),
+        &[
+            vec![common::control_change(0, 11, 40), common::tempo(0, 500_000)],
+            vec![
+                common::control_change(480, 7, 80),
+                common::program_change(480, 60),
+                common::strike(BAR_2 + 1, 60),
+                common::release(BAR_2 + 240, 60),
+            ],
+        ],
+    );
+    battuta::Take::read(&take)
+        .unwrap()
+        .passage("2:2".parse().unwrap())
+        .expect("different Controller numbers, Program and Tempo are different addresses");
+    let fake = fake_fluidsynth(dir.path());
+    let rig = common::fake_soundfont(&dir.path().join("rig.sf2"));
+    let blocked_temp = dir.path().join("not-a-directory");
+    std::fs::write(&blocked_temp, b"sentinel").unwrap();
+    let output = mid()
+        .arg("play")
+        .arg(take)
+        .args(["--bars", "2:2", "--rig"])
+        .arg(rig)
+        .env("PATH", &fake.dir)
+        .env("TMPDIR", &blocked_temp)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        stderr.contains("the passage could not be written to a temporary file"),
+        "{stderr}"
+    );
+    assert!(!fake.log.exists());
 }
