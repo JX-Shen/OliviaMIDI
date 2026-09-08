@@ -443,7 +443,8 @@ pub fn diff(before: &Take, after: &Take, tolerance: Option<u32>) -> Result<Diff>
         .map(|(_, note)| note.clone())
         .collect();
 
-    let (rank_disagreements, unranked_sites) = crate::rank::rank_differences(before, after)?;
+    let (rank_disagreements, unranked_sites) =
+        crate::rank::rank_differences(before, after, &before_notes, &after_notes, &matched_to)?;
 
     let (bends, unranked_bends) = bend_differences(before, after)?;
     let (programs, unranked_programs) = program_differences(before, after)?;

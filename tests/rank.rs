@@ -70,7 +70,8 @@ fn a_program_met_after_the_notes_it_governs_is_a_difference() {
     assert_eq!(
         diff(&before, &after),
         "rank  bar 1 beat 1  channel 0  program before its notes  before follows the rule, \
-         after does not\n"
+         after does not; track 1 program 40 occurrence 0 vs strike t1:c0:p69:s0:n0: \
+         state before note -> state after note\n"
     );
 }
 
@@ -111,13 +112,21 @@ fn the_payload_names_the_pair_and_says_which_take_follows_the_rule() {
             "pair": "program_before_strike",
             "before_is_correct": false,
             "after_is_correct": true,
+            "relations": [{
+                "statement": { "track": 1, "value": 40, "occurrence": 0 },
+                "before_note": "t1:c0:p69:s0:n0",
+                "after_note": "t1:c0:p69:s0:n0",
+                "before_state_first": false,
+                "after_state_first": true,
+            }],
         }])
     );
     assert_eq!(payload["unranked_sites"], serde_json::json!([]));
     assert_eq!(
         diff(&before, &after),
         "rank  bar 1 beat 1  channel 0  program before its notes  after follows the rule, \
-         before does not\n"
+         before does not; track 1 program 40 occurrence 0 vs strike t1:c0:p69:s0:n0: \
+         state after note -> state before note\n"
     );
 }
 
@@ -155,7 +164,8 @@ fn a_damper_met_before_the_releases_at_its_tick_is_a_difference() {
     assert_eq!(
         diff(&before, &after),
         "rank  bar 1 beat 2  channel 0  damper after its releases  before follows the rule, \
-         after does not\n"
+         after does not; track 1 CC64 127 occurrence 0 vs release t1:c0:p69:s0:n0: \
+         state after note -> state before note\n"
     );
 }
 
@@ -337,7 +347,8 @@ fn a_note_change_and_an_ordering_change_are_both_reported() {
     assert_eq!(
         diff(&before, &after),
         "rank     bar 1 beat 1  channel 0  program before its notes  before follows the rule, \
-         after does not\n\
+         after does not; track 1 program 40 occurrence 0 vs strike t1:c0:p69:s0:n0: \
+         state before note -> state after note\n\
          changed  bar 1 beat 1  track 1    A4                        duration 480 -> 960\n"
     );
 }
@@ -478,7 +489,8 @@ fn a_note_on_at_velocity_zero_is_a_release_for_the_damper_too() {
     assert_eq!(
         diff(&before, &after),
         "rank  bar 1 beat 2  channel 0  damper after its releases  before follows the rule, \
-         after does not\n"
+         after does not; track 1 CC64 127 occurrence 0 vs release t1:c0:p69:s0:n0: \
+         state after note -> state before note\n"
     );
 }
 
@@ -519,4 +531,290 @@ fn a_pair_the_other_take_does_not_carry_is_not_an_ordering_difference() {
         diff_json(&before, &after)["rank_disagreements"],
         serde_json::json!([])
     );
+}
+
+/// A mixed site can change its Program/strike relations while both Takes
+/// depart from the placement rule. See #33.
+#[test]
+fn two_mixed_program_sites_can_disagree_about_which_strike_precedes_the_program() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let build = |name: &str, first, second| {
+        common::build_take_setting(
+            &dir.path().join(name),
+            480,
+            &[(0, 4, 4)],
+            &[
+                common::program_change(0, 0),
+                common::strike(480, first),
+                common::program_change(480, 40),
+                common::strike(480, second),
+                common::release(960, 60),
+                common::release(960, 64),
+            ],
+            &[],
+        )
+    };
+    let before = build("before.mid", 60, 64);
+    let after = build("after.mid", 64, 60);
+    for take in [&before, &after] {
+        assert_eq!(diff(take, take), "no differences\n");
+    }
+    for (left, right) in [(&before, &after), (&after, &before)] {
+        let payload = diff_json(left, right);
+        assert_eq!(payload["changed"], serde_json::json!([]));
+        assert_eq!(payload["programs"], serde_json::json!([]));
+        assert_eq!(payload["rank_disagreements"].as_array().unwrap().len(), 1);
+        let rank = &payload["rank_disagreements"][0];
+        assert_eq!(rank["before_is_correct"], false);
+        assert_eq!(rank["after_is_correct"], false);
+        let first_pitch = if left == &before { 60 } else { 64 };
+        let second_pitch = if left == &before { 64 } else { 60 };
+        assert_eq!(
+            rank["relations"],
+            serde_json::json!([
+                {
+                    "statement": {"track": 1, "value": 40, "occurrence": 0},
+                    "before_note": format!("t1:c0:p{first_pitch}:s480:n0"),
+                    "after_note": format!("t1:c0:p{first_pitch}:s480:n0"),
+                    "before_state_first": false, "after_state_first": true,
+                },
+                {
+                    "statement": {"track": 1, "value": 40, "occurrence": 0},
+                    "before_note": format!("t1:c0:p{second_pitch}:s480:n0"),
+                    "after_note": format!("t1:c0:p{second_pitch}:s480:n0"),
+                    "before_state_first": true, "after_state_first": false,
+                }
+            ])
+        );
+        let human = diff(left, right);
+        assert!(human.contains("neither follows the rule"));
+        assert!(human.contains(&format!(
+            "strike t1:c0:p{first_pitch}:s480:n0: state after note -> state before note"
+        )));
+        assert!(human.contains(&format!(
+            "strike t1:c0:p{second_pitch}:s480:n0: state before note -> state after note"
+        )));
+    }
+}
+
+/// A one-sided cross-track pair is still disclosed in either comparison
+/// direction, even when the other Take carries no pair. See #33.
+#[test]
+fn a_one_sided_unranked_site_is_disclosed_in_both_comparison_directions() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let unranked = common::build_take_stating_apart(
+        &dir.path().join("unranked.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[
+            common::program_change(0, 40),
+            common::program_change(480, 40),
+        ],
+        &[(480, 480, 69)],
+    );
+    let absent = common::build_take_stating_apart(
+        &dir.path().join("absent.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[common::program_change(0, 40)],
+        &[(480, 480, 69)],
+    );
+    for (left, right, in_before, in_after) in [
+        (&unranked, &absent, true, false),
+        (&absent, &unranked, false, true),
+    ] {
+        let payload = diff_json(left, right);
+        assert_eq!(payload["rank_disagreements"], serde_json::json!([]));
+        assert!(battuta::diff::diff(
+            &battuta::Take::read(left).expect("before Take"),
+            &battuta::Take::read(right).expect("after Take"),
+            Some(0),
+        )
+        .expect("comparable Takes")
+        .is_empty());
+        assert_eq!(
+            payload["unranked_sites"],
+            serde_json::json!([{
+                "tick": 480,
+                "channel": 0,
+                "pair": "program_before_strike",
+                "in_before": in_before,
+                "in_after": in_after,
+            }])
+        );
+    }
+}
+
+/// Permuting strikes on one side of a Program changes no causal relation. #33.
+#[test]
+fn a_mixed_site_ignores_strike_permutations_that_do_not_cross_the_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let build = |name: &str, first, second| {
+        common::build_take_setting(
+            &dir.path().join(name),
+            480,
+            &[(0, 4, 4)],
+            &[
+                common::strike(0, first),
+                common::strike(0, second),
+                common::program_change(0, 40),
+                common::strike(0, 67),
+                common::release(480, 60),
+                common::release(480, 64),
+                common::release(480, 67),
+            ],
+            &[],
+        )
+    };
+    let before = build("before.mid", 60, 64);
+    let after = build("after.mid", 64, 60);
+    assert_eq!(diff(&before, &after), "no differences\n");
+    assert_eq!(diff(&after, &before), "no differences\n");
+}
+
+/// Repeated statements and colliding notes retain their own occurrences. #33.
+#[test]
+fn duplicate_notes_and_statements_keep_their_corresponding_relations() {
+    let dir = tempfile::tempdir().unwrap();
+    let before = common::build_take_setting(
+        &dir.path().join("before.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[
+            common::strike(0, 60),
+            common::program_change(0, 40),
+            common::strike(0, 60),
+            common::program_change(0, 40),
+            common::release(480, 60),
+            common::release(480, 60),
+        ],
+        &[],
+    );
+    let after = common::build_take_setting(
+        &dir.path().join("after.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[
+            common::strike(0, 60),
+            common::program_change(0, 40),
+            common::program_change(0, 40),
+            common::strike(0, 60),
+            common::release(480, 60),
+            common::release(480, 60),
+        ],
+        &[],
+    );
+    let payload = diff_json(&before, &after);
+    assert_eq!(payload["changed"], serde_json::json!([]));
+    assert_eq!(
+        payload["rank_disagreements"][0]["relations"],
+        serde_json::json!([{
+            "statement": {"track": 1, "value": 40, "occurrence": 1},
+            "before_note": "t1:c0:p60:s0:n1", "after_note": "t1:c0:p60:s0:n1",
+            "before_state_first": false, "after_state_first": true,
+        }])
+    );
+    assert_eq!(diff(&before, &before), "no differences\n");
+    assert_eq!(diff(&after, &after), "no differences\n");
+}
+
+/// Damper relations name the released note and its original start, rather
+/// than the release's position in a list. #33.
+#[test]
+fn mixed_damper_sites_report_which_note_release_crossed_the_state() {
+    let dir = tempfile::tempdir().unwrap();
+    let before = common::build_take_setting(
+        &dir.path().join("before.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[
+            common::strike(0, 60),
+            common::strike(240, 64),
+            common::release(480, 60),
+            common::control_change(480, 64, 127),
+            common::release(480, 64),
+        ],
+        &[],
+    );
+    let after = common::build_take_setting(
+        &dir.path().join("after.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[
+            common::strike(0, 60),
+            common::strike(240, 64),
+            common::release(480, 64),
+            common::control_change(480, 64, 127),
+            common::release(480, 60),
+        ],
+        &[],
+    );
+    let payload = diff_json(&before, &after);
+    assert_eq!(payload["changed"], serde_json::json!([]));
+    let rank = &payload["rank_disagreements"][0];
+    assert_eq!(rank["pair"], "damper_after_release");
+    assert_eq!(rank["before_is_correct"], false);
+    assert_eq!(rank["after_is_correct"], false);
+    assert_eq!(
+        rank["relations"],
+        serde_json::json!([
+            { "statement": {"track": 1, "value": 127, "occurrence": 0},
+              "before_note": "t1:c0:p60:s0:n0", "after_note": "t1:c0:p60:s0:n0",
+              "before_state_first": false, "after_state_first": true },
+            { "statement": {"track": 1, "value": 127, "occurrence": 0},
+              "before_note": "t1:c0:p64:s240:n0", "after_note": "t1:c0:p64:s240:n0",
+              "before_state_first": true, "after_state_first": false }
+        ])
+    );
+    let human = diff(&before, &after);
+    assert!(human.contains("release t1:c0:p60:s0:n0: state after note -> state before note"));
+    assert!(human.contains("release t1:c0:p64:s240:n0: state before note -> state after note"));
+    assert_eq!(diff(&before, &before), "no differences\n");
+}
+
+/// Rank uses the correspondence selected by diff's existing tolerance. #33.
+#[test]
+fn rank_reuses_note_matching_and_does_not_match_unrelated_statements() {
+    let dir = tempfile::tempdir().unwrap();
+    let before = common::build_take_setting(
+        &dir.path().join("before.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[
+            common::program_change(0, 40),
+            common::strike(0, 60),
+            common::release(480, 60),
+        ],
+        &[],
+    );
+    let build = |name: &str, value| {
+        common::build_take_setting(
+            &dir.path().join(name),
+            480,
+            &[(0, 4, 4)],
+            &[
+                common::strike(0, 64),
+                common::program_change(0, value),
+                common::release(480, 64),
+            ],
+            &[],
+        )
+    };
+    let after = build("after.mid", 40);
+    let changed_state = build("changed-state.mid", 41);
+    let read = |path: &std::path::Path| battuta::Take::read(path).unwrap();
+    let exact = battuta::diff::diff(&read(&before), &read(&after), Some(0)).unwrap();
+    assert!(exact.rank_disagreements.is_empty());
+    assert_eq!(exact.added.len(), 1);
+    assert_eq!(exact.removed.len(), 1);
+    let inferred = battuta::diff::diff(&read(&before), &read(&after), None).unwrap();
+    assert_eq!(inferred.rank_disagreements.len(), 1);
+    let relation = &inferred.rank_disagreements[0].relations[0];
+    assert_eq!(relation.before_note.to_string(), "t1:c0:p60:s0:n0");
+    assert_eq!(relation.after_note.to_string(), "t1:c0:p64:s0:n0");
+    let human = diff(&before, &after);
+    assert!(human.contains("t1:c0:p60:s0:n0 -> t1:c0:p64:s0:n0"));
+    let unmatched = battuta::diff::diff(&read(&before), &read(&changed_state), None).unwrap();
+    assert!(unmatched.rank_disagreements.is_empty());
+    assert!(!unmatched.programs.is_empty());
 }

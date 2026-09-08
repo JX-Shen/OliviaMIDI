@@ -155,20 +155,50 @@ pub fn channel(channel: u8) -> String {
 /// Which of the two Takes puts a ranked pair in the order the rule calls
 /// correct.
 ///
-/// Always one of them and never both: a disagreement is reported only where the
-/// two readings differ, and each reading is one of the two orders. So the clause
-/// can say which side is which rather than leaving the reader to work it out
-/// from a pair of booleans.
+/// Reports the site summaries and each changed state/note relation. See #33.
 ///
 /// It says *the rule* and not *right*. ADR-0008's rule is what a Take this
 /// project writes obeys; a Take that arrived the other way round is the author's
 /// (ADR-0003), and `mid` reports the disagreement rather than grading it.
 pub fn rank_difference(difference: &battuta::RankDisagreement) -> String {
-    if difference.before_is_correct {
-        "before follows the rule, after does not".to_string()
-    } else {
-        "after follows the rule, before does not".to_string()
+    let mut text = match (difference.before_is_correct, difference.after_is_correct) {
+        (true, false) => "before follows the rule, after does not",
+        (false, true) => "after follows the rule, before does not",
+        (false, false) => "neither follows the rule",
+        (true, true) => "both follow the rule",
     }
+    .to_string();
+    for relation in &difference.relations {
+        let state = match difference.pair {
+            battuta::RankedPairKind::ProgramBeforeStrike => "program",
+            battuta::RankedPairKind::DamperAfterRelease => "CC64",
+        };
+        let event = match difference.pair {
+            battuta::RankedPairKind::ProgramBeforeStrike => "strike",
+            battuta::RankedPairKind::DamperAfterRelease => "release",
+        };
+        let direction = |state_first| {
+            if state_first {
+                "state before note"
+            } else {
+                "state after note"
+            }
+        };
+        let note = if relation.before_note == relation.after_note {
+            relation.before_note.to_string()
+        } else {
+            format!("{} -> {}", relation.before_note, relation.after_note)
+        };
+        text.push_str(&format!(
+            "; track {} {state} {} occurrence {} vs {event} {note}: {} -> {}",
+            relation.statement.track,
+            relation.statement.value,
+            relation.statement.occurrence,
+            direction(relation.before_state_first),
+            direction(relation.after_state_first),
+        ));
+    }
+    text
 }
 
 /// Which of the two Takes leaves a site with no order to read.

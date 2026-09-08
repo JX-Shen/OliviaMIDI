@@ -49,6 +49,12 @@ use std::path::PathBuf;
 /// of a chord are not such a pair: neither governs the other, so the order they
 /// are written in is no claim about the music and reordering them is not a
 /// difference.
+/// Each Rank disagreement also identifies the state statements and matched
+/// notes whose relative direction changed. The site summaries may both say
+/// neither follows the rule: different mixed orders can still disagree.
+/// JSON carries these details in `rank_disagreements[].relations`. Statements
+/// correspond by track, value and same-value occurrence at the site; notes use
+/// the matching described above. Unmatched relations are not ordering changes.
 ///
 /// Where a Take writes such a pair across two tracks, the file states no order
 /// at all and the comparison cannot be made. Those sites are reported as

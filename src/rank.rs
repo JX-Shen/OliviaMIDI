@@ -21,10 +21,11 @@
 //! the same order (ADR-0003).
 
 use crate::error::Result;
+use crate::note::{Note, NoteId};
 use crate::take::Take;
 use midly::{MidiMessage, TrackEventKind};
 use serde::Serialize;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The MIDI controller number of the damper pedal.
 const DAMPER: u8 = 64;
@@ -76,21 +77,42 @@ impl RankedPairKind {
 
 /// One Tick where the two Takes carry a ranked pair in different orders.
 ///
-/// `before_is_correct` and `after_is_correct` rather than one verdict: which
-/// Take follows the rule is the useful half of the answer, and stating both
-/// leaves the reader holding what to do about it. They are never equal — two
-/// Takes that agree are not a disagreement.
+/// The booleans summarise the whole site; both may be false. `relations`
+/// identifies the corresponding pairs whose relative direction changed. #33.
 ///
 /// A Tick and a channel and no track. A Rank runs within one track (ADR-0008),
 /// so a pair split across two carries no order at all, and that site is an
 /// `UnrankedSite` rather than this.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RankDisagreement {
     pub tick: u32,
     pub channel: u8,
     pub pair: RankedPairKind,
     pub before_is_correct: bool,
     pub after_is_correct: bool,
+    pub relations: Vec<RankRelationChange>,
+}
+
+/// A state statement within a disagreement's Tick, channel and pair. #33.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub struct RankedStatement {
+    pub track: usize,
+    /// Program number or CC64 value, as selected by the enclosing pair kind.
+    pub value: u8,
+    /// Zero-based occurrence among statements with this track and value at
+    /// the enclosing site, counted in their written order.
+    pub occurrence: usize,
+}
+
+/// One corresponding state/note relation whose direction changed. #33.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct RankRelationChange {
+    pub statement: RankedStatement,
+    pub before_note: NoteId,
+    pub after_note: NoteId,
+    /// Whether the state precedes the strike or release named by the pair.
+    pub before_state_first: bool,
+    pub after_state_first: bool,
 }
 
 /// One Tick where the comparison could not be made, because a Take writes the
@@ -173,6 +195,8 @@ struct Sightings {
     /// (track, position) of each event the governing one is ranked against —
     /// the strikes, or the releases.
     governed: Vec<(usize, usize)>,
+    statements: Vec<(RankedStatement, usize)>,
+    notes: Vec<(usize, usize)>,
 }
 
 impl Sightings {
@@ -219,11 +243,28 @@ impl Sightings {
 /// A `BTreeMap` so that the sites come out in the order a reader meets them —
 /// earliest Tick first — for the reason every other listing this project prints
 /// is in the order the music happens.
-type Claims = BTreeMap<(u32, u8, RankedPairKind), Reading>;
+type Claims = BTreeMap<(u32, u8, RankedPairKind), Claim>;
 
-fn claims(take: &Take) -> Result<Claims> {
+struct Claim {
+    reading: Reading,
+    /// Statement and index in the already matched note list -> state first.
+    relations: BTreeMap<(RankedStatement, usize), bool>,
+}
+
+fn claims(take: &Take, notes: &[Note]) -> Result<Claims> {
     let smf = take.smf()?;
     let mut seen: BTreeMap<(u32, u8, RankedPairKind), Sightings> = BTreeMap::new();
+    let note_events: BTreeMap<_, _> = notes
+        .iter()
+        .enumerate()
+        .flat_map(|(index, note)| {
+            [
+                ((note.track, note.on_event), index),
+                ((note.track, note.off_event), index),
+            ]
+        })
+        .collect();
+    let mut occurrences = BTreeMap::new();
     for (track, events) in smf.tracks.iter().enumerate() {
         let mut tick = 0u32;
         for (at, event) in events.iter().enumerate() {
@@ -238,8 +279,28 @@ fn claims(take: &Take) -> Result<Claims> {
             let sightings = seen.entry((tick, channel, pair)).or_default();
             if governing {
                 sightings.governing.push((track, at));
+                let value = match message {
+                    MidiMessage::ProgramChange { program } => program.as_int(),
+                    MidiMessage::Controller { value, .. } => value.as_int(),
+                    _ => unreachable!("governing roles are Program and damper"),
+                };
+                let occurrence = occurrences
+                    .entry((tick, channel, pair, track, value))
+                    .or_insert(0);
+                sightings.statements.push((
+                    RankedStatement {
+                        track,
+                        value,
+                        occurrence: *occurrence,
+                    },
+                    at,
+                ));
+                *occurrence += 1;
             } else {
                 sightings.governed.push((track, at));
+                if let Some(&index) = note_events.get(&(track, at)) {
+                    sightings.notes.push((index, at));
+                }
             }
         }
     }
@@ -247,9 +308,16 @@ fn claims(take: &Take) -> Result<Claims> {
         .into_iter()
         .filter_map(|(site, sightings)| {
             let governing_first = site.2 == RankedPairKind::ProgramBeforeStrike;
-            sightings
-                .read(governing_first)
-                .map(|reading| (site, reading))
+            let reading = sightings.read(governing_first)?;
+            let mut relations = BTreeMap::new();
+            if reading != Reading::Unranked {
+                for &(statement, state_at) in &sightings.statements {
+                    for &(note, note_at) in &sightings.notes {
+                        relations.insert((statement, note), state_at < note_at);
+                    }
+                }
+            }
+            Some((site, Claim { reading, relations }))
         })
         .collect())
 }
@@ -257,40 +325,69 @@ fn claims(take: &Take) -> Result<Claims> {
 /// Where the two Takes place a ranked pair in different orders, and where
 /// neither order could be read.
 ///
-/// Compared only at a site both Takes make a claim about. A pair that exists in
-/// one Take and not the other is a difference of content — a Program that
-/// arrived, a chord that left — and is already reported as one; calling it an
-/// ordering difference as well would report one change twice under two names.
+/// Compare corresponding relations at shared determinate sites; disclose
+/// Unranked over the union of both Takes' sites. See #33.
 pub(crate) fn rank_differences(
     before: &Take,
     after: &Take,
+    before_notes: &[Note],
+    after_notes: &[Note],
+    matched_to: &[Option<usize>],
 ) -> Result<(Vec<RankDisagreement>, Vec<UnrankedSite>)> {
-    let before_claims = claims(before)?;
-    let after_claims = claims(after)?;
+    let before_claims = claims(before, before_notes)?;
+    let after_claims = claims(after, after_notes)?;
     let mut disagreements = Vec::new();
     let mut sites = Vec::new();
-    for (&site, &mine) in &before_claims {
-        let Some(&theirs) = after_claims.get(&site) else {
-            continue;
-        };
+    let all_sites: BTreeSet<_> = before_claims
+        .keys()
+        .chain(after_claims.keys())
+        .copied()
+        .collect();
+    for site in all_sites {
+        let mine = before_claims.get(&site);
+        let theirs = after_claims.get(&site);
         let (tick, channel, pair) = site;
-        if mine == Reading::Unranked || theirs == Reading::Unranked {
+        let in_before = mine.is_some_and(|claim| claim.reading == Reading::Unranked);
+        let in_after = theirs.is_some_and(|claim| claim.reading == Reading::Unranked);
+        if in_before || in_after {
             sites.push(UnrankedSite {
                 tick,
                 channel,
                 pair,
-                in_before: mine == Reading::Unranked,
-                in_after: theirs == Reading::Unranked,
+                in_before,
+                in_after,
             });
             continue;
         }
-        if mine != theirs {
+        let (Some(mine), Some(theirs)) = (mine, theirs) else {
+            continue;
+        };
+        let mut relations = Vec::new();
+        for (&(statement, note), &before_state_first) in &mine.relations {
+            let Some(after_note) = matched_to[note] else {
+                continue;
+            };
+            let Some(&after_state_first) = theirs.relations.get(&(statement, after_note)) else {
+                continue;
+            };
+            if before_state_first != after_state_first {
+                relations.push(RankRelationChange {
+                    statement,
+                    before_note: before_notes[note].id.clone(),
+                    after_note: after_notes[after_note].id.clone(),
+                    before_state_first,
+                    after_state_first,
+                });
+            }
+        }
+        if !relations.is_empty() {
             disagreements.push(RankDisagreement {
                 tick,
                 channel,
                 pair,
-                before_is_correct: mine == Reading::Follows,
-                after_is_correct: theirs == Reading::Follows,
+                before_is_correct: mine.reading == Reading::Follows,
+                after_is_correct: theirs.reading == Reading::Follows,
+                relations,
             });
         }
     }
