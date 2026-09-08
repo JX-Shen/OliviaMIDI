@@ -1,9 +1,9 @@
 # Performance baseline
 
 Dated observations for #36, not targets or promises. The original reading is
-retained below with its invalid apply rows withdrawn. The corrected reading
-measures the C integration on 2026-09-08. No Rust code was changed for this
-measurement work.
+retained below with its invalid apply rows withdrawn. The corrected readings
+measure the C integration and the subsequent passage-safety integration on
+2026-09-08. No Rust code was changed for this measurement work.
 
 Run `./docs/performance/measure.sh`, then
 `./docs/performance/measure.sh --scaling`, sequentially on macOS. Each run
@@ -219,7 +219,7 @@ these values do not establish a precise complexity class or speedup factor.
 There is no general performance conclusion for changed Takes or external files
 from these self-comparisons.
 
-No optimisation is included in D. Whether the remaining inspect cost blocks a
+No optimisation is included in this measurement work. Whether the remaining inspect cost blocks a
 release depends on real input and the owner's acceptable interaction time;
 this synthetic observation does not settle it.
 
@@ -237,3 +237,64 @@ and apostrophes retained their argument boundaries, and temporary files were
 removed after both success and failure. Shell syntax and whitespace checks
 passed. These checks validate the measuring script; they are not additional
 performance observations or an external-corpus acceptance.
+
+## Reading after passage safety — 2026-09-08
+
+Rerun on clean `dev` at `687270def043ffb87a890fd3b980f3bdb33280de`,
+after #34's passage-safety changes. Normal measurement started at
+**11:30:49 UTC**, scaling at **11:31:11 UTC**, sequentially. Both runs reported
+a clean tree; this report was updated afterwards. The commit includes the
+corrected measuring script, so the source and script now share one attribution.
+
+The machine and toolchain are unchanged from the corrected reading above:
+Apple M1, Darwin 25.5.0 arm64, macOS 26.5 (25F71), Cargo 1.98.0
+(`797e8a9bc`), rustc 1.98.0 (`88d9e12ae`), LLVM 22.1.8, `mid 0.1.2`.
+Both independent release builds produced the same binary SHA-256:
+`288a7eb00c94301864e5c178e25dc6a4f3c959de0fb96b12ea65f286798539eb`.
+The measuring script, generator, lockfile, no-op Edit Set and every workload
+have the exact hashes and byte sizes in the preceding tables, verified against
+both new run logs. The unchanged script retains the failure checks described
+above; those injected checks were not rerun for this observation.
+
+The entry commands were `docs/performance/measure.sh` followed by
+`docs/performance/measure.sh --scaling`. Build flags, generator parameters,
+measured commands, output validation and timing boundaries are exactly the
+recipes above. The normal run used
+`/var/folders/vb/lh5g8w2s06vgx9pqt5lbchhw0000gn/T/tmp.z8vXRUjUN8`;
+scaling used `tmp.sjIcOyXhl4` under that same parent. Substitute these for `work`
+in the recorded commands; both directories were removed on successful exit.
+
+| Path | Wall (s) | Peak (MiB) |
+| --- | --- | --- |
+| sparse inspect | 0.00 | 2.52 |
+| sparse inspect --json | 0.00 | 2.53 |
+| sparse apply (no-op) | 0.00 | 2.50 |
+| sparse diff (self) | 0.00 | 2.55 |
+| sparse play --bars 1:4 | 0.41 | 2.50 |
+| dense inspect | 0.54 | 14.77 |
+| dense inspect --json | 0.44 | 15.94 |
+| dense apply (no-op) | 0.01 | 9.34 |
+| dense diff (self) | 0.03 | 14.98 |
+| dense play --bars 1:4 | 0.01 | 7.61 |
+
+| Workload | inspect (s) | inspect (MiB) | diff (s) | diff (MiB) |
+| --- | --- | --- | --- | --- |
+| 200 Bars, notes varied | 0.02 | 8.12 | 0.01 | 9.23 |
+| 400 Bars, notes varied | 0.03 | 12.67 | 0.02 | 15.45 |
+| 800 Bars, notes varied | 0.05 | 22.52 | 0.05 | 28.59 |
+| 200 Bars, controls varied | 0.38 | 14.80 | 0.01 | 8.94 |
+| 400 Bars, controls varied | 1.44 | 24.17 | 0.03 | 15.67 |
+| 800 Bars, controls varied | 5.69 | 40.50 | 0.06 | 27.08 |
+
+Every measured command exited successfully. Both no-op outputs were nonempty
+and readable; both play paths invoked the fake synthesiser and read the
+prepared MIDI. These remain single observations under the timing limitations
+above, not speedup claims. Controller-heavy inspect again grows roughly fourfold
+per doubling, while self-diff does not reproduce the historical multi-second
+trend. That identifies a scaling concern, not a release threshold or a decision
+to optimise.
+
+The playback measurements start at Bar 1. They do not measure the worst case
+for inheriting a large history into a later passage, or establish audibility.
+Passage safety is checked by separate regression tests. Human listening remains
+part of external acceptance; neither is replaced by these timings.
