@@ -20,7 +20,7 @@
 
 use crate::error::Result;
 use crate::take::Take;
-use midly::{MidiMessage, TrackEventKind};
+use midly::{MetaMessage, MidiMessage, TrackEventKind};
 
 /// One place a Take leaves unordered, and what it is unordered against.
 ///
@@ -31,16 +31,41 @@ use midly::{MidiMessage, TrackEventKind};
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Unranked {
     pub tick: u32,
-    pub channel: u8,
-    /// The CC number, or `null` where the event is a program change. The same
-    /// spelling `inspect` uses elsewhere to tell one channel state from the
-    /// other.
+    /// The channel whose state this is, or `null` where the state has no
+    /// channel. A tempo governs the whole Take and is written on a conductor
+    /// track, so it has none — the same spelling `controller` uses for a state
+    /// that has no CC number. See #42.
+    pub channel: Option<u8>,
+    /// The CC number, or `null` where the state has no CC number. That is a
+    /// program change, a bend or a tempo — which `state` is what tells them
+    /// apart. Until #42 there were two states and `null` happened to mean
+    /// "program change"; that was a coincidence of there being two, never what
+    /// the field said.
     pub controller: Option<u8>,
     /// The track carrying the channel-state event.
     pub track: usize,
     /// The track carrying what it is unordered against.
     pub against_track: usize,
     pub against: Against,
+    /// Which state this is. Appended, and nothing above it moved: a consumer
+    /// reading the rows #26 shipped finds every field where it left it. See
+    /// #42.
+    pub state: State,
+}
+
+/// Which of a Take's states an unranked site is about.
+///
+/// The values are the glossary's own terms. The type ratifies prose this
+/// repository was already writing — `error.rs` calls this a `state` and so does
+/// `wording::unranked` — rather than coining a word, which is the argument
+/// **Rank** makes about itself in `CONTEXT.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum State {
+    Program,
+    Controller,
+    Bend,
+    Tempo,
 }
 
 /// What a channel-state event is left unordered against.
@@ -59,9 +84,13 @@ pub enum Against {
 struct Stated {
     track: usize,
     tick: u32,
-    channel: u8,
+    state: State,
+    channel: Option<u8>,
     controller: Option<u8>,
-    value: u8,
+    /// Wide enough for every state's own units: a program or a CC value is
+    /// 0-127, a bend is -8192 to 8191, and a tempo is microseconds to the
+    /// quarter. Only ever compared for equality, never read as a quantity.
+    value: i32,
 }
 
 /// One strike, as this reading collects them.
@@ -102,6 +131,20 @@ impl Take {
             let mut tick = 0u32;
             for event in events {
                 tick += event.delta.as_int();
+                // A tempo before the channel states, because it is the one
+                // that is not a channel event at all: it rides on a meta event
+                // and governs the whole Take.
+                if let TrackEventKind::Meta(MetaMessage::Tempo(micros)) = event.kind {
+                    stated.push(Stated {
+                        track,
+                        tick,
+                        state: State::Tempo,
+                        channel: None,
+                        controller: None,
+                        value: i32::try_from(micros.as_int()).expect("a 24-bit tempo"),
+                    });
+                    continue;
+                }
                 let TrackEventKind::Midi { channel, message } = event.kind else {
                     continue;
                 };
@@ -110,16 +153,26 @@ impl Take {
                     MidiMessage::ProgramChange { program } => stated.push(Stated {
                         track,
                         tick,
-                        channel,
+                        state: State::Program,
+                        channel: Some(channel),
                         controller: None,
-                        value: program.as_int(),
+                        value: i32::from(program.as_int()),
                     }),
                     MidiMessage::Controller { controller, value } => stated.push(Stated {
                         track,
                         tick,
-                        channel,
+                        state: State::Controller,
+                        channel: Some(channel),
                         controller: Some(controller.as_int()),
-                        value: value.as_int(),
+                        value: i32::from(value.as_int()),
+                    }),
+                    MidiMessage::PitchBend { bend } => stated.push(Stated {
+                        track,
+                        tick,
+                        state: State::Bend,
+                        channel: Some(channel),
+                        controller: None,
+                        value: i32::from(bend.as_int()),
                     }),
                     MidiMessage::NoteOn { vel, .. } if vel.as_int() > 0 => struck.push(Struck {
                         track,
@@ -141,6 +194,7 @@ impl Take {
                     track: state.track,
                     against_track,
                     against,
+                    state: state.state,
                 };
                 if !found.contains(&row) {
                     found.push(row);
@@ -149,7 +203,7 @@ impl Take {
             for note in &struck {
                 if note.track != state.track
                     && note.tick == state.tick
-                    && note.channel == state.channel
+                    && state.channel == Some(note.channel)
                 {
                     against(note.track, Against::Notes);
                 }
@@ -157,6 +211,7 @@ impl Take {
             for other in &stated {
                 if other.track != state.track
                     && other.tick == state.tick
+                    && other.state == state.state
                     && other.channel == state.channel
                     && other.controller == state.controller
                     && other.value != state.value

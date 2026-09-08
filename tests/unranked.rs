@@ -25,11 +25,18 @@ fn apart(dir: &Path, setting: &[(u32, u8)]) -> PathBuf {
         .iter()
         .map(|&(tick, program)| program_change(tick, program))
         .collect();
+    apart_with(dir, &setting)
+}
+
+/// The same Take, with whatever the setting track states written out in full.
+/// `apart` is this with the events spelled as programmes, which is every case
+/// #26 needed and none of the ones a tempo or a bend needs.
+fn apart_with(dir: &Path, setting: &[(u32, midly::TrackEventKind<'static>)]) -> PathBuf {
     build_take_stating_apart(
         &dir.join("apart.mid"),
         960,
         &[(0, 4, 4)],
-        &setting,
+        setting,
         &[(0, 1920, 60), (1920, 1920, 64)],
     )
 }
@@ -302,7 +309,8 @@ fn the_payload_carries_it_without_moving_anything_else() {
             "controller": null,
             "track": 2,
             "against_track": 1,
-            "against": "notes"
+            "against": "notes",
+            "state": "program"
         }])
     );
 }
@@ -336,4 +344,257 @@ fn agreeing_statements_on_two_tracks_are_not_reported() {
     let json: serde_json::Value =
         serde_json::from_str(&common::inspect_json(&out)).expect("inspect emits JSON");
     assert_eq!(json["unranked"], serde_json::json!([]));
+}
+
+// ---------------------------------------------------------------------------
+// Tempo and bend join the reading — #42.
+//
+// A bend is a channel's state (#44), so it is the case above unchanged. A tempo
+// has none: it governs the whole Take, which is why SMF Format 1 puts it on a
+// conductor track, and two tracks stating one at one Tick is one conductor
+// given two contradictory gestures rather than two players disagreeing.
+// ---------------------------------------------------------------------------
+
+/// Three tracks where both the voice and the setting track bend one channel at
+/// one Tick. `apart()` cannot make this: it puts every setting on track 2, and
+/// what is wanted here is a statement on each of two tracks.
+fn both_bending(dir: &Path, first: i16, second: i16) -> PathBuf {
+    stating_on_both(
+        dir,
+        common::pitch_bend(0, first),
+        common::pitch_bend(0, second),
+    )
+}
+
+/// The same Take with an arbitrary statement on each of the two tracks: `voice`
+/// carries the notes and the first, `setting` carries the second.
+fn stating_on_both(
+    dir: &Path,
+    on_voice: (u32, midly::TrackEventKind<'static>),
+    on_setting: (u32, midly::TrackEventKind<'static>),
+) -> PathBuf {
+    use midly::num::{u15, u24, u28, u4, u7};
+    use midly::{
+        Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind,
+    };
+
+    fn deltas(mut events: Vec<(u32, TrackEventKind<'static>)>) -> Vec<TrackEvent<'static>> {
+        events.sort_by_key(|(tick, _)| *tick);
+        let mut previous = 0u32;
+        events
+            .into_iter()
+            .map(|(tick, kind)| {
+                let event = TrackEvent {
+                    delta: u28::new(tick - previous),
+                    kind,
+                };
+                previous = tick;
+                event
+            })
+            .collect()
+    }
+
+    let conductor = vec![
+        (
+            0,
+            TrackEventKind::Meta(MetaMessage::TimeSignature(4, 2, 24, 8)),
+        ),
+        (
+            0,
+            TrackEventKind::Meta(MetaMessage::Tempo(u24::new(500_000))),
+        ),
+        (0, TrackEventKind::Meta(MetaMessage::EndOfTrack)),
+    ];
+    let voice = vec![
+        on_voice,
+        (
+            0,
+            TrackEventKind::Midi {
+                channel: u4::new(0),
+                message: MidiMessage::NoteOn {
+                    key: u7::new(60),
+                    vel: u7::new(64),
+                },
+            },
+        ),
+        (
+            1920,
+            TrackEventKind::Midi {
+                channel: u4::new(0),
+                message: MidiMessage::NoteOff {
+                    key: u7::new(60),
+                    vel: u7::new(0),
+                },
+            },
+        ),
+        (1920, TrackEventKind::Meta(MetaMessage::EndOfTrack)),
+    ];
+    let setting = vec![
+        on_setting,
+        (0, TrackEventKind::Meta(MetaMessage::EndOfTrack)),
+    ];
+
+    let smf = Smf {
+        header: Header::new(Format::Parallel, Timing::Metrical(u15::new(960))),
+        tracks: vec![deltas(conductor), deltas(voice), deltas(setting)],
+    };
+    let path = dir.join("both-bending.mid");
+    smf.save(&path).expect("a take is written");
+    path
+}
+
+/// A bend on the setting track where the voice track strikes that channel at
+/// the same Tick. The Program case verbatim, because a bend is held by the
+/// channel exactly as a Program is (#44) — the note sounds bent or unbent
+/// depending on which track the player merges first.
+#[test]
+fn a_bend_stated_where_another_track_strikes_that_channel_is_unranked() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = apart_with(dir.path(), &[common::pitch_bend(0, 4096)]);
+    let json: serde_json::Value =
+        serde_json::from_str(&common::inspect_json(&take)).expect("inspect emits JSON");
+
+    assert_eq!(
+        json["unranked"],
+        serde_json::json!([{
+            "tick": 0,
+            "channel": 0,
+            "controller": null,
+            "track": 2,
+            "against_track": 1,
+            "against": "notes",
+            "state": "bend"
+        }])
+    );
+}
+
+/// Two tracks bending one channel differently at one Tick. `Against::Value`,
+/// which the reading has had since #26 and which a bend reaches without a new
+/// code path once it is collected at all.
+#[test]
+fn two_tracks_bending_one_channel_differently_at_one_tick_are_unranked() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = both_bending(dir.path(), 4096, -4096);
+    let json: serde_json::Value =
+        serde_json::from_str(&common::inspect_json(&take)).expect("inspect emits JSON");
+
+    let rows = json["unranked"].as_array().expect("an array").clone();
+    assert!(
+        rows.iter().any(|row| {
+            row["state"] == "bend" && row["against"] == "value" && row["channel"] == 0
+        }),
+        "{rows:?}"
+    );
+}
+
+/// Two tracks bending one channel the *same* way decide nothing, so nothing is
+/// reported — the rule the entry states for a Program, holding for a bend.
+#[test]
+fn two_tracks_bending_one_channel_the_same_way_are_not_reported() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = both_bending(dir.path(), 4096, 4096);
+    let json: serde_json::Value =
+        serde_json::from_str(&common::inspect_json(&take)).expect("inspect emits JSON");
+
+    let rows = json["unranked"].as_array().expect("an array");
+    assert!(
+        !rows.iter().any(|row| row["against"] == "value"),
+        "{rows:?}"
+    );
+}
+
+/// A tempo on the setting track against the conductor's own at Tick 0. No
+/// channel, because a tempo has none: it is reported with `channel` null, which
+/// is the same spelling `controller` has always used for a state that has no
+/// such slot.
+#[test]
+fn two_tracks_stating_a_tempo_at_one_tick_are_unranked_with_no_channel() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    // The conductor states 500_000 at Tick 0; track 2 contradicts it.
+    let take = apart_with(dir.path(), &[common::tempo(0, 400_000)]);
+    let json: serde_json::Value =
+        serde_json::from_str(&common::inspect_json(&take)).expect("inspect emits JSON");
+
+    assert_eq!(
+        json["unranked"],
+        serde_json::json!([{
+            "tick": 0,
+            "channel": null,
+            "controller": null,
+            "track": 0,
+            "against_track": 2,
+            "against": "value",
+            "state": "tempo"
+        }, {
+            "tick": 0,
+            "channel": null,
+            "controller": null,
+            "track": 2,
+            "against_track": 0,
+            "against": "value",
+            "state": "tempo"
+        }])
+    );
+}
+
+/// The same tempo twice decides nothing.
+#[test]
+fn two_tracks_stating_the_same_tempo_at_one_tick_are_not_reported() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = apart_with(dir.path(), &[common::tempo(0, 500_000)]);
+    let json: serde_json::Value =
+        serde_json::from_str(&common::inspect_json(&take)).expect("inspect emits JSON");
+
+    assert_eq!(json["unranked"], serde_json::json!([]));
+}
+
+/// A tempo row names no site. `--allow-unranked` takes a track, a channel and a
+/// tick, and no Edit in the contract writes a tempo — so there is nothing to
+/// answer for, and a line offering a site the flag would refuse would be
+/// advertising a grammar that does not exist.
+#[test]
+fn a_tempo_row_offers_no_site_to_copy() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = apart_with(dir.path(), &[common::tempo(0, 400_000)]);
+    let out = mid().arg("inspect").arg(&take).output().expect("mid runs");
+    let human = String::from_utf8_lossy(&out.stdout);
+
+    let rows: Vec<&str> = human
+        .lines()
+        .filter(|line| line.contains("no order the file states"))
+        .collect();
+    assert_eq!(rows.len(), 2, "{human}");
+    for row in rows {
+        assert!(row.contains("the tempo"), "{row}");
+        assert!(
+            !row.contains("for channel"),
+            "a tempo row named a channel: {row}"
+        );
+        assert!(!row.contains("(t"), "a tempo row offered a site: {row}");
+    }
+}
+
+/// A program change and a bend both have no CC number, so `controller: null`
+/// cannot tell them apart. Without the state being part of the address, two
+/// tracks stating one and the other at one Tick would be compared as one
+/// address and reported as a disagreement that is not one.
+#[test]
+fn a_program_on_one_track_and_a_bend_on_another_are_not_one_address() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    // The bend rides with the notes on track 1, the programme sits on track 2.
+    // Both have no CC number and their values differ, so without the state
+    // being part of the address they would be read as one address disagreeing.
+    let take = stating_on_both(
+        dir.path(),
+        common::pitch_bend(0, 4096),
+        program_change(0, 40),
+    );
+    let json: serde_json::Value =
+        serde_json::from_str(&common::inspect_json(&take)).expect("inspect emits JSON");
+
+    let rows = json["unranked"].as_array().expect("an array");
+    assert!(
+        !rows.iter().any(|row| row["against"] == "value"),
+        "a program and a bend were read as one address: {rows:?}"
+    );
 }

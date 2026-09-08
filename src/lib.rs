@@ -34,4 +34,4 @@ pub use rank::{RankDisagreement, RankedPairKind, UnrankedSite};
 pub use rig::{Audition, Rig};
 pub use take::{Info, Take, Tempo, TimeSignature};
 pub use temporary::remove_temporary_takes_on_signals;
-pub use unranked::{Against, Unranked};
+pub use unranked::{Against, State, Unranked};

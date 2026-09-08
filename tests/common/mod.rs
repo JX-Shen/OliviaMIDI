@@ -553,6 +553,35 @@ pub fn control_change(
 }
 
 /// A statement of what a channel is on, written where the test puts it.
+/// A tempo, in the MIDI meta event's own units: microseconds to the quarter.
+pub fn tempo(tick: u32, micros_per_quarter: u32) -> (u32, midly::TrackEventKind<'static>) {
+    (
+        tick,
+        midly::TrackEventKind::Meta(midly::MetaMessage::Tempo(midly::num::u24::new(
+            micros_per_quarter,
+        ))),
+    )
+}
+
+/// A pitch bend, in MIDI's signed units: nought is the centre, -8192 is as far
+/// down as the event goes and 8191 as far up.
+pub fn pitch_bend(tick: u32, value: i16) -> (u32, midly::TrackEventKind<'static>) {
+    pitch_bend_on(0, tick, value)
+}
+
+/// The same, on whichever channel the test names.
+pub fn pitch_bend_on(channel: u8, tick: u32, value: i16) -> (u32, midly::TrackEventKind<'static>) {
+    (
+        tick,
+        midly::TrackEventKind::Midi {
+            channel: midly::num::u4::new(channel),
+            message: midly::MidiMessage::PitchBend {
+                bend: midly::PitchBend::from_int(value),
+            },
+        },
+    )
+}
+
 pub fn program_change(tick: u32, program: u8) -> (u32, midly::TrackEventKind<'static>) {
     on_channel(
         0,

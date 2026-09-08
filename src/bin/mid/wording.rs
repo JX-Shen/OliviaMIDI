@@ -421,9 +421,14 @@ pub fn stated_program(lines: Option<BarLines>, stated: &StatedProgram) -> Vec<St
 /// `--allow-unranked` takes it, so that a reader who decides to answer for it
 /// can copy the argument out of the line.
 pub fn unranked(lines: Option<BarLines>, row: &battuta::Unranked) -> String {
-    let state = match row.controller {
-        None => "the program change".to_string(),
-        Some(number) => format!("the control change for CC {number}"),
+    let state = match (row.state, row.controller) {
+        (battuta::State::Controller, Some(number)) => {
+            format!("the control change for CC {number}")
+        }
+        (battuta::State::Controller, None) => "the control change".to_string(),
+        (battuta::State::Program, _) => "the program change".to_string(),
+        (battuta::State::Bend, _) => "the bend".to_string(),
+        (battuta::State::Tempo, _) => "the tempo".to_string(),
     };
     let against = match row.against {
         battuta::Against::Notes => format!("notes of that channel on track {}", row.against_track),
@@ -431,16 +436,30 @@ pub fn unranked(lines: Option<BarLines>, row: &battuta::Unranked) -> String {
             format!("a different value for it on track {}", row.against_track)
         }
     };
-    format!(
-        "{}  {} for channel {} on track {} has no order the file states against {}  \
-         (t{}:c{}:s{})",
-        at(lines, row.tick),
-        state,
-        row.channel,
-        row.track,
-        against,
-        row.track,
-        row.channel,
-        row.tick,
-    )
+    match row.channel {
+        Some(channel) => format!(
+            "{}  {} for channel {} on track {} has no order the file states against {}  \
+             (t{}:c{}:s{})",
+            at(lines, row.tick),
+            state,
+            channel,
+            row.track,
+            against,
+            row.track,
+            channel,
+            row.tick,
+        ),
+        // No site to copy. `--allow-unranked` takes a track, a channel and a
+        // tick, and no Edit in the contract writes a state that has no channel
+        // — so there is nothing here for a caller to answer for, and a line
+        // offering an argument the flag would refuse would be advertising a
+        // grammar that does not exist. See #42.
+        None => format!(
+            "{}  {} on track {} has no order the file states against {}",
+            at(lines, row.tick),
+            state,
+            row.track,
+            against,
+        ),
+    }
 }
