@@ -13,37 +13,45 @@
 
 use crate::bars::BarRange;
 use crate::error::Result;
+use crate::reading::{Candidate, Reading, Timeline, UnrankedSpan};
 use crate::take::Take;
 use midly::{MidiMessage, TrackEventKind};
 use serde::Serialize;
 
-/// How far one channel of a passage is bent: where the passage begins, and the
-/// furthest each way inside it.
-///
-/// `Controller`'s shape, with one field where that has none. A Controller runs
-/// from nought upwards, so one *peak* says everything about where it went; a
-/// bend is signed about a centre MIDI fixes, so a phrase that dips below the
-/// note and returns never rises above where it began and a single extreme is
-/// blind to the whole of it. That is ADR-0007's own argument about what a
-/// reading must not hide, applied to a state that needs two numbers to obey it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// A channel's starting reading and the coverage of its interval summary — #42.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Bend {
     pub channel: u8,
+    pub value: Reading<i16>,
+    pub extremes: BendExtremes,
+    pub unranked: Vec<UnrankedSpan<i16>>,
+}
 
-    /// How far the channel is bent when the passage begins. `None` is a Take
-    /// that bent it nowhere before this, and it is not nought: a channel bent
-    /// back to the centre and a channel never bent are two different Pieces,
-    /// the same distinction `Controller` draws between holding 0 and holding
-    /// nothing.
-    pub value: Option<i16>,
+/// A complete interval's extremes, or an explicitly incomplete summary — #42.
+/// Incomplete summaries are accompanied by Bend::unranked intervals.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum BendExtremes {
+    Complete {
+        furthest_down: i16,
+        furthest_down_at: u32,
+        furthest_up: i16,
+        furthest_up_at: u32,
+    },
+    Incomplete,
+}
 
-    /// The lowest and the highest the passage reaches, and where each is first
-    /// reached. Seeded from `value` where the Take had already bent the
-    /// channel, so a passage that only rises still reports what it rose from.
-    pub furthest_down: i16,
-    pub furthest_down_at: u32,
-    pub furthest_up: i16,
-    pub furthest_up_at: u32,
+pub(crate) fn timeline(stated: &[StatedBend], channel: u8) -> Timeline<i16> {
+    Timeline::read(
+        stated
+            .iter()
+            .filter(|statement| statement.channel == channel)
+            .map(|statement| Candidate {
+                track: statement.track,
+                tick: statement.tick,
+                value: statement.value,
+            }),
+    )
 }
 
 /// The bends of a passage: how far each of its channels is bent when it begins,
@@ -112,11 +120,8 @@ impl Take {
             }
         }
 
-        // Stable, so events sharing a Tick keep track order among themselves —
-        // and where two tracks bend one channel at one Tick, the later track is
-        // the one in force, as it is for the synthesiser. Within one track it
-        // keeps file order, so the last bend at a Tick is still the last one
-        // after this.
+        // Stable listing order preserves within-track order, not cross-track
+        // precedence. The continuing reading is resolved by timeline — #42.
         found.sort_by_key(|found| found.tick);
         Ok(found)
     }
@@ -144,69 +149,67 @@ impl Take {
 
         let all = self.stated_bends()?;
 
-        let mut held: Vec<Bend> = Vec::new();
-        for stated in all.iter().filter(|stated| stated.tick <= span.start) {
-            match held.iter_mut().find(|held| held.channel == stated.channel) {
-                Some(held) => {
-                    held.value = Some(stated.value);
-                    held.furthest_down = stated.value;
-                    held.furthest_up = stated.value;
+        let mut channels: Vec<_> = all
+            .iter()
+            .filter(|stated| stated.tick < span.end)
+            .map(|stated| stated.channel)
+            .collect();
+        channels.sort_unstable();
+        channels.dedup();
+        let mut held = Vec::new();
+        for channel in channels {
+            let timeline = timeline(&all, channel);
+            let value = timeline.at(span.start);
+            let unranked = timeline.unranked(span.start, bars.map(|_| span.end));
+            let extremes = if unranked.is_empty() {
+                let mut values = value
+                    .determinate()
+                    .flatten()
+                    .map(|value| (span.start, value))
+                    .into_iter()
+                    .chain(
+                        all.iter()
+                            .filter(|stated| {
+                                stated.channel == channel
+                                    && span.start < stated.tick
+                                    && stated.tick < span.end
+                            })
+                            .map(|stated| (stated.tick, stated.value)),
+                    );
+                let (tick, first) = values
+                    .next()
+                    .expect("a listed channel states a bend before the window ends");
+                let (mut low, mut low_at, mut high, mut high_at) = (first, tick, first, tick);
+                for (tick, value) in values {
+                    if value < low {
+                        low = value;
+                        low_at = tick;
+                    }
+                    if value > high {
+                        high = value;
+                        high_at = tick;
+                    }
                 }
-                None => held.push(Bend {
-                    channel: stated.channel,
-                    value: Some(stated.value),
-                    furthest_down: stated.value,
-                    furthest_down_at: span.start,
-                    furthest_up: stated.value,
-                    furthest_up_at: span.start,
-                }),
-            }
+                BendExtremes::Complete {
+                    furthest_down: low,
+                    furthest_down_at: low_at,
+                    furthest_up: high,
+                    furthest_up_at: high_at,
+                }
+            } else {
+                BendExtremes::Incomplete
+            };
+            held.push(Bend {
+                channel,
+                value,
+                extremes,
+                unranked,
+            });
         }
-
-        let stated: Vec<StatedBend> = all
+        let stated = all
             .into_iter()
             .filter(|stated| span.start < stated.tick && stated.tick < span.end)
             .collect();
-
-        // A channel the passage bends and nothing bent before it is listed too,
-        // bent nowhere. Leaving it out would print its events under a block that
-        // had just said no channel was bent, and a reader would have to decide
-        // which half of the output to believe. `controllers_in` does the same
-        // for the same reason.
-        for stated in &stated {
-            if !held.iter().any(|held| held.channel == stated.channel) {
-                held.push(Bend {
-                    channel: stated.channel,
-                    value: None,
-                    furthest_down: stated.value,
-                    furthest_down_at: stated.tick,
-                    furthest_up: stated.value,
-                    furthest_up_at: stated.tick,
-                });
-            }
-        }
-
-        // Strictly beyond, so a value reached twice is reported at the first of
-        // the two: where the passage *first* goes furthest is the fact, and a
-        // later restatement of it changes nothing a listener hears.
-        for held in held.iter_mut() {
-            for stated in stated
-                .iter()
-                .filter(|stated| stated.channel == held.channel)
-            {
-                if stated.value < held.furthest_down {
-                    held.furthest_down = stated.value;
-                    held.furthest_down_at = stated.tick;
-                }
-                if stated.value > held.furthest_up {
-                    held.furthest_up = stated.value;
-                    held.furthest_up_at = stated.tick;
-                }
-            }
-        }
-
-        held.sort_by_key(|held| held.channel);
-
         Ok(Bends {
             bends: held,
             stated,

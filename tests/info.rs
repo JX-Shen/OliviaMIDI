@@ -15,7 +15,7 @@ fn reports_what_the_take_is() {
     assert_eq!(info["format"], 1);
     assert_eq!(info["tracks"], 3);
     assert_eq!(info["ppq"], 480);
-    assert_eq!(info["tempo"]["bpm"], 60.0);
+    assert_eq!(info["tempo"]["value"]["bpm"], 60.0);
     assert_eq!(info["time_signature"]["numerator"], 3);
     assert_eq!(info["time_signature"]["denominator"], 4);
     assert_eq!(info["length_ticks"], 11516);
@@ -230,18 +230,10 @@ fn a_take_past_the_tick_range_is_refused_rather_than_answered() {
     );
 }
 
-/// Two commands, one file, one answer about what tempo it opens at.
-///
-/// This Take states 120 on track 0 at Tick 0 and 240 on track 1 at the same
-/// Tick. `info` read the first of them and `diff` the last, so the two commands
-/// described the same file differently. Which of two tempos at one Tick is in
-/// force *at all* is a question the file does not answer and #43 takes up; what
-/// is guarded here is only that `info` and `diff` do not disagree about it.
+/// Info and diff preserve the same conflicting Tempo sources — #42.
 #[test]
-fn info_and_diff_agree_which_of_two_tempos_at_one_tick_is_in_force() {
+fn info_and_diff_agree_that_cross_track_tempos_are_indeterminate() {
     let dir = tempfile::tempdir().expect("temp dir");
-    // The setting goes on the voice track, so this is a second tempo statement
-    // at Tick 0 on a second track — the last of them, and so the one in force.
     let doubled = common::build_take_setting(
         &dir.path().join("two-tempos-at-nought.mid"),
         480,
@@ -256,40 +248,34 @@ fn info_and_diff_agree_which_of_two_tempos_at_one_tick_is_in_force() {
         &[],
         &[(0, 480, 60)],
     );
-
     let info = common::info_json(&doubled);
-    assert_eq!(info["tempo"]["micros_per_quarter"], 250_000);
-    assert_eq!(info["tempo"]["bpm"], 240.0);
-
-    let output = mid()
-        .arg("diff")
-        .arg(&single)
-        .arg(&doubled)
-        .arg("--json")
-        .output()
-        .expect("mid runs");
-    assert!(output.status.success());
-    let diff: serde_json::Value =
-        serde_json::from_slice(&output.stdout).expect("diff --json is JSON");
-    assert_eq!(
-        diff["tempos"][0]["after"]["at_start"]["micros_per_quarter"],
-        250_000
-    );
-
-    // And in both human readings, in the unit a musician holds.
-    assert!(
-        common::human_output(&["info", doubled.to_str().expect("a path")])
-            .contains("tempo           240 bpm"),
-        "info does not report the tempo in force at Tick 0"
-    );
-    assert_eq!(
-        common::human_output(&[
-            "diff",
-            single.to_str().expect("a path"),
-            doubled.to_str().expect("a path")
-        ]),
-        "tempo  bar 1 beat 1 onwards  120 -> 240\n"
-    );
+    assert_eq!(info["tempo"]["kind"], "indeterminate");
+    let candidates = &info["tempo"]["candidates"];
+    assert_eq!(candidates[0]["value"]["micros_per_quarter"], 500_000);
+    assert_eq!(candidates[1]["value"]["micros_per_quarter"], 250_000);
+    let diff: serde_json::Value = serde_json::from_str(&common::json_output(&[
+        "diff",
+        single.to_str().unwrap(),
+        doubled.to_str().unwrap(),
+        "--json",
+    ]))
+    .unwrap();
+    assert_eq!(diff["tempos"], serde_json::json!([]));
+    assert_eq!(diff["unranked_tempos"][0]["after"], *candidates);
+    for args in [
+        vec!["info", doubled.to_str().unwrap()],
+        vec!["diff", single.to_str().unwrap(), doubled.to_str().unwrap()],
+    ] {
+        let human = common::human_output(&args);
+        assert!(
+            human.contains("track 0") && human.contains("track 1"),
+            "{human}"
+        );
+        assert!(
+            human.contains("120 bpm") && human.contains("240 bpm"),
+            "{human}"
+        );
+    }
 }
 
 /// The whole block, because the layout is the thing under test: which facts are

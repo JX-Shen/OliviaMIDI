@@ -234,27 +234,99 @@ pub fn program_difference(difference: &ProgramDifference) -> String {
 ///
 /// `CC11` rather than `controller 11`: `CC` is MIDI's own shorthand, and it is
 /// where the attribution for any name printed beside it sits.
-/// Where the passage's highest value falls is passed in rather than read off
-/// `held`, because whether it is worth a cell is the consumer's call: a passage
-/// that states nothing for this Controller has a peak equal to the value beside
-/// it, and printing it would be saying one fact twice.
-pub fn controller(
-    lines: Option<BarLines>,
-    held: &Controller,
-    peak: Option<(u8, u32)>,
-) -> Vec<String> {
+/// Show a complete peak when the passage states another value; always disclose
+/// incomplete coverage — #42.
+pub fn controller(lines: Option<BarLines>, held: &Controller, inside: bool) -> Vec<String> {
     let mut row = vec![
         channel(held.channel),
         controller_number(held.controller),
-        match held.value {
-            None => "unstated".to_string(),
-            Some(value) => value.to_string(),
-        },
+        state_reading(&held.value, |value| value.to_string()),
     ];
-    if let Some((peak, tick)) = peak {
-        row.push(format!("peak {peak} at {}", at(lines, tick)));
+    match held.peak {
+        battuta::ControllerPeak::Complete { value, at: tick } if inside => {
+            row.push(format!("peak {value} at {}", at(lines, tick)))
+        }
+        battuta::ControllerPeak::Incomplete => {
+            row.push("peak not summarised across unranked intervals".to_string())
+        }
+        _ => {}
     }
     row
+}
+
+pub fn state_reading<T>(reading: &battuta::Reading<T>, format: impl Fn(&T) -> String) -> String {
+    match reading {
+        battuta::Reading::Unstated => "unstated".to_string(),
+        battuta::Reading::Determinate { value } => format(value),
+        battuta::Reading::Indeterminate { candidates } => {
+            format!("indeterminate ({})", state_candidates(candidates, format))
+        }
+    }
+}
+
+pub fn state_candidates<T>(
+    candidates: &[battuta::Candidate<T>],
+    format: impl Fn(&T) -> String,
+) -> String {
+    candidates
+        .iter()
+        .map(|candidate| {
+            format!(
+                "{} from track {} at tick {}",
+                format(&candidate.value),
+                candidate.track,
+                candidate.tick
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("; ")
+}
+
+pub fn tempo_value(tempo: &battuta::Tempo) -> String {
+    format!(
+        "{} bpm ({} us per quarter)",
+        tempo.bpm, tempo.micros_per_quarter
+    )
+}
+
+pub fn indeterminate_span<T>(
+    lines: Option<BarLines>,
+    address: String,
+    interval: &battuta::UnrankedSpan<T>,
+    format: impl Fn(&T) -> String,
+) -> Vec<String> {
+    vec![
+        address,
+        span(lines, interval.from, interval.until),
+        format!(
+            "indeterminate: {}",
+            state_candidates(&interval.candidates, format)
+        ),
+    ]
+}
+
+pub fn unranked_comparison<T>(
+    before_lines: Option<BarLines>,
+    after_lines: Option<BarLines>,
+    address: String,
+    interval: &battuta::UnrankedComparison<T>,
+    format: impl Fn(&T) -> String,
+) -> Vec<Vec<String>> {
+    [
+        ("before", before_lines, &interval.before),
+        ("after", after_lines, &interval.after),
+    ]
+    .into_iter()
+    .filter(|(_, _, candidates)| !candidates.is_empty())
+    .map(|(side, lines, candidates)| {
+        vec![
+            format!("unranked {address}"),
+            side.to_string(),
+            span(lines, interval.from, interval.until),
+            format!("not compared: {}", state_candidates(candidates, &format)),
+        ]
+    })
+    .collect()
 }
 
 /// How far a channel is bent where the passage begins, and how far the passage
@@ -276,31 +348,68 @@ pub fn controller(
 /// worth is the synthesiser's bend range, which is not in the file, so naming
 /// semitones would print a Rig fact from a command that reports the Piece.
 pub fn bend(lines: Option<BarLines>, held: &battuta::Bend, inside: bool) -> Vec<String> {
-    let mut cell = match held.value {
-        None => "unstated".to_string(),
-        Some(value) => value.to_string(),
+    let starting = match &held.value {
+        battuta::Reading::Determinate { value } => Some(*value),
+        _ => None,
     };
-    if inside {
-        let mut went: Vec<String> = Vec::new();
-        if Some(held.furthest_down) != held.value {
-            went.push(format!(
-                "down to {} at {}",
-                held.furthest_down,
-                at(lines, held.furthest_down_at)
-            ));
+    let mut cell = match &held.value {
+        battuta::Reading::Unstated => "unstated".to_string(),
+        battuta::Reading::Determinate { value } => value.to_string(),
+        battuta::Reading::Indeterminate { candidates } => {
+            format!("indeterminate ({})", bend_candidates(candidates))
         }
-        if Some(held.furthest_up) != held.value {
-            went.push(format!(
-                "up to {} at {}",
-                held.furthest_up,
-                at(lines, held.furthest_up_at)
-            ));
+    };
+    match held.extremes {
+        battuta::BendExtremes::Incomplete => {
+            cell.push_str("; extremes not summarised across unranked intervals")
         }
-        if !went.is_empty() {
-            cell = format!("{cell} ({})", went.join(", "));
+        battuta::BendExtremes::Complete {
+            furthest_down,
+            furthest_down_at,
+            furthest_up,
+            furthest_up_at,
+        } if inside => {
+            let mut went = Vec::new();
+            if Some(furthest_down) != starting {
+                went.push(format!(
+                    "down to {} at {}",
+                    furthest_down,
+                    at(lines, furthest_down_at)
+                ));
+            }
+            if Some(furthest_up) != starting {
+                went.push(format!(
+                    "up to {} at {}",
+                    furthest_up,
+                    at(lines, furthest_up_at)
+                ));
+            }
+            if !went.is_empty() {
+                cell = format!("{cell} ({})", went.join(", "));
+            }
         }
+        _ => {}
     }
     vec![channel(held.channel), "bend".to_string(), cell]
+}
+
+pub fn bend_candidates(candidates: &[battuta::Candidate<i16>]) -> String {
+    state_candidates(candidates, |value| value.to_string())
+}
+
+pub fn unranked_bend(
+    lines: Option<BarLines>,
+    channel_number: u8,
+    from: u32,
+    until: Option<u32>,
+    candidates: &[battuta::Candidate<i16>],
+) -> Vec<String> {
+    vec![
+        "unranked bend".to_string(),
+        span(lines, from, until),
+        channel(channel_number),
+        format!("not compared: {}", bend_candidates(candidates)),
+    ]
 }
 
 /// One place the passage bends a channel, as an event: where it happens, which
@@ -738,7 +847,7 @@ pub fn bend_rows(
 pub fn programs(state: &Program) -> Vec<String> {
     vec![
         channel(state.channel),
-        program(state.channel, state.program),
+        state_reading(&state.program, |value| program(state.channel, Some(*value))),
     ]
 }
 

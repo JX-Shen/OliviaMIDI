@@ -374,8 +374,8 @@ impl<'a> Rewrite<'a> {
         Some(previous)
     }
 
-    /// Every channel-state event the track still holds, as the cross-track check
-    /// reads them.
+    /// Every Program or Controller event the track still holds, as the
+    /// cross-track check reads them.
     ///
     /// No Rank comes out. A Rank orders events within one track and the caller
     /// of this is comparing two, which is the whole reason that check exists —
@@ -392,6 +392,18 @@ impl<'a> Rewrite<'a> {
                     written: slot.written.is_some(),
                 })
             })
+    }
+
+    /// Whether this track states a Bend at the given channel and Tick — #42.
+    pub(crate) fn states_bend_at(&self, channel: u8, tick: u32) -> bool {
+        self.slots.iter().any(|slot| {
+            slot.alive
+                && slot.tick == tick
+                && matches!(slot.kind, TrackEventKind::Midi {
+                    channel: on,
+                    message: MidiMessage::PitchBend { .. },
+                } if on.as_int() == channel)
+        })
     }
 
     /// Every strike the track still holds, as the cross-track check reads them.

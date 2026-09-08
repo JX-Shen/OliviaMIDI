@@ -500,12 +500,11 @@ fn stay_distinct(tracks: &[Rewrite], sounding: &[NoteSlots]) -> Result<()> {
     Ok(())
 }
 
-/// One site the run is allowed to leave unranked: where a channel-state event
-/// this Edit Set wrote is, spelled as the address it was written to.
+/// One site the run is allowed to leave unranked: a channel-state statement's
+/// track, channel and Tick, including when only the note was edited — #42.
 ///
-/// The state event's own address, never the notes' track, because that is the
-/// thing the Edit Set asked for and so the thing somebody can take
-/// responsibility for. Spelled `t2:c0:s1920` — the same three letters a note's
+/// The state event's own address, never the notes' track.
+/// Spelled `t2:c0:s1920` — the same three letters a note's
 /// identity uses for the same three facts (ADR-0002), so that one grammar
 /// answers "which track, which channel, which Tick" wherever it is asked.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -623,9 +622,19 @@ fn stay_rankable(tracks: &[Rewrite], allowed: &[Site]) -> Result<()> {
                 if other == stating {
                     continue;
                 }
-                let Some(state) = elsewhere.stated().find(|state| {
-                    state.tick == note.tick && state.statement.channel == note.channel
-                }) else {
+                let state = elsewhere
+                    .stated()
+                    .find(|state| {
+                        state.tick == note.tick && state.statement.channel == note.channel
+                    })
+                    .map(|state| state.statement.state.named())
+                    .or_else(|| {
+                        // A note can land on a carried Bend without editing it — #42.
+                        elsewhere
+                            .states_bend_at(note.channel, note.tick)
+                            .then(|| "bend".to_string())
+                    });
+                let Some(state) = state else {
                     continue;
                 };
                 if named(other, note.channel, note.tick) {
@@ -636,7 +645,7 @@ fn stay_rankable(tracks: &[Rewrite], allowed: &[Site]) -> Result<()> {
                     sounding: stating,
                     tick: note.tick,
                     channel: note.channel,
-                    state: state.statement.state.named(),
+                    state,
                 });
             }
         }

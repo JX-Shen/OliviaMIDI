@@ -137,6 +137,11 @@ use std::path::PathBuf;
 ///     and the format does not say which a player merges first, so the file
 ///     would not state what the music is. See below.
 ///
+/// This also checks the notes' side: adding or moving a note onto another
+/// track's existing Bend at the same Tick and channel is refused, even though
+/// the Bend itself was not edited. Move the strike to another Tick, or name the
+/// Bend statement's site with `--allow-unranked`, not the note's track.
+///
 /// A Take that arrived that way keeps it: what the author wrote is the author's
 /// (ADR-0003), `mid inspect` reports where a Take leaves an order unstated, and
 /// only what this Edit Set would write is refused. Nor is anything said where

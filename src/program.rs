@@ -16,21 +16,17 @@
 
 use crate::bars::BarRange;
 use crate::error::Result;
+use crate::reading::{Candidate, Reading, Timeline, UnrankedSpan};
 use crate::take::Take;
 use midly::{MidiMessage, TrackEventKind};
 use serde::Serialize;
 
-/// Which Program one channel is on.
-///
-/// `None` is a Take that states none for this channel, and it is not program 0.
-/// General MIDI's default is program 0, so the two are indistinguishable by ear
-/// on a General MIDI bank — which is exactly why they must be distinguishable
-/// here. Writing 0 where the file said nothing would change the Piece and pass
-/// every audition. See #12.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// A channel's starting Program reading and any indeterminate intervals — #42.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Program {
     pub channel: u8,
-    pub program: Option<u8>,
+    pub program: Reading<u8>,
+    pub unranked: Vec<UnrankedSpan<u8>>,
 }
 
 /// One place a Take states a Program: which track says it, on which channel, at
@@ -58,6 +54,19 @@ pub struct StatedProgram {
 pub struct Programs {
     pub programs: Vec<Program>,
     pub stated: Vec<StatedProgram>,
+}
+
+pub(crate) fn timeline(stated: &[StatedProgram], channel: u8) -> Timeline<u8> {
+    Timeline::read(
+        stated
+            .iter()
+            .filter(|statement| statement.channel == channel)
+            .map(|statement| Candidate {
+                track: statement.track,
+                tick: statement.tick,
+                value: statement.program,
+            }),
+    )
 }
 
 impl Take {
@@ -90,9 +99,8 @@ impl Take {
             }
         }
 
-        // Stable, so events sharing a Tick keep track order among themselves —
-        // and where two tracks state a Program for one channel at one Tick, the
-        // later track is the one in force, as it is for the synthesiser.
+        // Stable listing order preserves written order within a track; #42's
+        // timeline determines whether the continuing value is known.
         stated.sort_by_key(|stated| stated.tick);
         Ok(stated)
     }
@@ -117,47 +125,34 @@ impl Take {
         };
         let all = self.stated_programs()?;
 
-        // In force at the passage's first Tick: the last thing said at or before
-        // it, in the order `stated_programs` fixes.
-        let mut in_force: Vec<(u8, u8)> = Vec::new();
-        for stated in all.iter().filter(|stated| stated.tick <= span.start) {
-            match in_force
-                .iter_mut()
-                .find(|(channel, _)| *channel == stated.channel)
-            {
-                Some((_, program)) => *program = stated.program,
-                None => in_force.push((stated.channel, stated.program)),
-            }
-        }
-
-        let stated: Vec<StatedProgram> = all
-            .into_iter()
-            .filter(|stated| span.start < stated.tick && stated.tick < span.end)
-            .collect();
-
         let mut channels: Vec<u8> = self
             .notes_in(bars)?
             .iter()
             .map(|note| note.channel)
-            .chain(in_force.iter().map(|&(channel, _)| channel))
-            .chain(stated.iter().map(|stated| stated.channel))
+            .chain(
+                all.iter()
+                    .filter(|stated| stated.tick < span.end)
+                    .map(|stated| stated.channel),
+            )
             .collect();
         channels.sort_unstable();
         channels.dedup();
-
-        Ok(Programs {
-            programs: channels
-                .into_iter()
-                .map(|channel| Program {
+        let programs = channels
+            .into_iter()
+            .map(|channel| {
+                let reading = timeline(&all, channel);
+                Program {
                     channel,
-                    program: in_force
-                        .iter()
-                        .find(|&&(held, _)| held == channel)
-                        .map(|&(_, program)| program),
-                })
-                .collect(),
-            stated,
-        })
+                    program: reading.at(span.start),
+                    unranked: reading.unranked(span.start, bars.map(|_| span.end)),
+                }
+            })
+            .collect();
+        let stated = all
+            .into_iter()
+            .filter(|stated| span.start < stated.tick && stated.tick < span.end)
+            .collect();
+        Ok(Programs { programs, stated })
     }
 }
 

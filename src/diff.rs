@@ -1,7 +1,6 @@
 use crate::controller::StatedController;
 use crate::error::{Error, Result};
 use crate::note::{Note, NoteId};
-use crate::program::StatedProgram;
 use crate::rank::{RankDisagreement, UnrankedSite};
 use crate::take::{Take, Tempo};
 use serde::Serialize;
@@ -59,6 +58,48 @@ pub struct Diff {
     /// Consequences name as the next one to join, joining. Same hole as tempo
     /// until it existed.
     pub bends: Vec<BendDifference>,
+    /// Bend intervals excluded from value comparison, with each side's sources — #42.
+    pub unranked_bends: Vec<UnrankedBend>,
+    pub unranked_tempos: Vec<crate::UnrankedComparison<Tempo>>,
+    pub unranked_programs: Vec<UnrankedProgram>,
+    pub unranked_controllers: Vec<UnrankedController>,
+    /// Channel-state/strike relations, distinct from continuing value conflicts — #42.
+    pub unranked_state_sites: Vec<UnrankedStateSite>,
+}
+
+/// An uncomparable Bend interval. An empty side has no value conflict.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UnrankedBend {
+    pub channel: u8,
+    pub from: u32,
+    pub until: Option<u32>,
+    pub before: Vec<crate::Candidate<i16>>,
+    pub after: Vec<crate::Candidate<i16>>,
+}
+
+/// Program intervals excluded from value comparison — #42.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UnrankedProgram {
+    pub channel: u8,
+    #[serde(flatten)]
+    pub interval: crate::UnrankedComparison<u8>,
+}
+
+/// Controller intervals excluded from value comparison — #42.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UnrankedController {
+    pub channel: u8,
+    pub controller: u8,
+    #[serde(flatten)]
+    pub interval: crate::UnrankedComparison<u8>,
+}
+
+/// A Channel-state/strike site present in either Take; not a value interval.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UnrankedStateSite {
+    pub site: crate::Unranked,
+    pub in_before: bool,
+    pub in_after: bool,
 }
 
 /// One stretch of the Piece and what tempo each Take is at across it.
@@ -66,8 +107,8 @@ pub struct Diff {
 /// A span rather than a row per statement, for the reason a Controller
 /// difference is one: an accelerando is written as a run of tempo statements,
 /// and reporting forty of them as forty differences is the failure ADR-0007
-/// exists to prevent. `from` and `until` read as a half-open stretch, `None`
-/// where the two never agree again.
+/// exists to prevent. `from` and `until` read as a half-open stretch, ending
+/// at agreement or an indeterminate reading; `None` means neither occurs — #42.
 ///
 /// No channel, because tempo has none: one tempo governs the whole Take.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -145,9 +186,8 @@ pub struct BendSide {
 ///
 /// A span rather than a row per event, which is the whole of why forty
 /// differences become one. `from` is the Tick the two Takes stop agreeing about
-/// what is in force and `until` the Tick they agree again — `None` where they
-/// never do, which is a different statement from agreeing at the last Tick
-/// either of them happens to hold.
+/// what is in force and `until` the Tick they agree again or either reading
+/// becomes indeterminate. `None` means neither occurs — #42.
 ///
 /// Nothing here claims that a stretch of events in one Take *is* a stretch in
 /// the other, moved. That claim would need a parameter under ADR-0004; the two
@@ -192,6 +232,8 @@ pub struct ControllerSide {
 pub struct ProgramDifference {
     pub channel: u8,
     pub at: u32,
+    /// Exclusive end of this determinate value pair — #42.
+    pub until: Option<u32>,
     pub before: Option<u8>,
     pub after: Option<u8>,
 }
@@ -226,7 +268,17 @@ pub enum Change {
 }
 
 impl Diff {
-    /// Whether the two Takes say the same thing about the Piece.
+    /// Whether any part of the requested comparison could not be made — #42.
+    pub fn has_unranked(&self) -> bool {
+        !self.unranked_sites.is_empty()
+            || !self.unranked_bends.is_empty()
+            || !self.unranked_tempos.is_empty()
+            || !self.unranked_programs.is_empty()
+            || !self.unranked_controllers.is_empty()
+            || !self.unranked_state_sites.is_empty()
+    }
+
+    /// Whether no determinate differences were found. See has_unranked — #42.
     ///
     /// The orchestration and the controller data count. A Take whose horn part
     /// was a violin part has
@@ -393,39 +445,95 @@ pub fn diff(before: &Take, after: &Take, tolerance: Option<u32>) -> Result<Diff>
 
     let (rank_disagreements, unranked_sites) = crate::rank::rank_differences(before, after)?;
 
+    let (bends, unranked_bends) = bend_differences(before, after)?;
+    let (programs, unranked_programs) = program_differences(before, after)?;
+    let (controllers, unranked_controllers) = controller_differences(before, after)?;
+    let (tempos, unranked_tempos) = tempo_differences(before, after)?;
     Ok(Diff {
         tolerance_ticks,
         added,
         removed,
         changed,
-        programs: program_differences(before, after)?,
-        controllers: controller_differences(before, after)?,
+        programs,
+        unranked_programs,
+        controllers,
+        unranked_controllers,
         rank_disagreements,
         unranked_sites,
-        tempos: tempo_differences(before, after)?,
-        bends: bend_differences(before, after)?,
+        tempos,
+        unranked_tempos,
+        bends,
+        unranked_bends,
+        unranked_state_sites: state_sites(before, after, &before_notes, &after_notes)?,
     })
 }
 
-/// One stretch two readings of one state disagree over, each side read as
-/// scalars.
-///
-/// `Stretch` and the two functions below it are the state comparison ADR-0007
-/// asks for, with the state itself taken out: what is left is one algorithm over
-/// a list of `(Tick, number)` pairs, which is what a Program, a Controller, a
-/// tempo and a bend all reduce to. `i64` holds every one of them — a Controller's
-/// seven bits, a bend's signed fourteen, a tempo's microseconds — so no caller
-/// has to widen or lose anything to be compared here.
-///
-/// `controller_differences` predates this and still has its own copy of the
-/// algorithm. Moving it over would mean either renaming its shipped `peak`
-/// field or reading `highest` back into it, and #29's compatibility constraint
-/// says not this release.
-struct Stretch {
-    from: u32,
-    until: Option<u32>,
-    before: Reading,
-    after: Reading,
+/// Comparable differences and excluded intervals for one state address — #42.
+struct Comparison<T> {
+    moments: Vec<u32>,
+    differences: Vec<(u32, Option<u32>)>,
+    unranked: Vec<crate::UnrankedComparison<T>>,
+}
+
+fn compare<T: Copy + Eq>(
+    before: &crate::reading::Timeline<T>,
+    after: &crate::reading::Timeline<T>,
+) -> Comparison<T> {
+    let mut moments: Vec<_> = std::iter::once(0)
+        .chain(
+            before
+                .moments
+                .iter()
+                .chain(&after.moments)
+                .map(|(tick, _)| *tick),
+        )
+        .collect();
+    moments.sort_unstable();
+    moments.dedup();
+    let mut differences = Vec::new();
+    let mut unranked: Vec<crate::UnrankedComparison<T>> = Vec::new();
+    let mut open = None;
+    for (index, &at) in moments.iter().enumerate() {
+        let mine = before.at(at);
+        let theirs = after.at(at);
+        let differs = match (mine.determinate(), theirs.determinate()) {
+            (Some(mine), Some(theirs)) => mine != theirs,
+            _ => {
+                let until = moments.get(index + 1).copied();
+                if let Some(last) = unranked.last_mut().filter(|last| {
+                    last.until == Some(at)
+                        && last.before == mine.candidates()
+                        && last.after == theirs.candidates()
+                }) {
+                    last.until = until;
+                } else {
+                    unranked.push(crate::UnrankedComparison {
+                        from: at,
+                        until,
+                        before: mine.candidates().to_vec(),
+                        after: theirs.candidates().to_vec(),
+                    });
+                }
+                false
+            }
+        };
+        match (open, differs) {
+            (None, true) => open = Some(at),
+            (Some(from), false) => {
+                differences.push((from, Some(at)));
+                open = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(from) = open {
+        differences.push((from, None));
+    }
+    Comparison {
+        moments,
+        differences,
+        unranked,
+    }
 }
 
 /// One Take's reading of one stretch: the value in force at each end, and the
@@ -444,52 +552,6 @@ struct Reading {
     at_end: Option<i64>,
     lowest: Option<(i64, u32)>,
     highest: Option<(i64, u32)>,
-}
-
-/// Every stretch two readings of one state disagree over.
-///
-/// Compared at every Tick either reading says anything, plus Tick 0, because a
-/// Take that opens holding a value and one that holds nothing differ from the
-/// first note. A run of moments that disagree collapses into the one span that
-/// states it, and `until` is the Tick they agree again rather than the last one
-/// they were apart — half-open, as `ControllerDifference` documents.
-///
-/// Each list must be sorted by Tick, with the last statement at a Tick the one
-/// in force there. Every `stated_*` reading on `Take` fixes that.
-fn stretches(before: &[(u32, i64)], after: &[(u32, i64)]) -> Vec<Stretch> {
-    let mut moments: Vec<u32> = std::iter::once(0)
-        .chain(before.iter().chain(after.iter()).map(|&(tick, _)| tick))
-        .collect();
-    moments.sort_unstable();
-    moments.dedup();
-
-    let mut found = Vec::new();
-    let mut open: Option<u32> = None;
-    for &at in &moments {
-        let differs = scalar_in_force(before, at) != scalar_in_force(after, at);
-        match (open, differs) {
-            (None, true) => open = Some(at),
-            (Some(from), false) => {
-                found.push(Stretch {
-                    from,
-                    until: Some(at),
-                    before: reading(before, from, Some(at), &moments),
-                    after: reading(after, from, Some(at), &moments),
-                });
-                open = None;
-            }
-            _ => {}
-        }
-    }
-    if let Some(from) = open {
-        found.push(Stretch {
-            from,
-            until: None,
-            before: reading(before, from, None, &moments),
-            after: reading(after, from, None, &moments),
-        });
-    }
-    found
 }
 
 /// What one reading holds across a stretch.
@@ -529,8 +591,7 @@ fn reading(stated: &[(u32, i64)], from: u32, until: Option<u32>, moments: &[u32]
     }
 }
 
-/// The value in force at a Tick: the last thing said at or before it, in the
-/// order the list arrived in.
+/// The scalar within an interval already proved determinate by `compare` — #42.
 fn scalar_in_force(stated: &[(u32, i64)], at: u32) -> Option<i64> {
     stated
         .iter()
@@ -539,26 +600,25 @@ fn scalar_in_force(stated: &[(u32, i64)], at: u32) -> Option<i64> {
         .next_back()
 }
 
-/// Where the two Takes are at different tempos.
-///
-/// One comparison rather than one per channel, because a tempo governs the whole
-/// Take: `stated_tempos` reads every statement wherever it was written, and the
-/// last at or before a moment is the one in force there.
-fn tempo_differences(before: &Take, after: &Take) -> Result<Vec<TempoDifference>> {
-    let scalars = |take: &Take| -> Result<Vec<(u32, i64)>> {
-        Ok(take
-            .stated_tempos()?
-            .into_iter()
+/// Compare Tempo only across determinate intervals — #42.
+fn tempo_differences(
+    before: &Take,
+    after: &Take,
+) -> Result<(Vec<TempoDifference>, Vec<crate::UnrankedComparison<Tempo>>)> {
+    let before_stated = before.stated_tempos()?;
+    let after_stated = after.stated_tempos()?;
+    let comparison = compare(
+        &crate::take::tempo_timeline(&before_stated),
+        &crate::take::tempo_timeline(&after_stated),
+    );
+    let scalars = |stated: &[crate::StatedTempo]| -> Vec<(u32, i64)> {
+        stated
+            .iter()
             .map(|stated| (stated.tick, i64::from(stated.tempo.micros_per_quarter)))
-            .collect())
+            .collect()
     };
-    let before_stated = scalars(before)?;
-    let after_stated = scalars(after)?;
-
-    // The extremes swap names on the way out. Fewer microseconds to the quarter
-    // note is a faster tempo, so the lowest number is the fastest reading —
-    // which is why `TempoSide` names them the way a musician would and this is
-    // the one place the inversion is written.
+    let before_values = scalars(&before_stated);
+    let after_values = scalars(&after_stated);
     let side = |reading: Reading| TempoSide {
         at_start: reading.at_start.map(as_tempo),
         at_end: reading.at_end.map(as_tempo),
@@ -567,16 +627,24 @@ fn tempo_differences(before: &Take, after: &Take) -> Result<Vec<TempoDifference>
         slowest: reading.highest.map(|(micros, _)| as_tempo(micros)),
         slowest_at: reading.highest.map(|(_, tick)| tick),
     };
-
-    Ok(stretches(&before_stated, &after_stated)
+    let differences = comparison
+        .differences
         .into_iter()
-        .map(|stretch| TempoDifference {
-            from: stretch.from,
-            until: stretch.until,
-            before: side(stretch.before),
-            after: side(stretch.after),
+        .map(|(from, until)| TempoDifference {
+            from,
+            until,
+            before: side(reading(&before_values, from, until, &comparison.moments)),
+            after: side(reading(&after_values, from, until, &comparison.moments)),
         })
-        .collect())
+        .collect();
+    Ok((
+        differences,
+        comparison
+            .unranked
+            .into_iter()
+            .map(|interval| interval.map(Tempo::from_micros_per_quarter))
+            .collect(),
+    ))
 }
 
 /// A tempo back from the scalar it was compared as.
@@ -592,7 +660,10 @@ fn as_tempo(micros: i64) -> Tempo {
 /// Per channel, because a bend is channel state: bending one channel says
 /// nothing about any other. A channel neither Take ever bends cannot differ and
 /// is not considered.
-fn bend_differences(before: &Take, after: &Take) -> Result<Vec<BendDifference>> {
+fn bend_differences(
+    before: &Take,
+    after: &Take,
+) -> Result<(Vec<BendDifference>, Vec<UnrankedBend>)> {
     let before_stated = before.stated_bends()?;
     let after_stated = after.stated_bends()?;
 
@@ -614,27 +685,147 @@ fn bend_differences(before: &Take, after: &Take) -> Result<Vec<BendDifference>> 
     };
 
     let mut differences = Vec::new();
+    let mut unranked = Vec::new();
     for channel in channels {
-        let on = |stated: &[crate::bend::StatedBend]| -> Vec<(u32, i64)> {
+        let before_timeline = crate::bend::timeline(&before_stated, channel);
+        let after_timeline = crate::bend::timeline(&after_stated, channel);
+        let comparison = compare(&before_timeline, &after_timeline);
+        // Keep raw within-Tick excursions for determinate intervals, as the
+        // existing summaries do. These lists never decide comparability — #42.
+        let on = |stated: &[crate::StatedBend]| -> Vec<(u32, i64)> {
             stated
                 .iter()
                 .filter(|stated| stated.channel == channel)
                 .map(|stated| (stated.tick, i64::from(stated.value)))
                 .collect()
         };
-        differences.extend(
-            stretches(&on(&before_stated), &on(&after_stated))
+        let before_values = on(&before_stated);
+        let after_values = on(&after_stated);
+        for (from, until) in comparison.differences {
+            differences.push(BendDifference {
+                channel,
+                from,
+                until,
+                before: side(reading(&before_values, from, until, &comparison.moments)),
+                after: side(reading(&after_values, from, until, &comparison.moments)),
+            });
+        }
+        unranked.extend(
+            comparison
+                .unranked
                 .into_iter()
-                .map(|stretch| BendDifference {
+                .map(|interval| UnrankedBend {
                     channel,
-                    from: stretch.from,
-                    until: stretch.until,
-                    before: side(stretch.before),
-                    after: side(stretch.after),
+                    from: interval.from,
+                    until: interval.until,
+                    before: interval.before,
+                    after: interval.after,
                 }),
         );
     }
-    Ok(differences)
+    Ok((differences, unranked))
+}
+
+fn state_sites(
+    before: &Take,
+    after: &Take,
+    before_notes: &[Note],
+    after_notes: &[Note],
+) -> Result<Vec<UnrankedStateSite>> {
+    let sites = |take: &Take, notes: &[Note]| -> Result<Vec<crate::Unranked>> {
+        let mut strikes: std::collections::BTreeMap<(u32, u8), std::collections::BTreeSet<usize>> =
+            std::collections::BTreeMap::new();
+        for note in notes {
+            strikes
+                .entry((note.start, note.channel))
+                .or_default()
+                .insert(note.track);
+        }
+        let mut found = Vec::new();
+        let mut statements = Vec::new();
+        for statement in take.stated_bends()? {
+            statements.push((
+                statement.tick,
+                statement.channel,
+                statement.track,
+                crate::State::Bend,
+                None,
+            ));
+        }
+        for statement in take.stated_programs()? {
+            statements.push((
+                statement.tick,
+                statement.channel,
+                statement.track,
+                crate::State::Program,
+                None,
+            ));
+        }
+        for statement in take.stated_controllers()? {
+            statements.push((
+                statement.tick,
+                statement.channel,
+                statement.track,
+                crate::State::Controller,
+                Some(statement.controller),
+            ));
+        }
+        for (tick, channel, source_track, state, controller) in statements {
+            if let Some(tracks) = strikes.get(&(tick, channel)) {
+                for &track in tracks {
+                    if track != source_track {
+                        found.push(crate::Unranked {
+                            tick,
+                            channel: Some(channel),
+                            controller,
+                            track: source_track,
+                            against_track: track,
+                            against: crate::Against::Notes,
+                            state,
+                        });
+                    }
+                }
+            }
+        }
+        found.sort_by_key(|site| {
+            (
+                site.tick,
+                site.channel,
+                site.state as u8,
+                site.controller,
+                site.track,
+                site.against_track,
+            )
+        });
+        found.dedup();
+        Ok(found)
+    };
+    let before = sites(before, before_notes)?;
+    let after = sites(after, after_notes)?;
+    let mut union = before.clone();
+    for site in &after {
+        if !union.contains(site) {
+            union.push(site.clone());
+        }
+    }
+    union.sort_by_key(|site| {
+        (
+            site.tick,
+            site.channel,
+            site.state as u8,
+            site.controller,
+            site.track,
+            site.against_track,
+        )
+    });
+    Ok(union
+        .into_iter()
+        .map(|site| UnrankedStateSite {
+            in_before: before.contains(&site),
+            in_after: after.contains(&site),
+            site,
+        })
+        .collect())
 }
 
 /// A bend back from the scalar it was compared as. `stated_bends` is where the
@@ -643,228 +834,121 @@ fn as_bend(value: i64) -> i16 {
     value as i16
 }
 
-/// Where the two Takes have a channel on different Programs.
-///
-/// Compared at every Tick either Take says anything on that channel, plus Tick
-/// 0, because a Take that opens with a Program and one that opens with none
-/// differ from the first note. Consecutive moments agreeing on the same
-/// disagreement collapse into the one row that states it: a Take that switches
-/// to program 60 at Bar 3 while the other never does disagrees from Bar 3
-/// onwards, and saying so once is saying it.
-///
-/// A channel neither Take ever states a Program for cannot differ and is not
-/// considered. Two Takes that state the same Program at different Ticks *do*
-/// differ, and the row falls at the earlier of the two — which is the Tick from
-/// which they are on different instruments.
-fn program_differences(before: &Take, after: &Take) -> Result<Vec<ProgramDifference>> {
+/// Compare each determinate Program pair, bounded by the next pair or conflict — #42.
+fn program_differences(
+    before: &Take,
+    after: &Take,
+) -> Result<(Vec<ProgramDifference>, Vec<UnrankedProgram>)> {
     let before_stated = before.stated_programs()?;
     let after_stated = after.stated_programs()?;
-
-    let mut channels: Vec<u8> = before_stated
+    let mut channels: Vec<_> = before_stated
         .iter()
-        .chain(after_stated.iter())
+        .chain(&after_stated)
         .map(|stated| stated.channel)
         .collect();
     channels.sort_unstable();
     channels.dedup();
-
-    let mut differences = Vec::new();
+    let mut differences: Vec<ProgramDifference> = Vec::new();
+    let mut unranked = Vec::new();
     for channel in channels {
-        let mut moments: Vec<u32> = std::iter::once(0)
-            .chain(
-                before_stated
-                    .iter()
-                    .chain(after_stated.iter())
-                    .filter(|stated| stated.channel == channel)
-                    .map(|stated| stated.tick),
-            )
-            .collect();
-        moments.sort_unstable();
-        moments.dedup();
-
-        let mut said: Option<(Option<u8>, Option<u8>)> = None;
-        for at in moments {
-            let pair = (
-                in_force(&before_stated, channel, at),
-                in_force(&after_stated, channel, at),
-            );
-            if pair.0 == pair.1 {
-                said = None;
+        let mine = crate::program::timeline(&before_stated, channel);
+        let theirs = crate::program::timeline(&after_stated, channel);
+        let comparison = compare(&mine, &theirs);
+        for (index, &at) in comparison.moments.iter().enumerate() {
+            let (Some(before), Some(after)) =
+                (mine.at(at).determinate(), theirs.at(at).determinate())
+            else {
+                continue;
+            };
+            if before == after {
                 continue;
             }
-            if said == Some(pair) {
-                continue;
+            let until = comparison.moments.get(index + 1).copied();
+            if let Some(last) = differences.last_mut().filter(|last| {
+                last.channel == channel
+                    && last.until == Some(at)
+                    && last.before == before
+                    && last.after == after
+            }) {
+                last.until = until;
+            } else {
+                differences.push(ProgramDifference {
+                    channel,
+                    at,
+                    until,
+                    before,
+                    after,
+                });
             }
-            said = Some(pair);
-            differences.push(ProgramDifference {
-                channel,
-                at,
-                before: pair.0,
-                after: pair.1,
-            });
         }
+        unranked.extend(
+            comparison
+                .unranked
+                .into_iter()
+                .map(|interval| UnrankedProgram { channel, interval }),
+        );
     }
-    Ok(differences)
+    Ok((differences, unranked))
 }
 
-/// Where the two Takes hold different values for a Controller.
-///
-/// Compared at every Tick either Take says anything about that Controller, plus
-/// Tick 0, because a Take that opens holding a value and one that holds nothing
-/// differ from the first note. A run of moments that disagree collapses into the
-/// one span that states it, which is what turns a crescendo's forty events into
-/// a row.
-///
-/// A span closes at the first moment the two agree again, and `until` is that
-/// Tick — the moment they are back together, not the last moment they were
-/// apart, so that reading `from` and `until` as a half-open stretch is reading
-/// it correctly. A span that never closes carries `None`.
-fn controller_differences(before: &Take, after: &Take) -> Result<Vec<ControllerDifference>> {
+/// Compare each Controller address only across determinate intervals — #42.
+fn controller_differences(
+    before: &Take,
+    after: &Take,
+) -> Result<(Vec<ControllerDifference>, Vec<UnrankedController>)> {
     let before_stated = before.stated_controllers()?;
     let after_stated = after.stated_controllers()?;
-
-    let mut pairs: Vec<(u8, u8)> = before_stated
+    let mut pairs: Vec<_> = before_stated
         .iter()
-        .chain(after_stated.iter())
+        .chain(&after_stated)
         .map(|stated| (stated.channel, stated.controller))
         .collect();
     pairs.sort_unstable();
     pairs.dedup();
-
     let mut differences = Vec::new();
+    let mut unranked = Vec::new();
+    let side = |reading: Reading| ControllerSide {
+        at_start: reading.at_start.map(|value| value as u8),
+        at_end: reading.at_end.map(|value| value as u8),
+        peak: reading.highest.map(|(value, _)| value as u8),
+        peak_at: reading.highest.map(|(_, tick)| tick),
+    };
     for (channel, controller) in pairs {
-        let mut moments: Vec<u32> = std::iter::once(0)
-            .chain(
-                before_stated
-                    .iter()
-                    .chain(after_stated.iter())
-                    .filter(|stated| stated.channel == channel && stated.controller == controller)
-                    .map(|stated| stated.tick),
-            )
-            .collect();
-        moments.sort_unstable();
-        moments.dedup();
-
-        let mut open: Option<u32> = None;
-        for &at in &moments {
-            let differs = held(&before_stated, channel, controller, at)
-                != held(&after_stated, channel, controller, at);
-            match (open, differs) {
-                (None, true) => open = Some(at),
-                (Some(from), false) => {
-                    differences.push(span(
-                        &before_stated,
-                        &after_stated,
-                        channel,
-                        controller,
-                        from,
-                        Some(at),
-                        &moments,
-                    ));
-                    open = None;
-                }
-                _ => {}
-            }
-        }
-        if let Some(from) = open {
-            differences.push(span(
-                &before_stated,
-                &after_stated,
+        let comparison = compare(
+            &crate::controller::timeline(&before_stated, channel, controller),
+            &crate::controller::timeline(&after_stated, channel, controller),
+        );
+        let scalars = |stated: &[StatedController]| -> Vec<(u32, i64)> {
+            stated
+                .iter()
+                .filter(|stated| stated.channel == channel && stated.controller == controller)
+                .map(|stated| (stated.tick, i64::from(stated.value)))
+                .collect()
+        };
+        let before_values = scalars(&before_stated);
+        let after_values = scalars(&after_stated);
+        for (from, until) in comparison.differences {
+            differences.push(ControllerDifference {
                 channel,
                 controller,
                 from,
-                None,
-                &moments,
-            ));
+                until,
+                before: side(reading(&before_values, from, until, &comparison.moments)),
+                after: side(reading(&after_values, from, until, &comparison.moments)),
+            });
         }
+        unranked.extend(
+            comparison
+                .unranked
+                .into_iter()
+                .map(|interval| UnrankedController {
+                    channel,
+                    controller,
+                    interval,
+                }),
+        );
     }
-    Ok(differences)
-}
-
-/// One span, with each Take's reading of it.
-fn span(
-    before_stated: &[StatedController],
-    after_stated: &[StatedController],
-    channel: u8,
-    controller: u8,
-    from: u32,
-    until: Option<u32>,
-    moments: &[u32],
-) -> ControllerDifference {
-    ControllerDifference {
-        channel,
-        controller,
-        from,
-        until,
-        before: side(before_stated, channel, controller, from, until, moments),
-        after: side(after_stated, channel, controller, from, until, moments),
-    }
-}
-
-/// What one Take holds for one Controller across a span.
-///
-/// The peak considers the value in force at `from` as well as everything stated
-/// inside the span: that value is in force during the span like any other, and a
-/// span the Take says nothing new in still holds something. Strictly greater, so
-/// a value reached twice is reported at the first of the two.
-fn side(
-    stated: &[StatedController],
-    channel: u8,
-    controller: u8,
-    from: u32,
-    until: Option<u32>,
-    moments: &[u32],
-) -> ControllerSide {
-    let at_start = held(stated, channel, controller, from);
-    let last = moments
-        .iter()
-        .copied()
-        .rfind(|&at| until.map(|until| at < until).unwrap_or(true))
-        .unwrap_or(from);
-
-    let mut peak = at_start;
-    let mut peak_at = at_start.map(|_| from);
-    for inside in stated
-        .iter()
-        .filter(|stated| stated.channel == channel && stated.controller == controller)
-        .filter(|stated| {
-            from < stated.tick && until.map(|until| stated.tick < until).unwrap_or(true)
-        })
-    {
-        if peak.map(|peak| inside.value > peak).unwrap_or(true) {
-            peak = Some(inside.value);
-            peak_at = Some(inside.tick);
-        }
-    }
-
-    ControllerSide {
-        at_start,
-        at_end: held(stated, channel, controller, last),
-        peak,
-        peak_at,
-    }
-}
-
-/// The value in force for a Controller on a channel at a Tick: the last thing
-/// said at or before it, in the order `stated_controllers` fixes.
-fn held(stated: &[StatedController], channel: u8, controller: u8, at: u32) -> Option<u8> {
-    stated
-        .iter()
-        .filter(|stated| {
-            stated.channel == channel && stated.controller == controller && stated.tick <= at
-        })
-        .map(|stated| stated.value)
-        .next_back()
-}
-
-/// The Program in force on a channel at a Tick: the last thing said at or before
-/// it, in the order `stated_programs` fixes.
-fn in_force(stated: &[StatedProgram], channel: u8, at: u32) -> Option<u8> {
-    stated
-        .iter()
-        .filter(|stated| stated.channel == channel && stated.tick <= at)
-        .map(|stated| stated.program)
-        .next_back()
+    Ok((differences, unranked))
 }
 
 /// Everything that differs between two matched notes, in the fixed order

@@ -6,6 +6,11 @@ use std::path::PathBuf;
 /// derived view. Bars need one time signature governing the whole Take, so a Take
 /// that states none — or states one only part way in, or changes it — is reported
 /// without a Bar count. `mid inspect --bars` says which of those it is.
+///
+/// Tempo is read at its earliest stated Tick. Conflicting cross-track final
+/// values are indeterminate and retain their candidates and source locations.
+/// In JSON, `tempo.kind` distinguishes unstated, determinate and indeterminate;
+/// `tempo.value` or `tempo.candidates` carries the corresponding reading.
 #[derive(clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
@@ -34,13 +39,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
         vec!["ppq".to_string(), info.ppq.to_string()],
         vec![
             "tempo".to_string(),
-            match info.tempo {
-                Some(tempo) => format!(
-                    "{} bpm ({} us per quarter)",
-                    tempo.bpm, tempo.micros_per_quarter
-                ),
-                None => "unstated".to_string(),
-            },
+            crate::wording::state_reading(&info.tempo, crate::wording::tempo_value),
         ],
         vec![
             "time signature".to_string(),

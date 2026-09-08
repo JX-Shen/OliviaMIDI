@@ -51,8 +51,15 @@ use std::path::PathBuf;
 ///
 /// Where a Take writes such a pair across two tracks, the file states no order
 /// at all and the comparison cannot be made. Those sites are reported as
-/// `unranked`, including under `no differences`, and they are not themselves
-/// differences.
+/// `unranked` and are not themselves differences. With unranked content, an
+/// otherwise empty comparison reports no determinate differences and states
+/// that some content was not compared.
+///
+/// Conflicting cross-track Program, Controller, Tempo and Bend values are excluded from value comparison
+/// until a determinate overwrite. Their intervals and candidate sources appear
+/// under `unranked_programs`, `unranked_controllers`, `unranked_tempos` and
+/// `unranked_bends` in JSON; Channel-state/strike sites appear separately under
+/// `unranked_state_sites`. Determinate differences elsewhere remain reported.
 ///
 /// A matched note reports everything about it that differs, in the fixed order
 /// pitch, start, duration, velocity — a note that was both moved and softened
@@ -108,7 +115,11 @@ pub fn run(args: Args) -> battuta::Result<()> {
     let after_lines = after.bar_lines();
 
     if diff.is_empty() {
-        println!("no differences");
+        if diff.has_unranked() {
+            println!("no determinate differences; some content was not compared");
+        } else {
+            println!("no differences");
+        }
         // And then, if there are any, the sites where the ordering question
         // could not be put. They are not differences — `is_empty` does not
         // consult them — but a reader who has just been told the two Takes
@@ -116,6 +127,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
         // them here would make "no differences" the strongest sentence `mid`
         // prints and the least examined.
         crate::wording::table(&unranked_rows(before_lines, &diff.unranked_sites));
+        crate::wording::table(&unranked_state_rows(before_lines, after_lines, &diff));
         return Ok(());
     }
 
@@ -138,7 +150,10 @@ pub fn run(args: Args) -> battuta::Result<()> {
             "program".to_string(),
             // Placed against the before Take's Bar lines: the Tick is the moment
             // the two stop agreeing, and it is the Take the reader knows.
-            crate::wording::at(before_lines, difference.at),
+            match difference.until {
+                Some(_) => crate::wording::span(before_lines, difference.at, difference.until),
+                None => crate::wording::at(before_lines, difference.at),
+            },
             crate::wording::channel(difference.channel),
             crate::wording::program_difference(difference),
         ]);
@@ -202,8 +217,77 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // Last, and after the differences rather than among them, because they are
     // not differences.
     rows.extend(unranked_rows(before_lines, &diff.unranked_sites));
+    rows.extend(unranked_state_rows(before_lines, after_lines, &diff));
     crate::wording::table(&rows);
     Ok(())
+}
+
+fn unranked_state_rows(
+    before_lines: Option<battuta::BarLines>,
+    after_lines: Option<battuta::BarLines>,
+    diff: &battuta::Diff,
+) -> Vec<Vec<String>> {
+    let mut rows = Vec::new();
+    for interval in &diff.unranked_tempos {
+        rows.extend(crate::wording::unranked_comparison(
+            before_lines,
+            after_lines,
+            "tempo".to_string(),
+            interval,
+            crate::wording::tempo_value,
+        ));
+    }
+    for item in &diff.unranked_programs {
+        rows.extend(crate::wording::unranked_comparison(
+            before_lines,
+            after_lines,
+            format!("program channel {}", item.channel),
+            &item.interval,
+            |value| value.to_string(),
+        ));
+    }
+    for item in &diff.unranked_controllers {
+        rows.extend(crate::wording::unranked_comparison(
+            before_lines,
+            after_lines,
+            format!("controller channel {} CC{}", item.channel, item.controller),
+            &item.interval,
+            |value| value.to_string(),
+        ));
+    }
+    for interval in &diff.unranked_bends {
+        for (name, lines, candidates) in [
+            ("before", before_lines, &interval.before),
+            ("after", after_lines, &interval.after),
+        ] {
+            if candidates.is_empty() {
+                continue;
+            }
+            let mut row = crate::wording::unranked_bend(
+                lines,
+                interval.channel,
+                interval.from,
+                interval.until,
+                candidates,
+            );
+            row.insert(1, name.to_string());
+            rows.push(row);
+        }
+    }
+    for site in &diff.unranked_state_sites {
+        for (name, lines, present) in [
+            ("before", before_lines, site.in_before),
+            ("after", after_lines, site.in_after),
+        ] {
+            if present {
+                rows.push(vec![
+                    name.to_string(),
+                    crate::wording::unranked(lines, &site.site),
+                ]);
+            }
+        }
+    }
+    rows
 }
 
 /// The sites where the ordering question could not be put, as rows.

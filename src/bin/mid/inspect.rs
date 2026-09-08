@@ -31,6 +31,16 @@ use std::path::PathBuf;
 /// semitones — how many semitones a bend is worth is the synthesiser's bend
 /// range, which is not in the file.
 ///
+/// Program, Controller and Bend readings are unstated, determinate, or indeterminate. Conflicting values
+/// retain their source tracks and Ticks, including conflicts before the requested
+/// passage that have not been overwritten. A passage containing such intervals
+/// reports its extremes as incomplete and lists the affected intervals. In JSON,
+/// `bends[].value.kind` identifies the reading, `extremes.kind` identifies summary
+/// coverage, and `bends[].unranked` carries the intervals and candidate sources.
+/// Programs use `program.kind`; Controllers use `value.kind` and `peak.kind`.
+/// Both carry `unranked` intervals. `unranked_tempos` lists Tempo conflicts
+/// affecting the passage, including those inherited from earlier statements.
+///
 /// The Program and Controller blocks answer even when the answer is nothing,
 /// because a reader can name one and ask. Nothing addresses a bend, so a Take
 /// that bends nothing says nothing about bends.
@@ -74,9 +84,8 @@ pub struct Args {
 /// a terminal, and an agent is entitled to one spelling of a fact. The number is
 /// the fact.
 ///
-/// A Controller's state carries `null` where the Take set nothing, which is what
-/// `unstated` is on the terminal. An agent deciding whether to write a
-/// `set_controller` needs 0 and nothing apart for the reason a human does.
+/// State values carry a `kind`: unstated, determinate, or indeterminate.
+/// Indeterminate intervals retain candidate values and sources — #42.
 #[derive(serde::Serialize)]
 struct Listing {
     programs: Vec<battuta::Program>,
@@ -93,6 +102,7 @@ struct Listing {
     /// nothing else moved: a consumer reading the payload for the four lists
     /// above still finds them exactly where they were.
     unranked: Vec<battuta::Unranked>,
+    unranked_tempos: Vec<battuta::UnrankedSpan<battuta::Tempo>>,
     notes: Vec<battuta::Note>,
 }
 
@@ -103,6 +113,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
     let controllers = take.controllers_in(args.bars)?;
     let bends = take.bends_in(args.bars)?;
     let unranked = take.unranked(args.bars)?;
+    let unranked_tempos = take.unranked_tempos(args.bars)?;
 
     if args.json {
         println!(
@@ -115,6 +126,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
                 bends: bends.bends,
                 stated_bends: bends.stated,
                 unranked,
+                unranked_tempos,
                 notes,
             })
         );
@@ -124,6 +136,18 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // Read once for the whole listing rather than per row: every Tick of a Take
     // is placed against the same Bar lines.
     let lines = take.bar_lines();
+
+    for interval in &unranked_tempos {
+        crate::wording::table(&[crate::wording::indeterminate_span(
+            lines,
+            "tempo".to_string(),
+            interval,
+            crate::wording::tempo_value,
+        )]);
+    }
+    if !unranked_tempos.is_empty() {
+        println!();
+    }
 
     // Two blocks above the notes, a blank line under each: what each channel is
     // on, and where the passage states another. Separate tables rather than one,
@@ -143,13 +167,15 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // nothing to say nothing about — `no notes` below is the whole of the answer
     // — and a Controller line there would be answering about channels the
     // Program block had just declined to mention.
-    let has_channels = !programs.programs.is_empty() || !programs.stated.is_empty();
+    let has_channels = !programs.programs.is_empty()
+        || !programs.stated.is_empty()
+        || !controllers.controllers.is_empty();
     if has_channels {
         if programs.stated.is_empty()
             && programs
                 .programs
                 .iter()
-                .all(|state| state.program.is_none())
+                .all(|state| matches!(state.program, battuta::Reading::Unstated))
         {
             println!("no programs stated");
         } else {
@@ -159,6 +185,16 @@ pub fn run(args: Args) -> battuta::Result<()> {
                 .map(crate::wording::programs)
                 .collect();
             crate::wording::table(&rows);
+        }
+        for held in &programs.programs {
+            for interval in &held.unranked {
+                crate::wording::table(&[crate::wording::indeterminate_span(
+                    lines,
+                    format!("program channel {}", held.channel),
+                    interval,
+                    |value| value.to_string(),
+                )]);
+            }
         }
         if !programs.stated.is_empty() {
             println!();
@@ -198,14 +234,20 @@ pub fn run(args: Args) -> battuta::Result<()> {
                     let stated = controllers.stated.iter().any(|stated| {
                         stated.channel == held.channel && stated.controller == held.controller
                     });
-                    crate::wording::controller(
-                        lines,
-                        held,
-                        stated.then_some((held.peak, held.peak_at)),
-                    )
+                    crate::wording::controller(lines, held, stated)
                 })
                 .collect();
             crate::wording::table(&rows);
+        }
+        for held in &controllers.controllers {
+            for interval in &held.unranked {
+                crate::wording::table(&[crate::wording::indeterminate_span(
+                    lines,
+                    format!("controller channel {} CC{}", held.channel, held.controller),
+                    interval,
+                    |value| value.to_string(),
+                )]);
+            }
         }
         if !controllers.stated.is_empty() {
             println!();
@@ -249,6 +291,22 @@ pub fn run(args: Args) -> battuta::Result<()> {
             })
             .collect();
         crate::wording::table(&rows);
+        for held in &bends.bends {
+            for span in &held.unranked {
+                let mut row = crate::wording::unranked_bend(
+                    lines,
+                    held.channel,
+                    span.from,
+                    span.until,
+                    &span.candidates,
+                );
+                row[3] = format!(
+                    "indeterminate: {}",
+                    crate::wording::bend_candidates(&span.candidates)
+                );
+                crate::wording::table(&[row]);
+            }
+        }
         if !bends.stated.is_empty() {
             println!();
             let rows: Vec<Vec<String>> = bends

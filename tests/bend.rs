@@ -27,6 +27,235 @@ fn payload(take: &std::path::Path, bars: &str) -> serde_json::Value {
     .expect("the payload is JSON")
 }
 
+// Two independent state tracks, with no boundary strike to obscure value conflicts.
+fn split_bends(
+    dir: &std::path::Path,
+    name: &str,
+    left: &[(u32, i16)],
+    right: &[(u32, i16)],
+) -> std::path::PathBuf {
+    use midly::{Format, Header, MetaMessage, Smf, Timing, TrackEvent, TrackEventKind};
+    let mut tracks = vec![vec![
+        TrackEvent {
+            delta: 0.into(),
+            kind: TrackEventKind::Meta(MetaMessage::TimeSignature(2, 2, 24, 8)),
+        },
+        TrackEvent {
+            delta: 3840.into(),
+            kind: TrackEventKind::Meta(MetaMessage::EndOfTrack),
+        },
+    ]];
+    for statements in [left, right] {
+        let mut previous = 0;
+        let mut events = Vec::new();
+        for &(tick, value) in statements {
+            events.push(TrackEvent {
+                delta: (tick - previous).into(),
+                kind: common::pitch_bend(tick, value).1,
+            });
+            previous = tick;
+        }
+        events.push(TrackEvent {
+            delta: (3840 - previous).into(),
+            kind: TrackEventKind::Meta(MetaMessage::EndOfTrack),
+        });
+        tracks.push(events);
+    }
+    let path = dir.join(name);
+    Smf {
+        header: Header::new(Format::Parallel, Timing::Metrical(480.into())),
+        tracks,
+    }
+    .save(&path)
+    .expect("write Take");
+    path
+}
+
+#[test]
+fn a_bend_conflict_is_inherited_until_a_determinate_overwrite() {
+    let dir = tempfile::tempdir().unwrap();
+    let take = split_bends(
+        dir.path(),
+        "conflict.mid",
+        &[(480, -4000), (1920, 0)],
+        &[(480, 2000)],
+    );
+    let middle = payload(&take, "2:2");
+    assert_eq!(middle["bends"][0]["value"]["kind"], "indeterminate");
+    assert_eq!(
+        middle["bends"][0]["value"]["candidates"],
+        serde_json::json!([
+            {"track": 1, "tick": 480, "value": -4000},
+            {"track": 2, "tick": 480, "value": 2000}
+        ])
+    );
+    assert_eq!(middle["bends"][0]["extremes"]["kind"], "incomplete");
+    assert_eq!(middle["bends"][0]["unranked"][0]["from"], 960);
+    assert_eq!(middle["bends"][0]["unranked"][0]["until"], 1920);
+    let said = listing(&take, "2:2");
+    assert!(said.contains("indeterminate"), "{said}");
+    assert!(
+        said.contains("track 1") && said.contains("track 2"),
+        "{said}"
+    );
+    let later = payload(&take, "3:3");
+    assert_eq!(
+        later["bends"][0]["value"],
+        serde_json::json!({"kind":"determinate", "value":0})
+    );
+    assert_eq!(later["bends"][0]["unranked"], serde_json::json!([]));
+}
+
+#[test]
+fn bend_conflicts_are_disclosed_in_self_comparison_and_track_rearrangement() {
+    let dir = tempfile::tempdir().unwrap();
+    let a = split_bends(dir.path(), "a.mid", &[(0, -4000)], &[(0, 2000)]);
+    let b = split_bends(dir.path(), "b.mid", &[(0, 2000)], &[(0, -4000)]);
+    for other in [&a, &b] {
+        let json: serde_json::Value = serde_json::from_str(&common::json_output(&[
+            "diff",
+            a.to_str().unwrap(),
+            other.to_str().unwrap(),
+            "--json",
+        ]))
+        .unwrap();
+        assert_eq!(json["bends"], serde_json::json!([]));
+        assert_eq!(json["unranked_bends"][0]["from"], 0);
+        assert_eq!(
+            json["unranked_bends"][0]["before"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(
+            json["unranked_bends"][0]["after"].as_array().unwrap().len(),
+            2
+        );
+        let said = common::human_output(&["diff", a.to_str().unwrap(), other.to_str().unwrap()]);
+        assert!(
+            said.contains("no determinate differences") && said.contains("not compared"),
+            "{said}"
+        );
+    }
+}
+
+#[test]
+fn bend_readings_keep_same_track_order_and_agreeing_cross_track_values() {
+    let dir = tempfile::tempdir().unwrap();
+    for (name, left, right, expected) in [
+        ("same-track.mid", vec![(0, 4000), (0, -2000)], vec![], -2000),
+        ("agree.mid", vec![(0, -2000)], vec![(0, -2000)], -2000),
+        (
+            "lasts-agree.mid",
+            vec![(0, 4000), (0, -2000)],
+            vec![(0, -2000)],
+            -2000,
+        ),
+    ] {
+        let take = split_bends(dir.path(), name, &left, &right);
+        let read = payload(&take, "2:2");
+        assert_eq!(
+            read["bends"][0]["value"],
+            serde_json::json!({"kind":"determinate", "value":expected})
+        );
+        assert_eq!(read["bends"][0]["unranked"], serde_json::json!([]));
+        let take = battuta::Take::read(&take).unwrap();
+        let diff = battuta::diff::diff(&take, &take, None).unwrap();
+        assert!(diff.is_empty());
+        assert!(diff.unranked_bends.is_empty());
+    }
+}
+
+#[test]
+fn an_unranked_interval_interrupts_a_difference_and_a_later_overwrite_resumes_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let a = split_bends(
+        dir.path(),
+        "a.mid",
+        &[(0, 100), (480, -4000), (1920, 100)],
+        &[(480, 2000)],
+    );
+    let b = split_bends(dir.path(), "b.mid", &[(0, 0)], &[]);
+    for (before, after, before_conflicts) in [(&a, &b, true), (&b, &a, false)] {
+        let diff = battuta::diff::diff(
+            &battuta::Take::read(before).unwrap(),
+            &battuta::Take::read(after).unwrap(),
+            Some(0),
+        )
+        .unwrap();
+        assert!(!diff.is_empty());
+        assert_eq!(
+            diff.bends
+                .iter()
+                .map(|span| (span.from, span.until))
+                .collect::<Vec<_>>(),
+            vec![(0, Some(480)), (1920, None)]
+        );
+        assert_eq!(diff.unranked_bends.len(), 1);
+        let interval = &diff.unranked_bends[0];
+        assert_eq!((interval.from, interval.until), (480, Some(1920)));
+        assert_eq!(!interval.before.is_empty(), before_conflicts);
+        assert_eq!(!interval.after.is_empty(), !before_conflicts);
+        for span in &diff.bends {
+            let side = if before_conflicts {
+                &span.before
+            } else {
+                &span.after
+            };
+            assert_eq!(side.furthest_down, Some(100));
+            assert_eq!(side.furthest_up, Some(100));
+        }
+    }
+}
+
+#[test]
+fn an_unranked_bend_strike_relation_does_not_poison_the_continuing_value() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = common::build_take_stating_apart(
+        &dir.path().join("strike.mid"),
+        480,
+        &[(0, 2, 4)],
+        &[common::pitch_bend(0, -2000)],
+        &[(0, 240, 60), (1920, 240, 62)],
+    );
+    let take = battuta::Take::read(&path).unwrap();
+    let diff = battuta::diff::diff(&take, &take, None).unwrap();
+    assert!(diff.is_empty());
+    assert!(diff.unranked_bends.is_empty());
+    assert_eq!(diff.unranked_state_sites.len(), 1);
+    assert!(diff.unranked_state_sites[0].in_before && diff.unranked_state_sites[0].in_after);
+    assert_eq!(
+        payload(&path, "2:2")["bends"][0]["value"],
+        serde_json::json!({"kind":"determinate", "value":-2000})
+    );
+}
+
+#[test]
+fn a_conflict_inside_a_window_does_not_claim_complete_extremes() {
+    let dir = tempfile::tempdir().unwrap();
+    let take = split_bends(
+        dir.path(),
+        "inside.mid",
+        &[(0, 0), (1200, -4000), (1440, 200)],
+        &[(1200, 2000)],
+    );
+    let read = payload(&take, "2:2");
+    assert_eq!(
+        read["bends"][0]["value"],
+        serde_json::json!({"kind":"determinate", "value":0})
+    );
+    assert_eq!(read["bends"][0]["extremes"]["kind"], "incomplete");
+    assert_eq!(read["bends"][0]["unranked"][0]["from"], 1200);
+    assert_eq!(read["bends"][0]["unranked"][0]["until"], 1440);
+    let said = listing(&take, "2:2");
+    assert!(said.contains("extremes not summarised"), "{said}");
+    assert!(
+        said.contains("1440") || said.contains("bar 2 beat 2"),
+        "{said}"
+    );
+}
+
 /// Four Bars of 2/4 at 480 PPQ: Bar N begins at Tick (N-1) * 960.
 fn bent(dir: &std::path::Path, name: &str, events: &[(u32, i16)]) -> std::path::PathBuf {
     let mut setting: Vec<(u32, midly::TrackEventKind<'static>)> = events
@@ -92,11 +321,15 @@ fn a_channel_bent_to_the_centre_is_not_a_channel_never_bent() {
         payload(&centred, "3:4")["bends"],
         serde_json::json!([{
             "channel": 0,
-            "value": 0,
-            "furthest_down": 0,
-            "furthest_down_at": 1920,
-            "furthest_up": 0,
-            "furthest_up_at": 1920,
+            "value": {"kind": "determinate", "value": 0},
+            "extremes": {
+                "kind": "complete",
+                "furthest_down": 0,
+                "furthest_down_at": 1920,
+                "furthest_up": 0,
+                "furthest_up_at": 1920
+            },
+            "unranked": [],
         }])
     );
 }
@@ -180,6 +413,7 @@ fn the_payload_gains_two_lists_and_moves_nothing() {
             "stated_controllers",
             "stated_programs",
             "unranked",
+            "unranked_tempos",
         ]
     );
     assert_eq!(

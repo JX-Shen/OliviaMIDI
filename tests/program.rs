@@ -163,7 +163,7 @@ fn a_take_that_states_no_program_is_described_as_stating_none() {
     assert!(stated.is_empty());
     for state in &programs {
         assert!(
-            state["program"].is_null(),
+            state["program"]["kind"] == "unstated",
             "stating none is null, never 0: {state}"
         );
     }
@@ -187,7 +187,10 @@ fn json_carries_the_orchestration_as_numbers() {
     assert_eq!(
         programs
             .iter()
-            .map(|state| (state["channel"].as_u64(), state["program"].as_u64()))
+            .map(|state| (
+                state["channel"].as_u64(),
+                state["program"]["value"].as_u64()
+            ))
             .collect::<Vec<_>>(),
         vec![(Some(0), Some(40)), (Some(1), None), (Some(2), None)]
     );

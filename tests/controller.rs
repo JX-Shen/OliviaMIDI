@@ -260,9 +260,9 @@ fn hands_an_agent_the_state_and_every_event() {
         vec![serde_json::json!({
             "channel": 0,
             "controller": 64,
-            "value": null,
-            "peak": 127,
-            "peak_at": 3360,
+            "value": {"kind":"unstated"},
+            "peak": {"kind":"complete", "value":127, "at":3360},
+            "unranked": [],
         })]
     );
     assert_eq!(
@@ -345,9 +345,9 @@ fn holds_the_last_of_two_values_written_at_one_address() {
         controllers.contains(&serde_json::json!({
             "channel": 0,
             "controller": 11,
-            "value": 40,
-            "peak": 96,
-            "peak_at": 2760,
+            "value": {"kind":"determinate", "value":40},
+            "peak": {"kind":"complete", "value":96, "at":2760},
+            "unranked": [],
         })),
         "the state does not hold the second of the two values: {controllers:#?}"
     );

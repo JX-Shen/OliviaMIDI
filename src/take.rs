@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
 use crate::note::{Note, NoteId};
+use crate::reading::{Candidate, Reading, Timeline, UnrankedSpan};
 use midly::{Format, MetaMessage, MidiMessage, Smf, Timing, TrackEventKind};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -34,9 +35,8 @@ pub struct Info {
     pub tracks: usize,
     /// Ticks per quarter note.
     pub ppq: u16,
-    /// Absent when the Take never states a tempo. Not defaulted: a Take that
-    /// does not say is different from one that says 120.
-    pub tempo: Option<Tempo>,
+    /// The reading at the earliest stated Tempo Tick, or Unstated — #42.
+    pub tempo: Reading<Tempo>,
     /// Absent when the Take never states a time signature.
     pub time_signature: Option<TimeSignature>,
     /// The largest tick any track reaches, end-of-track included.
@@ -73,8 +73,8 @@ impl Tempo {
 ///
 /// Not per channel, because tempo is not channel state: one tempo governs the
 /// whole Take from the moment it is stated, wherever it was written. Otherwise
-/// it is read exactly as a Program or a Controller is (ADR-0007) — what is in
-/// force is the last statement at or before a moment.
+/// it is read as a Program or a Controller is (ADR-0007), preserving conflicting
+/// cross-track final values rather than choosing one — #42.
 ///
 /// Not `TempoChange`, for the reason `StatedController` is not `ControlChange`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -94,6 +94,14 @@ impl std::fmt::Display for TimeSignature {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}/{}", self.numerator, self.denominator)
     }
+}
+
+pub(crate) fn tempo_timeline(stated: &[StatedTempo]) -> Timeline<u32> {
+    Timeline::read(stated.iter().map(|statement| Candidate {
+        track: statement.track,
+        tick: statement.tick,
+        value: statement.tempo.micros_per_quarter,
+    }))
 }
 
 impl Take {
@@ -280,11 +288,28 @@ impl Take {
             }
         }
 
-        // Stable, so statements sharing a Tick keep track order among
-        // themselves, and the last of them is the one in force — as it is for
-        // the synthesiser, and as `stated_controllers` fixes for a Controller.
+        // Stable event listing order; tempo_timeline reads continuing state — #42.
         found.sort_by_key(|found| found.tick);
         Ok(found)
+    }
+
+    /// Continuing Tempo conflicts intersecting a window, including inherited ones — #42.
+    pub fn unranked_tempos(
+        &self,
+        bars: Option<crate::BarRange>,
+    ) -> Result<Vec<UnrankedSpan<Tempo>>> {
+        let span = match bars {
+            Some(bars) => self.tick_span(bars)?,
+            None => crate::TickSpan {
+                start: 0,
+                end: u32::MAX,
+            },
+        };
+        Ok(tempo_timeline(&self.stated_tempos()?)
+            .unranked(span.start, bars.map(|_| span.end))
+            .into_iter()
+            .map(|span| span.map(Tempo::from_micros_per_quarter))
+            .collect())
     }
 
     pub fn info(&self) -> Result<Info> {
@@ -308,24 +333,12 @@ impl Take {
             },
             tracks: smf.tracks.len(),
             ppq,
-            // The tempo the Take opens on, which is what `info` has always
-            // reported: one line describing a Take, not the whole of a tempo
-            // map. `stated_tempos` is where every statement is.
-            //
-            // The *last* statement at the earliest Tick, not the first, because
-            // that is the one in force there — `stated_tempos` says so, and it
-            // is what `diff` reads. Two commands answering differently about one
-            // file is what #32 removed a second copy of this reading to prevent,
-            // and taking `.first()` was the copy surviving in another form. Which
-            // of two tempos at one Tick is in force at all is a question the file
-            // does not answer; see #42.
             tempo: {
                 let stated = self.stated_tempos()?;
-                stated
-                    .first()
-                    .map(|first| first.tick)
-                    .and_then(|opening| stated.iter().rfind(|stated| stated.tick == opening))
-                    .map(|stated| stated.tempo)
+                let opening = stated.first().map_or(0, |first| first.tick);
+                tempo_timeline(&stated)
+                    .at(opening)
+                    .map(Tempo::from_micros_per_quarter)
             },
             time_signature: self.time_signatures()?.first().map(|&(_, ts)| ts),
             length_ticks,

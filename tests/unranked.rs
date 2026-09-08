@@ -199,6 +199,135 @@ fn a_note_added_where_another_track_states_its_channel_is_refused() {
     assert!(stderr.contains("--allow-unranked t2:c0:s960"), "{stderr}");
 }
 
+// Note-side Bend safety — #42.
+#[test]
+fn a_note_added_or_moved_onto_another_tracks_bend_is_refused() {
+    for edits in [
+        r#"{ "kind": "add_note", "track": 1, "channel": 0, "pitch": 67,
+             "start": 960, "duration": 480, "velocity": 50 }"#,
+        r#"{ "kind": "move_note", "id": "t1:c0:p64:s1920:n0", "delta_ticks": -960 }"#,
+    ] {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let take = apart_with(dir.path(), &[common::pitch_bend(960, 4096)]);
+        let original = std::fs::read(&take).unwrap();
+        let (ok, stderr, out) = applied(&take, edits, &[]);
+        assert!(!ok, "a note landed on another track's Bend: {edits}");
+        assert!(!out.exists(), "a refused Edit Set left a Take behind");
+        assert_eq!(std::fs::read(&take).unwrap(), original);
+        assert!(stderr.contains("bend"), "{stderr}");
+        assert!(
+            stderr.contains("track 1") && stderr.contains("track 2"),
+            "{stderr}"
+        );
+        assert!(stderr.contains("--allow-unranked t2:c0:s960"), "{stderr}");
+        assert!(!stderr.contains("this Edit Set put a bend"), "{stderr}");
+    }
+}
+
+#[test]
+fn a_note_side_bend_allowance_names_exactly_the_statement_site() {
+    for edits in [
+        r#"{ "kind": "add_note", "track": 1, "channel": 0, "pitch": 67,
+             "start": 960, "duration": 480, "velocity": 50 }"#,
+        r#"{ "kind": "move_note", "id": "t1:c0:p64:s1920:n0", "delta_ticks": -960 }"#,
+    ] {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let take = apart_with(dir.path(), &[common::pitch_bend(960, 4096)]);
+        for wrong in ["t1:c0:s960", "t2:c1:s960", "t2:c0:s1920"] {
+            let (ok, stderr, out) = applied(&take, edits, &[wrong]);
+            assert!(!ok, "{wrong} covered the Bend statement: {stderr}");
+            assert!(!out.exists());
+        }
+        let (ok, stderr, out) = applied(&take, edits, &["t2:c0:s960"]);
+        assert!(ok, "{stderr}");
+        let written = battuta::Take::read(&out).unwrap();
+        assert_eq!(
+            written.stated_bends().unwrap(),
+            battuta::Take::read(&take).unwrap().stated_bends().unwrap()
+        );
+        assert!(written.unranked(None).unwrap().iter().any(|site| {
+            site.state == battuta::State::Bend
+                && site.track == 2
+                && site.against_track == 1
+                && site.tick == 960
+                && site.channel == Some(0)
+                && site.against == battuta::Against::Notes
+        }));
+    }
+}
+
+#[test]
+fn a_bend_does_not_refuse_a_note_on_its_own_track_or_another_channel_or_tick() {
+    for (track, channel, start) in [(2, 0, 960), (1, 1, 960), (1, 0, 961)] {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let take = apart_with(dir.path(), &[common::pitch_bend(960, 4096)]);
+        let edits = format!(
+            r#"{{ "kind": "add_note", "track": {track}, "channel": {channel},
+                  "pitch": 67, "start": {start}, "duration": 480, "velocity": 50 }}"#
+        );
+        let (ok, stderr, out) = applied(&take, &edits, &[]);
+        assert!(ok, "{stderr}");
+        let written = battuta::Take::read(&out).unwrap();
+        assert!(written.unranked(None).unwrap().is_empty());
+        if track == 2 {
+            let bytes = std::fs::read(&out).unwrap();
+            let smf = midly::Smf::parse(&bytes).unwrap();
+            let events = &smf.tracks[2];
+            let bend = events
+                .iter()
+                .position(|event| {
+                    matches!(
+                        event.kind,
+                        midly::TrackEventKind::Midi {
+                            message: midly::MidiMessage::PitchBend { .. },
+                            ..
+                        }
+                    )
+                })
+                .unwrap();
+            let strike = events
+                .iter()
+                .position(|event| {
+                    matches!(
+                        event.kind,
+                        midly::TrackEventKind::Midi {
+                            message: midly::MidiMessage::NoteOn { .. },
+                            ..
+                        }
+                    )
+                })
+                .unwrap();
+            assert!(bend < strike, "the note must follow the carried Bend");
+        }
+    }
+}
+
+#[test]
+fn a_carried_bend_site_survives_an_empty_edit_or_an_edit_elsewhere() {
+    for edits in [
+        "",
+        r#"{ "kind": "set_velocity", "id": "t1:c0:p64:s1920:n0", "velocity": 40 }"#,
+    ] {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let take = apart_with(dir.path(), &[common::pitch_bend(0, -4096)]);
+        let before = battuta::Take::read(&take).unwrap();
+        let (ok, stderr, out) = applied(&take, edits, &[]);
+        assert!(ok, "{stderr}");
+        let after = battuta::Take::read(&out).unwrap();
+        assert_eq!(
+            after.unranked(None).unwrap(),
+            before.unranked(None).unwrap()
+        );
+        assert_eq!(
+            after.stated_bends().unwrap(),
+            before.stated_bends().unwrap()
+        );
+        if edits.is_empty() {
+            assert_eq!(common::event_stream(&out), common::event_stream(&take));
+        }
+    }
+}
+
 /// What the Take carried in is the author's (ADR-0003). An Edit Set that
 /// touches none of it is not answerable for it, and refusing here would mean a
 /// Take with one such Tick could not be edited anywhere at all.

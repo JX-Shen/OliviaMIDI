@@ -282,9 +282,11 @@ fn a_pair_split_across_two_tracks_is_reported_and_is_not_a_difference() {
 
     assert_eq!(
         diff(&before, &after),
-        "no differences\n\
+        "no determinate differences; some content was not compared\n\
          unranked  bar 1 beat 1  channel 0  program before its notes  neither states an order \
-         between the tracks\n"
+         between the tracks\n\
+         before  bar 1 beat 1  the program change for channel 0 on track 2 has no order the file states against notes of that channel on track 1  (t2:c0:s0)\n\
+         after   bar 1 beat 1  the program change for channel 0 on track 2 has no order the file states against notes of that channel on track 1  (t2:c0:s0)\n"
     );
 
     let payload = diff_json(&before, &after);
@@ -376,7 +378,12 @@ fn the_two_new_payload_fields_are_additive() {
             "removed",
             "tempos",
             "tolerance_ticks",
+            "unranked_bends",
+            "unranked_controllers",
+            "unranked_programs",
             "unranked_sites",
+            "unranked_state_sites",
+            "unranked_tempos",
         ]
     );
 }

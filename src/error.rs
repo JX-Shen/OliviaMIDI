@@ -352,14 +352,15 @@ pub enum Error {
     UnrankedSiteMalformed(String),
 
     #[error(
-        "at tick {tick}, this Edit Set put a {state} for channel {channel} on track {stating}, \
+        "at tick {tick}, this Edit Set leaves a {state} for channel {channel} on track {stating}, \
          while track {sounding} strikes that channel at the same tick. A Rank orders events within \
          one track; these are on two, and the file states no order between them, so which one a \
          synthesiser meets first is not something your Take says. Those notes would sound under \
          either state depending on the player. Nothing has been written.\n\
          \n\
          State it on track {sounding}, which carries those notes, or at a tick where channel \
-         {channel} strikes nothing. If you know what you are doing here, name the site: \
+         {channel} strikes nothing. For a note Edit, move the strike to a tick without this \
+         cross-track statement. If you know what you are doing here, name the site: \
          --allow-unranked t{stating}:c{channel}:s{tick}"
     )]
     StateUnrankedAgainstNotes {
