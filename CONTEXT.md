@@ -383,3 +383,55 @@ second Controller number, and many exports write only the coarse one; combining
 them is an inference about what an export meant, and a Take that round-trips at
 the event level (ADR-0003) has no room to make it. Two Controllers stated are
 two Controllers reported.
+
+**Bend**:
+How far a channel's sounding pitch is displaced, as the MIDI pitch bend event
+carries it: one fourteen-bit value, read signed about a centre the format fixes
+at `0x2000`, so that nought is no bend and the range is -8192 to 8191. Part of
+the Piece, not of the Rig — how far the pitch is pulled is in the file, and how
+many semitones that is worth is not. Held by the channel, as a **Program** is: a
+bend moves everything the channel is sounding, so one note of a chord written on
+one channel cannot be bent alone.
+
+Nought is a value and not the absence of one. A channel bent back to the centre
+and a channel never bent are two different Pieces, and `mid` reports the second
+as `unstated` — the distinction **Controller** already draws between holding 0
+and holding nothing.
+
+Reported as two extremes rather than one peak, unlike a **Controller**. A
+Controller runs from nought upwards, so the highest value reached says everything
+about where it went; a bend is signed about a centre, so a phrase that dips below
+the note and returns never rises above where it began, and one extreme would be
+blind to the whole of it. That is ADR-0007's argument about what a reading must
+not hide, applied to a state that needs two numbers to obey it.
+
+Read as one number, where a **Controller**'s coarse and fine halves are not. A
+bend's fourteen bits arrive in one event, so reading them as one value infers
+nothing about what an export meant; a Controller's arrive as two events on two
+numbers, and combining those would. Same rule, opposite answers, and what
+decides it is in the file rather than in this project's taste.
+
+Its bend range — how many semitones a full bend is worth — is not carried by the
+bend event, and two semitones is a convention rather than a reading. Where a file
+states it at all it states it as Controllers, through RPN 0 (CC101, CC100, CC6
+and CC38), and `mid` reports those as the Controllers they are rather than
+folding them into the bend, for the same reason it does not pair a Controller's
+own halves. Where the file does not state it, it is the synthesiser's, and so the
+**Rig**'s.
+_中文_: 弯音
+_Avoid_: pitch bend, pitch wheel, modulation; 滑音、推弦、颤音
+
+滑音 is portamento, which MIDI already carries as Controllers — CC5 and CC65 —
+so spending the word here would leave one word naming two things. 推弦 is a
+guitarist's physical action rather than a written value, and is
+instrument-specific besides: nothing 推弦 in a piano Take. 颤音 is vibrato, which
+on most synthesisers is the modulation wheel — CC1, another Controller — and
+which sits beside the bend wheel without being it. `modulation` is avoided in
+English for that same reason.
+
+Not `pitch bend`, although that is what the event is usually called and what
+ADR-0007 named as the state to join. A term whose head word is `pitch` would sit
+beside **Pitch** reading as a kind of it, and a bend is not a kind of pitch: it
+does not change which key was struck, it displaces what is already sounding.
+`pitch wheel` — the format's own wording in some editions — names the hardware,
+which is what 控制信号 is avoided for under **Controller**.
