@@ -246,8 +246,8 @@ V1's named Rigs, and a stated non-goal for V0.
 | [releases](https://github.com/JX-Shen/OliviaMIDI/releases) | what each version changed, and which silence it stopped keeping |
 | [`AGENTS.md`](https://github.com/JX-Shen/OliviaMIDI/blob/main/AGENTS.md) | how agents are expected to behave here — deliberately not packaged with the crate, so this one link leaves it |
 
-The first four files are in the crate as published; the last two are in the
-repository, and their links say so by leaving crates.io.
+`CHARTER.md`, `CONTEXT.md` and `docs/adr/` are included in the published crate.
+The issue, release and `AGENTS.md` links point to GitHub.
 
 This README is an introduction, not an authority. Where it and `CHARTER.md`
 disagree, the charter is right and this file is stale. What the tool accepts is

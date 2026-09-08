@@ -28,8 +28,10 @@ use std::path::PathBuf;
 /// far it goes each way and where: a bend is signed about a centre, so a phrase
 /// that dips and returns never rises above where it began, and one extreme
 /// would be blind to the dive. The number is MIDI's own signed reading and never
-/// semitones — how many semitones a bend is worth is the synthesiser's bend
-/// range, which is not in the file.
+/// semitones. The bend event carries no semitone range. A file can state one
+/// through RPN 0 Controllers, which remain part of the Piece and are reported
+/// as Controllers; `mid` does not convert them into a bend in semitones. Where
+/// the file states no range, it depends on the Rig.
 ///
 /// Program, Controller and Bend readings are unstated, determinate, or indeterminate. Conflicting values
 /// retain their source tracks and Ticks, including conflicts before the requested

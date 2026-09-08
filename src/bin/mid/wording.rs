@@ -344,9 +344,8 @@ pub fn unranked_comparison<T>(
 /// went somewhere `value` does not already say — a bend that only rose says
 /// only that it rose.
 ///
-/// The raw signed number and never semitones. How many semitones a bend is
-/// worth is the synthesiser's bend range, which is not in the file, so naming
-/// semitones would print a Rig fact from a command that reports the Piece.
+/// The signed value, never converted to semitones. Any range stated through
+/// RPN 0 stays in the Controller reading. See #44.
 pub fn bend(lines: Option<BarLines>, held: &battuta::Bend, inside: bool) -> Vec<String> {
     let starting = match &held.value {
         battuta::Reading::Determinate { value } => Some(*value),
@@ -794,9 +793,8 @@ fn bpm(bpm: f64) -> String {
 /// The rows one bend difference occupies: `bend`, the span, the channel, and how
 /// far each Take bends it across the span.
 ///
-/// The raw signed number, not semitones. How many semitones a bend is worth is
-/// the synthesiser's bend range and is not in the file, so naming semitones here
-/// would be reporting a Rig fact as a Piece one. `0` is the centre and is a
+/// The signed value, never converted to semitones. Any range stated through
+/// RPN 0 stays in the Controller comparison. See #44. `0` is the centre and is a
 /// value: a channel bent back to nought is not a channel never bent, which is
 /// what `unstated` says.
 ///

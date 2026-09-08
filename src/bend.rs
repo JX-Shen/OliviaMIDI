@@ -84,9 +84,10 @@ pub struct StatedBend {
     /// read as 8192, and every question anybody asks of a bend is a question
     /// about a distance from the centre: which way, and how far.
     ///
-    /// How many semitones a given distance is worth is not here, because the
-    /// file does not say. It is the synthesiser's bend range — a Rig fact by the
-    /// boundary in `AGENTS.md`, and two semitones only by convention.
+    /// The bend event carries no semitone range. A Take can state one through
+    /// RPN 0 Controllers; this reading leaves those as Controllers rather than
+    /// converting the bend to semitones. An unstated range depends on the Rig.
+    /// See #44.
     pub value: i16,
 }
 

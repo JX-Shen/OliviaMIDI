@@ -388,10 +388,10 @@ two Controllers reported.
 How far a channel's sounding pitch is displaced, as the MIDI pitch bend event
 carries it: one fourteen-bit value, read signed about a centre the format fixes
 at `0x2000`, so that nought is no bend and the range is -8192 to 8191. Part of
-the Piece, not of the Rig — how far the pitch is pulled is in the file, and how
-many semitones that is worth is not. Held by the channel, as a **Program** is: a
-bend moves everything the channel is sounding, so one note of a chord written on
-one channel cannot be bent alone.
+the Piece, not of the Rig — the signed value is in the file; the bend event
+itself does not state how many semitones that is worth. Held by the channel, as
+a **Program** is: a bend moves everything the channel is sounding, so one note
+of a chord written on one channel cannot be bent alone.
 
 Nought is a value and not the absence of one. A channel bent back to the centre
 and a channel never bent are two different Pieces, and `mid` reports the second
