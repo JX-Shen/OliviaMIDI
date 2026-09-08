@@ -235,14 +235,28 @@ A place where two events share a Tick and the file states no Rank between them.
 A Rank runs within one track; two tracks have none between them, and a Type-1
 player merges them in an order the format does not state. So a channel's state
 written on one track and a strike of that channel on another are unranked, and
-what a listener hears there is not something the Take says.
+so are two tracks writing one state at one Tick and disagreeing about its value
+— and what a listener hears in either place is not something the Take says.
+
+A state does not need a channel to be left this way. A tempo has none: it
+governs the whole Take rather than any one player, which is why Format 1 puts it
+on a conductor track. Two tracks stating one at one Tick is not polytempo —
+MIDI's tempo meta event drives the whole file's clock and has no way to express
+that — it is one conductor given two contradictory gestures. So a tempo is
+unranked against *another track's tempo*, where a channel's state is unranked
+against another track's writing of that channel: the same word, and a different
+thing each is ranked against. A **Bend** is held by the channel as a **Program**
+is, so it is the case above unchanged.
 
 Unranked is a property of the file, never a complaint about it. `mid inspect`
 reports where a Take is unranked, `apply` refuses to write a new one, and
-`--allow-unranked` names a site the person running it is answering for. Where
-both readings agree — two tracks stating one channel the same Program at one
-Tick — nothing is unranked in any sense worth a word, because no order decides
-anything. See #26.
+`--allow-unranked` names a site the person running it is answering for — a
+track, a channel and a tick. A state with no channel has no such site and is
+offered none: no Edit writes a tempo, so nothing can put one of these places
+into a Take and there is nothing for a caller to answer for. Where both readings
+agree — two tracks stating one channel the same Program at one Tick — nothing is
+unranked in any sense worth a word, because no order decides anything. See #26
+and #42.
 _中文_: 无次序
 _Avoid_: ambiguous, undefined, unordered, racy; 歧义、未定义、乱序
 
