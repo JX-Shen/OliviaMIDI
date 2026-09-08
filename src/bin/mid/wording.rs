@@ -273,8 +273,8 @@ pub fn controller(
 /// only that it rose.
 ///
 /// The raw signed number and never semitones. How many semitones a bend is
-/// worth is the synthesiser's bend range, which is not in the file, so naming
-/// semitones would print a Rig fact from a command that reports the Piece.
+/// worth is its bend range, which the bend event does not carry, so naming
+/// semitones would print something this number does not say.
 pub fn bend(lines: Option<BarLines>, held: &battuta::Bend, inside: bool) -> Vec<String> {
     let mut cell = match held.value {
         None => "unstated".to_string(),
@@ -686,8 +686,8 @@ fn bpm(bpm: f64) -> String {
 /// far each Take bends it across the span.
 ///
 /// The raw signed number, not semitones. How many semitones a bend is worth is
-/// the synthesiser's bend range and is not in the file, so naming semitones here
-/// would be reporting a Rig fact as a Piece one. `0` is the centre and is a
+/// its bend range, which the bend event does not carry, so naming semitones here
+/// would print something this number does not say. `0` is the centre and is a
 /// value: a channel bent back to nought is not a channel never bent, which is
 /// what `unstated` says.
 ///

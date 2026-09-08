@@ -31,8 +31,8 @@ use std::path::PathBuf;
 /// are at different tempos and says the extreme each reaches inside it, so an
 /// accelerando written as forty tempo events is one row and not forty. A bend
 /// row is the same for one channel, in the raw signed units the file carries:
-/// how many semitones a bend is worth is the synthesiser's bend range, which is
-/// the Rig and is not compared. A Take that states no tempo and one that states
+/// how many semitones a bend is worth is its bend range, which the bend event
+/// does not carry and this comparison does not reach. A Take that states no tempo and one that states
 /// 120 are different Pieces here, as are a channel bent back to the centre and a
 /// channel never bent.
 /// Same-Tick ordering is compared too, and it is a layer under both of those.

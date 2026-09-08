@@ -28,8 +28,8 @@ use std::path::PathBuf;
 /// far it goes each way and where: a bend is signed about a centre, so a phrase
 /// that dips and returns never rises above where it began, and one extreme
 /// would be blind to the dive. The number is MIDI's own signed reading and never
-/// semitones — how many semitones a bend is worth is the synthesiser's bend
-/// range, which is not in the file.
+/// semitones — how many semitones a bend is worth is its bend range, which the
+/// bend event does not carry.
 ///
 /// The Program and Controller blocks answer even when the answer is nothing,
 /// because a reader can name one and ask. Nothing addresses a bend, so a Take

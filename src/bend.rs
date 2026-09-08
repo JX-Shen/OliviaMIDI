@@ -77,8 +77,10 @@ pub struct StatedBend {
     /// about a distance from the centre: which way, and how far.
     ///
     /// How many semitones a given distance is worth is not here, because the
-    /// file does not say. It is the synthesiser's bend range — a Rig fact by the
-    /// boundary in `AGENTS.md`, and two semitones only by convention.
+    /// bend event does not carry it, and two semitones is a convention rather
+    /// than a reading. Where a bend range does live — stated as Controllers
+    /// through RPN 0 where an export states it at all, and the Rig's where it
+    /// does not — is **Bend**'s entry in `CONTEXT.md`. See #44.
     pub value: i16,
 }
 
