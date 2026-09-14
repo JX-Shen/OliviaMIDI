@@ -277,6 +277,30 @@ mechanism and must never be used as one — anything that would actually harm
 someone by being public has to be removed or rewritten, not merely left out of
 the tarball.
 
+**Not carried is not the same as not checkable.** Some of what the tests read
+was made by somebody else on software this project does not run, because
+fixtures this project wrote can only exercise the assumptions this project
+already had. Those files are kept in the repository and excluded from the
+crate. Nobody who depends on `battuta` runs its integration tests, so carrying
+them served no reader; and a crate that states its licence in one word should
+not have somebody else's terms inside it, where a licence scanner reading a
+company's dependency tree will find them. What replaces carrying them is
+`docs/fixtures.md`: for each file, where it came from, its SHA-256, and the
+licence statement that was read together with the date it was read. That record
+is what lets a reader who never trusts this repository fetch the source, take
+the digest, and decide for themselves — which carrying the bytes would not have
+given them, because bytes in a tree say nothing about where they were got.
+
+**What may not be carried may not be taken.** Leaving a file out of the tarball
+does not undo publishing it in a public repository, so the question a sourced
+fixture has to answer is not whether the crate ships it but whether this project
+may distribute it at all. A licence that forbids commercial use is a licence
+this project cannot rely on: `battuta` is published under MIT and its future is
+not decided, and a term that would have to be argued about later is one to
+decline now. Attribution is a cost worth paying and is paid in the record;
+NonCommercial and ShareAlike are not, and material under them is left where it
+is. #35 is where the fixtures now in the tree were judged against this.
+
 Prebuilt binaries, a Homebrew tap and Rigs referable by name are all downstream
 of this, and none of them is V0.
 
