@@ -269,13 +269,19 @@ resolve. That record — rejections written down at the moment they were made �
 is one nobody can reconstruct after the fact, including whoever wrote it, and
 it is worth nothing held and something read.
 
-**Not shipped is not the same as not public.** `AGENTS.md` and `docs/agents/` are
-excluded from the crate because they describe how this repository is worked in
-rather than what the crate is, and a package should be honest about its own
-scope. They stay readable in the repository. `exclude` is not a privacy
-mechanism and must never be used as one — anything that would actually harm
-someone by being public has to be removed or rewritten, not merely left out of
-the tarball.
+**Not shipped is not the same as not public.** `AGENTS.md`, `docs/agents/`,
+`fixtures/` and `tests/` are excluded from the crate because they describe how
+this repository is worked in rather than what the crate is, and a package should
+be honest about its own scope. The test suite is the case that makes the rule
+legible: a third of it reads inputs the package does not carry, so a package
+that shipped it would be offering something it cannot run. Marking that failure
+clearly, or splitting the suite in two so that half of it could still pass, were
+both considered — the first decorates the problem and the second puts the
+dependency at the wrong level, because needing a fixture is a property of a
+test, not of the file it sits in. All of it stays readable in the repository.
+`exclude` is not a privacy mechanism and must never be used as one — anything
+that would actually harm someone by being public has to be removed or rewritten,
+not merely left out of the tarball.
 
 **Not carried is not the same as not checkable.** Some of what the tests read
 was made by somebody else on software this project does not run, because

@@ -21,13 +21,22 @@ categories = ["command-line-utilities", "multimedia::audio", "parser-implementat
 # and it has to be named here, because excluding a file does not exclude a link
 # to it: `cargo package` carries the link and publishes what it points at.
 #
-# Test inputs are the same kind of thing: they are what this repository is
-# worked in, not what the crate is. Nobody who depends on `battuta` runs its
-# integration tests, and `cargo package` compiles the crate without building
-# them — so shipping the fixtures served no reader, while the sourced ones
-# would have put somebody else's licence inside a crate whose own is one word
+# The tests and what they read are the same kind of thing: they are what this
+# repository is worked in, not what the crate is. Nobody who depends on
+# `battuta` runs its integration tests, and `cargo package` compiles the crate
+# without building them — so shipping them served no reader, while the sourced
+# fixtures would have put somebody else's licence inside a crate whose own is
+# one word. They go together because 116 of the suite's 311 tests read a
+# fixture: shipping `tests/` without `fixtures/` offers a suite that cannot run
 # (#35, and `CHARTER.md`'s *Distribution*).
-exclude = [".claude/", "AGENTS.md", "CLAUDE.md", "docs/agents/", "fixtures/"]
+exclude = [
+    ".claude/",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/agents/",
+    "fixtures/",
+    "tests/",
+]
 
 [lib]
 name = "battuta"
