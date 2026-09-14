@@ -18,9 +18,9 @@ shasum -a 256 fixtures/external/groove-drummer8-funk.mid
 
 Licences are recorded as the statement that was read and the date it was read,
 not only as a name. A licence name is a copy of somebody else's page and can go
-stale: the search result for one of the corpora below said CC BY 4.0 on the day
-this file was written, and the repository's own `LICENSE.txt` said
-CC BY-NC-SA 4.0.
+stale: of a corpus considered for this list and declined, the search result said
+CC BY 4.0 on the day this file was written and the corpus's own `LICENSE.txt`
+said CC BY-NC-SA 4.0. Reading the second is what kept it out.
 
 `fixtures/external/` is not shipped in the crate. `CHARTER.md`'s *Distribution*
 section says why.
@@ -42,8 +42,9 @@ Härtel (1862–1865).
   text meta event on the control track: `GNU LilyPond 2.10.25`.
 
 `mid info`: format 1, 14 tracks, ppq 384, 102.0000510000255 bpm, 4/4, 820608
-ticks. `mid inspect`: 13 programs, 3055 stated Controllers (all CC7), 17380
-notes.
+ticks. `mid inspect`: thirteen channels, each on a Program the Take states at
+Tick 0 and never restates; 3055 Controller events, all CC7; 17380 notes; no
+bend, no SysEx.
 
 This is the widest file here — fourteen tracks and a tempo the format cannot
 spell exactly.
@@ -62,7 +63,10 @@ Project.
 - Production path: notation software, LilyPond, same corpus as the Beethoven.
 
 `mid info`: format 1, 6 tracks, ppq 384, 60 bpm, 4/4, 61440 ticks.
-`mid inspect`: 4 programs, 18 stated Controllers (all CC7), 1045 notes.
+`mid inspect`: four channels and **no Program stated on any of them**; 18
+Controller events across two channels, all CC7; 1045 notes; no bend, no SysEx.
+A channel the Take says nothing about is not a channel on program 0, and this
+is the file that makes the difference visible.
 
 The same production path as the Beethoven at a sixteenth of the size, for a
 test that should not read seventeen thousand notes to prove its point.
@@ -85,11 +89,13 @@ public domain. Twelve named tracks — `trumpets`, `french horns`, `violin`,
   software made it is unknown and is left unknown.
 
 `mid info`: format 1, 12 tracks, ppq 960, 160 bpm, 4/4, 464640 ticks.
-`mid inspect`: 11 programs, 2201 stated Controllers (CC1, CC10, CC64), 3867
-notes.
+`mid inspect`: eleven channels, one of them on a Program at Tick 0 and eight
+further Programs stated later in the Take; 2201 Controller events across seven
+channels (CC1, CC10, CC64); 3867 notes; 46 pitch-bend events on channel 5,
+which dives to -8192 and returns to 0 around bar 36; no SysEx.
 
-The densest Controller writing of the four, and the only one here that uses
-CC64 and CC10.
+The only file here that writes more than one kind of Controller, the only one
+that uses CC64 and CC10, and the only one that bends anything.
 
 ## groove-drummer8-funk.mid
 
@@ -112,8 +118,8 @@ electronic kit, captured live. 367.46 seconds; the dataset's `train` split.
   `info.csv`.
 
 `mid info`: **format 0**, 1 track, ppq 480, 91.99998773333498 bpm, 4/4, 270450
-ticks. `mid inspect`: 1 program, 1964 stated Controllers (all CC4, the hi-hat
-pedal), 3835 notes.
+ticks. `mid inspect`: one channel with no Program stated; 1964 Controller
+events, all CC4, the hi-hat pedal; 3835 notes; no bend, no SysEx.
 
 The only format 0 file this repository has. Every other Take here, sourced or
 made, is format 1.
