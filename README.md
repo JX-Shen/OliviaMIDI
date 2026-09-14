@@ -137,7 +137,7 @@ her playing something for me.
 She could. Eight bars in three, D major, I–IV–V–I, her own melody, sixty beats a
 minute, slow. It arrived as base64 in a Discord message, with a note that any
 MIDI player would open it: GarageBand, VLC, MuseScore. It is in this repository
-as [`fixtures/olivia.mid`](./fixtures/olivia.mid) — 365 bytes, three tracks,
+as [`fixtures/olivia.mid`](https://github.com/JX-Shen/OliviaMIDI/blob/main/fixtures/olivia.mid) — 365 bytes, three tracks,
 480 ticks to the quarter — and it is the first thing `mid` will be asked to
 read.
 
@@ -242,12 +242,14 @@ V1's named Rigs, and a stated non-goal for V0.
 | [`CHARTER.md`](./CHARTER.md) | the binding decisions — boundary, principles, scope, non-goals |
 | [`CONTEXT.md`](./CONTEXT.md) | the glossary; every term pins a Chinese equivalent |
 | [`docs/adr/`](./docs/adr/README.md) | the principles the code is built on — the index is one line per principle |
+| [`docs/fixtures.md`](./docs/fixtures.md) | where each sourced test input came from, its digest and its licence — the tests and the files are on GitHub, this record travels |
 | [issues labelled `decision`](https://github.com/JX-Shen/OliviaMIDI/issues?q=label%3Adecision) | every judgement made about one behaviour, closed with the options it rejected |
 | [releases](https://github.com/JX-Shen/OliviaMIDI/releases) | what each version changed, and which silence it stopped keeping |
 | [`AGENTS.md`](https://github.com/JX-Shen/OliviaMIDI/blob/main/AGENTS.md) | how agents are expected to behave here — deliberately not packaged with the crate, so this one link leaves it |
 
-`CHARTER.md`, `CONTEXT.md` and `docs/adr/` are included in the published crate.
-The issue, release and `AGENTS.md` links point to GitHub.
+`CHARTER.md`, `CONTEXT.md`, `docs/adr/` and `docs/fixtures.md` are included in
+the published crate. The issue, release, `AGENTS.md` and `fixtures/` links point
+to GitHub, because the tests and what they read are not packaged either.
 
 This README is an introduction, not an authority. Where it and `CHARTER.md`
 disagree, the charter is right and this file is stale. What the tool accepts is
