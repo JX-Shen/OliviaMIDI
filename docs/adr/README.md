@@ -23,7 +23,7 @@ why no file here supersedes another.
 | [0005](./0005-the-library-decides-the-fact-the-consumer-decides-the-wording.md) | The library decides the fact, the consumer decides the wording | `battuta` owns what is so, when it is told, and that it is told; `mid` owns the English and the stream |
 | [0006](./0006-a-library-takes-no-process-global-resource-without-consent.md) | A library takes no process-global resource without consent | Signals, environment, working directory: nothing that belongs to the process is touched until the process asks by name |
 | [0007](./0007-a-setting-is-reported-as-what-is-in-force.md) | A setting is reported as what is in force, never as the events that set it | What a Take holds is the answer; the events that put it there are clerical history. Why a curve is not summarised into a shape, why a tempo belongs here although it has no channel, and why anything with nothing in force falls outside every command |
-| [0008](./0008-events-sharing-one-instant-are-heard-in-the-order-they-are-written.md) | Events sharing one instant are heard in the order they are written | A Tick is a sequence carrying one timestamp, not an instant. What decides an event's Rank among its neighbours, why notation never had to answer this, and where the file cannot answer it at all |
+| [0008](./0008-events-sharing-one-instant-are-heard-in-the-order-they-are-written.md) | Events sharing one instant are heard in the order they are written | A Tick is a sequence carrying one timestamp, not an instant. What decides an event's Rank among its neighbours, why notation never had to answer this, where the file cannot answer it at all — and, amended, which orders a comparison reports and a combination may refuse on: the same list, read by both |
 
 ## How they hang together
 
@@ -51,7 +51,11 @@ it. `0007` says what a reading reports and never said what a writer must do, and
 `0008` is that missing half: a state is *in force* from a Tick only if the events
 of that Tick meet it first. It leans on `0003` in the opposite direction to
 `0002`, for permission to leave carried-in order alone even where the order is
-what makes a placement wrong.
+what makes a placement wrong. It was amended twice in place rather than given a
+ninth number: once under #33, when comparison was found reading the same list
+of ranked pairs the writer obeys, and once under #51, when combination was found
+refusing on it — the subject did not split, it acquired a second and a third
+reader.
 
 *Refuse rather than answer plausibly* in `CHARTER.md` is argued from more often
 than any file here, and it is not here because it changes no code on its own:

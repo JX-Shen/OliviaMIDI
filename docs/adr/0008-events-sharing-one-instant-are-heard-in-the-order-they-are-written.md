@@ -89,13 +89,27 @@ discover it.
 behind a strike at one Tick, that is a fact about the file and ADR-0003 keeps it.
 The rule places what an Edit puts there; it does not rearrange what arrived.
 
-## Amended: Rank is also the oracle for comparison
+## Amended: Rank is also the oracle for comparison and combination
 
 The rule that decides which order is correct for writing also decides which
 order is correct for comparing. `mid diff` uses Rank to detect ordering
 differences between two Takes: where the two Takes place causally-dependent
 events in different orders at one Tick, that is a difference the diff reports
 and that `is_empty()` answers for.
+
+The same list decides what a combination may refuse. Where two Alternatives
+made from one Take are combined, each carries an order it established at the
+Ticks it changed, and the result inherits it; where the two established
+opposite orders for one pair, the combination refuses **only if the rule ranks
+that pair** — that is, only where `diff` between the two Alternatives would
+report the site. A pair the rule does not rank — two releases meeting at one
+Tick — is ordered by a stated convention and the site is disclosed, because
+neither order is a claim the file makes and a refusal there would hand the
+human a choice no surface of theirs can inform (`CHARTER.md`, *Refuse rather
+than answer plausibly*, and its limit). Comparison and combination read one
+list of ranked pairs; neither keeps its own. Extended under #51, 2026-09-30,
+where this was the second judgement found arguing from the first; the
+combination itself, its inputs and its diagnostics are that issue's.
 
 Only event pairs the rule assigns a determinate Rank to are compared for
 ordering. Two events the rule does not rank — two NoteOns on the same Tick,

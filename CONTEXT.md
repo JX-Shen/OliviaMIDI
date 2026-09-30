@@ -35,6 +35,34 @@ notation — but an operation sounds large enough to carry intent, and an Edit i
 deliberately flatter than that. So the discriminator key in `edits.json` is
 `kind`, never `op`.
 
+**Alternative**:
+A Take made from another by one Edit Set and kept beside it as a candidate —
+one of two answers to the same question about the same Take, neither yet
+chosen. What makes it an Alternative rather than merely a later Take is that
+the Take it was made from and the Edit Set that made it are both still to
+hand, so the account can be replayed and checked. The Take both were made
+from is their **common Take**.
+_中文_: 备选
+_Avoid_: branch, fork, variant, version, ossia; 分支、变体、版本
+
+`branch` and `fork` are Git's and `CHARTER.md` keeps Git words off the Piece
+side; `ossia` is a notation term for an alternative *passage* written above
+the staff, and an Alternative is a whole Take, so borrowing it would claim a
+scope it does not have.
+
+**Combine**:
+To make one Take from two Alternatives and their common Take: replay each
+account to check it, take up what each actually changed, refuse where the two
+demand different things of one note or rank one causal pair differently, and
+write a new Take that carries both. Never in place; on any refusal, nothing is
+written. Which orders it may refuse on is Rank's list, not its own.
+_中文_: 组合
+_Avoid_: merge, integrate, reconcile, rebase; 合并、融合
+
+`merge` is refused by name in `CHARTER.md`'s naming rules; `reconcile` implies
+the tool settles the disagreement, and it does not — the human does, by
+narrowing the request. See #51.
+
 **Transpose**:
 Moving a note by a number of semitones and changing nothing else — its start,
 its length and its velocity are untouched. One kind of Edit.
@@ -213,7 +241,10 @@ Rank is also the oracle `mid diff` uses when comparing event ordering between
 two Takes. Only event pairs with a causal dependency — those the rule assigns a
 determinate Rank to — are compared for ordering; pairs the rule does not rank
 are compared by content alone. A site where two Takes carry differently-ranked
-causal pairs is a difference `is_empty()` answers for.
+causal pairs is a difference `is_empty()` answers for. Combining two
+Alternatives reads the same list: it refuses on an ordering only where the two
+rank a causal pair differently, and orders an unranked pair by a stated
+convention, disclosing the site (ADR-0008, as amended under #51).
 _中文_: 次序
 _Avoid_: order, precedence, priority; 顺序、优先级
 
