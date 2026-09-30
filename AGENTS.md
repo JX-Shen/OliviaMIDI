@@ -246,6 +246,23 @@ that disagrees with the binary.
 **`cargo publish` is not automated, and is not to be.** A green pipeline cannot
 read a release narrative. #22 is the checklist, and it is run by a human.
 
+**It is run from a worktree of the tag, never from the working tree.** 0.1.3
+was published from `main` with an untracked file beside it, and the crate
+carries that file while the tag does not (#55); CI never saw it because CI
+packages a checkout. The working tree is a second source the pipeline cannot
+read, so the release path does not go through it:
+
+```sh
+git worktree add ../battuta-v0.1.4 v0.1.4
+(cd ../battuta-v0.1.4 && cargo publish)
+git worktree remove ../battuta-v0.1.4
+```
+
+`--allow-dirty` is not a flag an agent writes into a handoff or a checklist.
+If `cargo publish` refuses, the tree is the problem, not the refusal. And the
+manifest's `include` list is the second guard: it names what the crate is, so
+a file it does not name is not carried whatever tree the publish ran from.
+
 **The test no CI can run, and it is worth more than the ones it can.** Start an
 agent with no history of this project. Give it the repository and a Take
 carrying a CC11 curve, and ask for `inspect` → a Controller Edit → `apply` →
@@ -268,6 +285,16 @@ release that changed anything an agent is told about.
   branch, so this costs no signal: a branch gets the same four jobs. What it
   buys is that a disagreement lands somewhere other than the history everyone
   else reads.
+- **Disposable work goes in `.scratch/<issue>-<slug>/`, not in `/tmp`.** Probe
+  scripts, the Takes they construct, rendered audio, a venv: all of it, inside
+  the repository and ignored by git. `/tmp` is cleared without notice and three
+  research harnesses were lost that way; `.scratch/` survives a reboot, git
+  ignores it, and the manifest's `include` list does not name it, so it reaches
+  neither a commit nor the crate. A probe's recipe — input construction,
+  commands, what was observed — is recorded in its issue, which is what has to
+  survive; the script itself is promoted to `docs/` or `tests/` only by a
+  decision. A sourced file whose licence the crate could not carry (#35) may
+  sit there too: ignored is neither tracked nor distributed.
 
 ## Agent skills
 

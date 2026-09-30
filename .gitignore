@@ -5,7 +5,12 @@
 # Pointer to the real music project (machine-local, never tracked)
 .asset
 
-# Working state for a session: handoffs, notes. Never project record.
+# Disposable work for a session: handoffs, notes, probe scripts and what they
+# generate — constructed Takes, rendered audio, a venv. Never project record:
+# a probe's recipe goes in its issue, and a script that has to survive is
+# promoted to `docs/` or `tests/` by a decision. Out of the crate too, because
+# the manifest's `include` list does not name it — not because it is ignored
+# here; `cargo package` stops reading this file once `include` is set.
 .scratch/
 
 # macOS
@@ -14,6 +19,5 @@
 # Claude Code machine-local settings
 .claude/settings.json
 
-# Python experiments
-experiments/.venv/
+# Python
 __pycache__/

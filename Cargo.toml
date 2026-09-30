@@ -14,28 +14,27 @@ readme = "README.md"
 keywords = ["midi", "music", "cli", "agent", "composition"]
 categories = ["command-line-utilities", "multimedia::audio", "parser-implementations"]
 
-# Agent operating instructions are how this repository is worked in, not part of
-# what the crate ships. They also name the machine's account layout.
+# The crate is exactly this list and nothing else (#55). A file the crate should
+# carry is named here; a file not named here is not carried, whatever the tree
+# holds. `Cargo.toml`, `Cargo.lock` and the `readme` above are added by Cargo.
+# Once `include` is set, `.gitignore` is no longer consulted, and a pattern
+# without a leading `/` matches at any depth — so every entry is anchored.
 #
-# `CLAUDE.md` is a symlink to `AGENTS.md` and is excluded for the same reason —
-# and it has to be named here, because excluding a file does not exclude a link
-# to it: `cargo package` carries the link and publishes what it points at.
-#
-# The tests and what they read are the same kind of thing: they are what this
-# repository is worked in, not what the crate is. Nobody who depends on
-# `battuta` runs its integration tests, and `cargo package` compiles the crate
-# without building them — so shipping them served no reader, while the sourced
-# fixtures would have put somebody else's licence inside a crate whose own is
-# one word. They go together because 116 of the suite's 311 tests read a
-# fixture: shipping `tests/` without `fixtures/` offers a suite that cannot run
-# (#35, and `CHARTER.md`'s *Distribution*).
-exclude = [
-    ".claude/",
-    "AGENTS.md",
-    "CLAUDE.md",
-    "docs/agents/",
-    "fixtures/",
-    "tests/",
+# What is in and why: the source; the charter, glossary and licence; the ADRs,
+# which `src/` cites by number; and `docs/fixtures.md`, which is what a reader
+# holding only the tarball checks a sourced fixture against. What is out: how
+# this repository is worked in (`AGENTS.md` and its symlink, `docs/agents/`,
+# `.claude/`), the tests and the fixtures they read (#35, and `CHARTER.md`'s
+# *Distribution*), and working material under `docs/` that reads files the
+# crate does not carry.
+include = [
+    "/src/**",
+    "/CHARTER.md",
+    "/CONTEXT.md",
+    "/LICENSE",
+    "/README.md",
+    "/docs/adr/**",
+    "/docs/fixtures.md",
 ]
 
 [lib]
