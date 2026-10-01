@@ -419,6 +419,85 @@ pub enum Error {
     WriteInPlace(PathBuf),
 
     #[error(
+        "combine takes exactly two Alternatives and the common Take they were both made from; \
+         {0} were given"
+    )]
+    CombineNeedsTwoSides(usize),
+
+    #[error(
+        "combine never writes in place: -o {0} names one of its inputs. One file has as many \
+         names as something has given it, and a symlink or a second hard link to an input is \
+         still that input. Choose an output that names none of them."
+    )]
+    CombineOverInput(PathBuf),
+
+    #[error(
+        "side {side} ({take}) cannot be checked: its Edit Set does not apply to the common Take. \
+         {source} An Alternative is checked by replaying the Edit Set that made it on the Take it \
+         was made from, so this is not the Edit Set, or not the common Take, it was made with. \
+         Nothing has been written."
+    )]
+    SourceReplayFailed {
+        side: usize,
+        take: PathBuf,
+        #[source]
+        source: Box<Error>,
+    },
+
+    #[error(
+        "side {side} ({take}) is not what its Edit Set makes of the common Take: replaying the \
+         Edit Set gives different events, so the account it offers cannot be trusted and nothing \
+         has been read from it. Nothing has been written. Supply the Edit Set that made this \
+         Take, or the Take that this Edit Set makes."
+    )]
+    SourceEvidenceMismatch { side: usize, take: PathBuf },
+
+    #[error(
+        "side {side} ({take}): Edit {edit} of its Edit Set, counted from 0, changes something \
+         other than an existing note's velocity, duration or presence, and those three — \
+         `set_velocity`, `resize_note` and `delete_note` — are all combine takes up in this \
+         release. Nothing has been written. Leave that Edit out of the Alternative and apply it \
+         to the combined Take afterwards."
+    )]
+    EditOutsideCombination {
+        side: usize,
+        take: PathBuf,
+        edit: usize,
+    },
+
+    #[error(
+        "the two Alternatives demand different things of the same note, in {} place(s). Neither \
+         is chosen and none is settled by arithmetic, so nothing has been written. Narrow one \
+         side's Edit Set until the two no longer ask different things of one note, and combine \
+         again.",
+        .0.len()
+    )]
+    Conflicts(Vec<crate::combine::Conflict>),
+
+    #[error(
+        "the two Alternatives write {} pair(s) of events at one Tick in opposite orders, where \
+         the order is a claim the file makes — one `mid diff` would report between them. \
+         Nothing has been written. Narrow one side's Edit Set so that only one of them places \
+         that pair, and combine again.",
+        .0.len()
+    )]
+    OrderContradiction(Vec<crate::combine::OrderContradiction>),
+
+    #[error(
+        "each Alternative is sound and the two cannot be made together: {0} This was found \
+         building the combined Take and is reported as found, which is not a claim that nothing \
+         else stands in the way. Nothing has been written."
+    )]
+    CoreInvalid(#[source] Box<Error>),
+
+    #[error(
+        "on track {track}, at tick {tick}, the orders the common Take and the two Alternatives \
+         establish go round in a circle, so no order satisfies them all. That is a fault in \
+         battuta rather than in your Takes or your Edit Sets; nothing has been written."
+    )]
+    CombinedRanksCircular { track: usize, tick: u32 },
+
+    #[error(
         "no Rig configured. Pass --rig <soundfont.sf2>, or set BATTUTA_SOUNDFONT to a soundfont \
          path.\n\
          \n\

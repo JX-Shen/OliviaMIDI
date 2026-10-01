@@ -170,6 +170,22 @@ pub(crate) fn role(message: &MidiMessage) -> Option<Role> {
     Some(Role { pair, governing })
 }
 
+/// Which ranked pair two events at one Tick form, if any: one of them governs
+/// the other, on one channel.
+///
+/// The question `claims` asks of each event, asked of two at once, so that a
+/// combination deciding whether an order it found contradicted is a claim asks
+/// exactly what a comparison asks (ADR-0008, as amended under #51). There is no
+/// second list: an event kind becomes an ordering claim in `role` or nowhere.
+pub(crate) fn ranked_pair(
+    (channel, message): (u8, &MidiMessage),
+    (other_channel, other): (u8, &MidiMessage),
+) -> Option<RankedPairKind> {
+    let (mine, theirs) = (role(message)?, role(other)?);
+    (channel == other_channel && mine.pair == theirs.pair && mine.governing != theirs.governing)
+        .then_some(mine.pair)
+}
+
 /// What one Take says about one pair at one Tick.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Reading {
