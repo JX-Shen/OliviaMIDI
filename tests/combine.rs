@@ -1086,15 +1086,12 @@ fn together_a(dir: &Path) -> PathBuf {
     )
 }
 
-/// Rewrite a side's Take through `midly`, keeping a copy of it as made.
-fn rewrite_side(dir: &Path, side: &Side, change: impl FnOnce(&mut Smf)) -> PathBuf {
-    let as_made = dir.join("as-made.mid");
-    std::fs::copy(&side.take, &as_made).expect("copyable");
+/// Rewrite a side's Take through `midly`.
+fn rewrite_side(side: &Side, change: impl FnOnce(&mut Smf)) {
     let bytes = std::fs::read(&side.take).expect("readable");
     let mut smf = Smf::parse(&bytes).expect("parses");
     change(&mut smf);
     smf.save(&side.take).expect("writable");
-    as_made
 }
 
 fn vlq(mut n: u32, out: &mut Vec<u8>) {
@@ -1183,16 +1180,16 @@ fn an_event_equal_reencoding_of_a_side_is_accepted() {
     assert!(events_equal(&d, &as_made));
 }
 
-/// Two strikes at one Tick written the other way round: `mid diff` compares
-/// no such order and reports nothing, and the side is still not what its Edit
-/// Set makes. Evidence is the complete parsed events (#51).
+/// Two strikes at one Tick written the other way round: the same notes, and
+/// still not what the Edit Set makes. Evidence is the complete parsed events,
+/// including within-track sequence (#51).
 #[test]
-fn a_side_differing_only_where_diff_does_not_look_is_refused() {
+fn a_side_with_strikes_at_one_tick_in_another_order_is_refused() {
     let dir = tempfile::tempdir().expect("temp dir");
     let a = together_a(dir.path());
     let b = side(dir.path(), "B", &a, &[vel(P60, 50)]);
     let c = side(dir.path(), "C", &a, &[]);
-    let as_made = rewrite_side(dir.path(), &b, |smf| {
+    rewrite_side(&b, |smf| {
         let strikes: Vec<usize> = smf.tracks[0]
             .iter()
             .enumerate()
@@ -1213,17 +1210,6 @@ fn a_side_differing_only_where_diff_does_not_look_is_refused() {
         smf.tracks[0][first].kind = smf.tracks[0][second].kind;
         smf.tracks[0][second].kind = kind;
     });
-    let diff = mid()
-        .arg("diff")
-        .arg(&as_made)
-        .arg(&b.take)
-        .output()
-        .expect("mid runs");
-    assert!(diff.status.success());
-    assert!(
-        String::from_utf8_lossy(&diff.stdout).contains("no differences"),
-        "the case is one `diff` does not see"
-    );
     let refusal = refused(dir.path(), &a, [&b, &c], "source_evidence_mismatch");
     assert_eq!(refusal["side"], 0);
 }
@@ -1236,7 +1222,7 @@ fn a_side_differing_only_in_its_header_is_refused() {
     let a = together_a(dir.path());
     let b = side(dir.path(), "B", &a, &[vel(P60, 50)]);
     let c = side(dir.path(), "C", &a, &[]);
-    rewrite_side(dir.path(), &b, |smf| smf.header.format = Format::Parallel);
+    rewrite_side(&b, |smf| smf.header.format = Format::Parallel);
     let refusal = refused(dir.path(), &a, [&b, &c], "source_evidence_mismatch");
     assert_eq!(refusal["side"], 0);
 }
