@@ -1074,6 +1074,238 @@ fn a_side_that_does_not_replay_refuses_as_source_replay_failed() {
         .contains("t0:c0:p61:s0:n0"));
 }
 
+// ------------------------------------------------------- what is evidence --
+
+/// p60 [0, 100] and p64 [0, 200], struck at one Tick.
+fn together_a(dir: &Path) -> PathBuf {
+    synth(
+        &dir.join("A.mid"),
+        &[(0, 100, 60, 80, 10), (0, 200, 64, 80, 20)],
+        &[],
+        1000,
+    )
+}
+
+/// Rewrite a side's Take through `midly`, keeping a copy of it as made.
+fn rewrite_side(dir: &Path, side: &Side, change: impl FnOnce(&mut Smf)) -> PathBuf {
+    let as_made = dir.join("as-made.mid");
+    std::fs::copy(&side.take, &as_made).expect("copyable");
+    let bytes = std::fs::read(&side.take).expect("readable");
+    let mut smf = Smf::parse(&bytes).expect("parses");
+    change(&mut smf);
+    smf.save(&side.take).expect("writable");
+    as_made
+}
+
+fn vlq(mut n: u32, out: &mut Vec<u8>) {
+    let mut bytes = vec![(n & 0x7F) as u8];
+    n >>= 7;
+    while n > 0 {
+        bytes.push((n & 0x7F) as u8 | 0x80);
+        n >>= 7;
+    }
+    out.extend(bytes.iter().rev());
+}
+
+/// The same Take, with every channel message carrying its own status byte —
+/// the encoding `midly` does not write, so a byte comparison would tell it
+/// apart. Only the meta events `synth` writes are spelled.
+fn without_running_status(path: &Path) -> Vec<u8> {
+    let bytes = std::fs::read(path).expect("readable");
+    let smf = Smf::parse(&bytes).expect("parses");
+    let format: u16 = match smf.header.format {
+        Format::SingleTrack => 0,
+        Format::Parallel => 1,
+        Format::Sequential => 2,
+    };
+    let Timing::Metrical(ppq) = smf.header.timing else {
+        panic!("a metrical Take");
+    };
+    let mut out = b"MThd".to_vec();
+    out.extend(6u32.to_be_bytes());
+    out.extend(format.to_be_bytes());
+    out.extend((smf.tracks.len() as u16).to_be_bytes());
+    out.extend(ppq.as_int().to_be_bytes());
+    for track in &smf.tracks {
+        let mut data = Vec::new();
+        for event in track {
+            vlq(event.delta.as_int(), &mut data);
+            match event.kind {
+                TrackEventKind::Midi { channel, message } => {
+                    midly::live::LiveEvent::Midi { channel, message }
+                        .write_std(&mut data)
+                        .expect("writable");
+                }
+                TrackEventKind::Meta(MetaMessage::Tempo(t)) => {
+                    data.extend([0xFF, 0x51, 0x03]);
+                    data.extend(&t.as_int().to_be_bytes()[1..]);
+                }
+                TrackEventKind::Meta(MetaMessage::TimeSignature(a, b, c, d)) => {
+                    data.extend([0xFF, 0x58, 0x04, a, b, c, d]);
+                }
+                TrackEventKind::Meta(MetaMessage::EndOfTrack) => {
+                    data.extend([0xFF, 0x2F, 0x00]);
+                }
+                other => panic!("not spelled here: {other:?}"),
+            }
+        }
+        out.extend(b"MTrk");
+        out.extend((data.len() as u32).to_be_bytes());
+        out.extend(data);
+    }
+    out
+}
+
+/// A side re-encoded with the same events and different bytes is the same
+/// evidence: replay compares events, never bytes (#51, ADR-0003).
+#[test]
+fn an_event_equal_reencoding_of_a_side_is_accepted() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let a = together_a(dir.path());
+    let b = side(dir.path(), "B", &a, &[vel(P60, 50)]);
+    let c = side(dir.path(), "C", &a, &[]);
+    let as_made = dir.path().join("D-as-made.mid");
+    assert!(combine(&a, [&b, &c], &as_made).success);
+
+    let b_as_made = dir.path().join("B-as-made.mid");
+    std::fs::copy(&b.take, &b_as_made).expect("copyable");
+    let reencoded = without_running_status(&b.take);
+    assert_ne!(
+        reencoded,
+        std::fs::read(&b.take).expect("readable"),
+        "the re-encoding has to differ in bytes for this to test anything"
+    );
+    std::fs::write(&b.take, reencoded).expect("writable");
+    assert!(events_equal(&b.take, &b_as_made));
+    let d = dir.path().join("D.mid");
+    let outcome = combine(&a, [&b, &c], &d);
+    assert!(outcome.success, "{}", outcome.stderr);
+    assert!(events_equal(&d, &as_made));
+}
+
+/// Two strikes at one Tick written the other way round: `mid diff` compares
+/// no such order and reports nothing, and the side is still not what its Edit
+/// Set makes. Evidence is the complete parsed events (#51).
+#[test]
+fn a_side_differing_only_where_diff_does_not_look_is_refused() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let a = together_a(dir.path());
+    let b = side(dir.path(), "B", &a, &[vel(P60, 50)]);
+    let c = side(dir.path(), "C", &a, &[]);
+    let as_made = rewrite_side(dir.path(), &b, |smf| {
+        let strikes: Vec<usize> = smf.tracks[0]
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| {
+                matches!(
+                    e.kind,
+                    TrackEventKind::Midi {
+                        message: MidiMessage::NoteOn { .. },
+                        ..
+                    }
+                )
+            })
+            .map(|(i, _)| i)
+            .collect();
+        let (first, second) = (strikes[0], strikes[1]);
+        assert_eq!(smf.tracks[0][second].delta.as_int(), 0, "one Tick");
+        let kind = smf.tracks[0][first].kind;
+        smf.tracks[0][first].kind = smf.tracks[0][second].kind;
+        smf.tracks[0][second].kind = kind;
+    });
+    let diff = mid()
+        .arg("diff")
+        .arg(&as_made)
+        .arg(&b.take)
+        .output()
+        .expect("mid runs");
+    assert!(diff.status.success());
+    assert!(
+        String::from_utf8_lossy(&diff.stdout).contains("no differences"),
+        "the case is one `diff` does not see"
+    );
+    let refusal = refused(dir.path(), &a, [&b, &c], "source_evidence_mismatch");
+    assert_eq!(refusal["side"], 0);
+}
+
+/// The same events under a different header — format 1 for format 0 — are
+/// not the Take the Edit Set makes.
+#[test]
+fn a_side_differing_only_in_its_header_is_refused() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let a = together_a(dir.path());
+    let b = side(dir.path(), "B", &a, &[vel(P60, 50)]);
+    let c = side(dir.path(), "C", &a, &[]);
+    rewrite_side(dir.path(), &b, |smf| smf.header.format = Format::Parallel);
+    let refusal = refused(dir.path(), &a, [&b, &c], "source_evidence_mismatch");
+    assert_eq!(refusal["side"], 0);
+}
+
+/// A refusal of this kind leaves every input byte for byte as it was, and an
+/// output path that already held a file still holds it.
+fn refused_untouched(dir: &Path, a: &Path, sides: [&Side; 2], kind: &str) {
+    let inputs: Vec<&Path> = [a]
+        .into_iter()
+        .chain(
+            sides
+                .iter()
+                .flat_map(|s| [s.take.as_path(), s.edits_path.as_path()]),
+        )
+        .collect();
+    let read = |p: &&Path| std::fs::read(p).expect("readable");
+    let before: Vec<Vec<u8>> = inputs.iter().map(read).collect();
+    let output = dir.join("existing.mid");
+    std::fs::write(&output, b"already here").expect("writable");
+    let outcome = combine(a, sides, &output);
+    assert!(!outcome.success, "{kind} should refuse");
+    assert_eq!(
+        outcome.document["refusal"]["kind"], kind,
+        "{}",
+        outcome.stderr
+    );
+    let after: Vec<Vec<u8>> = inputs.iter().map(read).collect();
+    assert!(before == after, "{kind}: an input changed");
+    assert_eq!(
+        std::fs::read(&output).expect("still there"),
+        b"already here",
+        "{kind}: the existing output was touched"
+    );
+}
+
+#[test]
+fn every_refusal_leaves_the_inputs_and_an_existing_output_untouched() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let a = plain_a(dir.path());
+    let b = side(dir.path(), "B", &a, &[vel(P60, 50)]);
+    let c = side(dir.path(), "C", &a, &[vel(P60, 70)]);
+    refused_untouched(dir.path(), &a, [&b, &c], "conflict");
+    let c = side(dir.path(), "C", &a, &[delete(P60)]);
+    refused_untouched(dir.path(), &a, [&b, &c], "conflict");
+
+    let mut tampered = side(dir.path(), "T", &a, &[vel(P60, 50)]);
+    let claimed = dir.path().join("claimed.json");
+    write_edits(&claimed, &[vel(P60, 51)]);
+    tampered.edits_path = claimed;
+    refused_untouched(dir.path(), &a, [&tampered, &c], "source_evidence_mismatch");
+
+    let mut unreplayable = side(dir.path(), "U", &a, &[vel(P60, 50)]);
+    let missing = dir.path().join("missing.json");
+    write_edits(&missing, &[vel("t0:c0:p61:s0:n0", 50)]);
+    unreplayable.edits_path = missing;
+    refused_untouched(dir.path(), &a, [&unreplayable, &c], "source_replay_failed");
+
+    let dir = tempfile::tempdir().expect("temp dir");
+    let a = synth(
+        &dir.path().join("A.mid"),
+        &[(0, 100, 60, 80, 10), (50, 200, 60, 90, 20)],
+        &[],
+        1000,
+    );
+    let b = side(dir.path(), "B", &a, &[resize("t0:c0:p60:s0:n0", 80)]);
+    let c = side(dir.path(), "C", &a, &[resize("t0:c0:p60:s50:n0", -50)]);
+    refused_untouched(dir.path(), &a, [&b, &c], "core_invalid");
+}
+
 // --------------------------------------------------------- net-zero resize --
 
 /// p60 [0, 100] with a CC11 written in front of its release at 100.
