@@ -11,6 +11,7 @@ thing would only create a divergence to maintain.
 | `domain.md` | upstream, unchanged — its examples are generic and not about MIDI |
 | `triage-labels.md` | upstream, with the label column filled in for this tracker |
 | `issue-tracker.md` | this project's own, apart from the `gh` conventions |
+| `landing.md` | this project's own — how a branch reaches `main` |
 
 The disciplines these skills encode — grilling a design before building it,
 resolving domain terms before naming anything, recording decisions as ADRs and

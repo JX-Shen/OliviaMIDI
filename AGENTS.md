@@ -285,6 +285,9 @@ release that changed anything an agent is told about.
   branch, so this costs no signal: a branch gets the same four jobs. What it
   buys is that a disagreement lands somewhere other than the history everyone
   else reads.
+- **A branch lands by rebase and fast-forward, never by a GitHub merge
+  button.** `main` has no merge commits. The procedure, including landing
+  several branches at once, is `docs/agents/landing.md`.
 - **Disposable work goes in `.scratch/<issue>-<slug>/`, not in `/tmp`.** Probe
   scripts, the Takes they construct, rendered audio, a venv: all of it, inside
   the repository and ignored by git. `/tmp` is cleared without notice and three
