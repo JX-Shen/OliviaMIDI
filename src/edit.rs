@@ -370,6 +370,24 @@ pub fn apply(take: &Take, edit_set: &EditSet) -> Result<Take> {
 /// says who is answering for a place where the file cannot say what the music
 /// is. A caller that has nothing to answer for never has to mention it. See #26.
 pub fn apply_allowing(take: &Take, edit_set: &EditSet, allowed: &[Site]) -> Result<Take> {
+    Ok(apply_traced(take, edit_set, allowed)?.0)
+}
+
+/// Which event of the input Take each written event is: per track, per
+/// position in the written track, the index the event arrived at — `None` for
+/// one an Edit added and for the end-of-track, which is re-appended.
+pub(crate) type Origins = Vec<Vec<Option<usize>>>;
+
+/// `apply_allowing`, saying as well which input event each written one is.
+///
+/// One path, not two: `apply_allowing` is this with the trace dropped, so what
+/// `combine` replays an Alternative's account through is exactly what `mid
+/// apply` ran when the Alternative was made.
+pub(crate) fn apply_traced(
+    take: &Take,
+    edit_set: &EditSet,
+    allowed: &[Site],
+) -> Result<(Take, Origins)> {
     let notes = take.notes()?;
     let resolved = resolve(&notes, &take.controller_events()?, &edit_set.edits)?;
 
@@ -409,11 +427,16 @@ pub fn apply_allowing(take: &Take, edit_set: &EditSet, allowed: &[Site]) -> Resu
         track.stay_placed(number)?;
     }
 
+    let mut origins = Vec::with_capacity(tracks.len());
     smf.tracks = tracks
         .into_iter()
-        .map(Rewrite::finish)
+        .map(|track| {
+            let (events, origin) = track.finish()?;
+            origins.push(origin);
+            Ok(events)
+        })
         .collect::<Result<_>>()?;
-    Take::from_smf(&smf)
+    Ok((Take::from_smf(&smf)?, origins))
 }
 
 /// The two slots carrying one note of the Take being built.
@@ -1015,7 +1038,7 @@ pub fn apply_to_new_take(
 /// The pathname comparison is kept for the ordinary case where the output does
 /// not exist yet. A path naming nothing cannot be the input, which had to exist
 /// to be read, so that comparison is answering a different and easier question.
-fn same_file(a: &Path, b: &Path) -> bool {
+pub(crate) fn same_file(a: &Path, b: &Path) -> bool {
     use std::os::unix::fs::MetadataExt;
     // `metadata` follows symlinks, which is what makes an output symlinked at
     // the input resolve to the file it points at rather than to itself.

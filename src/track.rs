@@ -179,6 +179,9 @@ pub(crate) struct Rewrite<'a> {
     slots: Vec<Slot<'a>>,
     /// How many writes this rewrite has made, which numbers the next one.
     writes: usize,
+    /// How many events the track arrived with. A slot below this is one of
+    /// them, at its own index; a slot at or above it was put there by an Edit.
+    arrived: usize,
 }
 
 impl<'a> Rewrite<'a> {
@@ -197,7 +200,12 @@ impl<'a> Rewrite<'a> {
                 written: None,
             });
         }
-        Rewrite { slots, writes: 0 }
+        let arrived = slots.len();
+        Rewrite {
+            slots,
+            writes: 0,
+            arrived,
+        }
     }
 
     /// Put a new event into the track. It goes on the end of the list, where it
@@ -722,27 +730,45 @@ impl<'a> Rewrite<'a> {
     /// End-of-track is not sorted with the rest — it is where the track stops,
     /// so it is gathered up and re-appended after the last surviving event,
     /// wherever an Edit has left that.
-    pub(crate) fn finish(mut self) -> Result<Vec<TrackEvent<'a>>> {
+    ///
+    /// Beside the events, the index each one arrived at in the input track —
+    /// `None` for an event an Edit added, and for the end-of-track, which is
+    /// re-appended rather than carried. `apply` drops it; `combine` reads it to
+    /// know which event of the common Take each event of an Alternative is, and
+    /// so the order the Alternative wrote them in. Read off the slots as they
+    /// are sorted, so it is this rewrite's own account and not a second one.
+    pub(crate) fn finish(mut self) -> Result<(Vec<TrackEvent<'a>>, Vec<Option<usize>>)> {
+        let arrived = self.arrived;
         let mut end = 0u32;
-        self.slots.retain(|slot| {
-            if !slot.alive {
-                return false;
-            }
-            if matches!(slot.kind, TrackEventKind::Meta(MetaMessage::EndOfTrack)) {
-                end = end.max(slot.tick);
-                return false;
-            }
-            true
-        });
-        self.slots.sort_by_key(|slot| (slot.tick, slot.rank));
-        let end = end.max(self.slots.last().map_or(0, |slot| slot.tick));
+        let mut slots: Vec<(usize, Slot<'a>)> = std::mem::take(&mut self.slots)
+            .into_iter()
+            .enumerate()
+            .filter(|(_, slot)| {
+                if !slot.alive {
+                    return false;
+                }
+                if matches!(slot.kind, TrackEventKind::Meta(MetaMessage::EndOfTrack)) {
+                    end = end.max(slot.tick);
+                    return false;
+                }
+                true
+            })
+            .collect();
+        slots.sort_by_key(|(_, slot)| (slot.tick, slot.rank));
+        let end = end.max(slots.last().map_or(0, |(_, slot)| slot.tick));
 
-        with_delta_times(
-            self.slots
+        let origins = slots
+            .iter()
+            .map(|&(index, _)| (index < arrived).then_some(index))
+            .chain([None])
+            .collect();
+        let events = with_delta_times(
+            slots
                 .into_iter()
-                .map(|slot| (slot.tick, slot.kind))
+                .map(|(_, slot)| (slot.tick, slot.kind))
                 .chain([(end, TrackEventKind::Meta(MetaMessage::EndOfTrack))]),
-        )
+        )?;
+        Ok((events, origins))
     }
 }
 
