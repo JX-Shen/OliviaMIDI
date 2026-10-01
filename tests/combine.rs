@@ -1660,3 +1660,122 @@ fn an_edit_outside_the_subset_is_refused() {
         .stderr(predicates::str::contains("Edit 0"));
     assert!(!d.exists());
 }
+
+// ------------------------------------------------- the subset's contract --
+
+/// Every Edit kind there is, read out of `battuta::EditSet` the way
+/// `tests/contract.rs` reads it: from the variants `serde` would have taken.
+fn every_kind() -> BTreeSet<String> {
+    let refusal = serde_json::from_str::<battuta::EditSet>(r#"{ "edits": [ { "kind": "" } ] }"#)
+        .expect_err("an empty kind is not a kind")
+        .to_string();
+    let (_, listed) = refusal
+        .split_once("expected one of ")
+        .expect("serde names the variants it would have taken");
+    listed
+        .split(&[',', ' '][..])
+        .filter_map(|word| word.trim().strip_prefix('`'))
+        .filter_map(|word| word.split('`').next())
+        .filter(|word| !word.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// `mid combine --help` names the kinds of Edit `combine` takes up, and
+/// nothing else is allowed to: the refusal of any other kind points there.
+/// This holds that sentence to the binary in both directions, the way
+/// `tests/contract.rs` holds `apply --help`.
+///
+/// Neither side of the comparison is written down here. The kinds there are
+/// come out of the `Edit` type; the example of each is the one
+/// `fixtures/every-kind.json` holds (which `tests/contract.rs` keeps one per
+/// kind); and whether `combine` takes a kind up is found by driving that one
+/// Edit through `mid combine` as an Alternative and seeing whether it is
+/// refused as a kind combine does not take up. An example that does not apply
+/// to the common Take as written is tried with its `delta_ticks` negated — the
+/// fixture's `move_note` moves the first note before Tick 0 — and a kind that
+/// still cannot be driven fails here rather than being skipped.
+#[test]
+fn combine_help_names_exactly_the_kinds_combine_takes_up() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let common = Path::new(common::EXPRESSIVE);
+    let text = std::fs::read_to_string("fixtures/every-kind.json").expect("the fixture is there");
+    let examples: Vec<Value> = serde_json::from_str::<Value>(&text).expect("JSON")["edits"]
+        .as_array()
+        .expect("an Edit list")
+        .clone();
+    let empty = dir.path().join("empty.json");
+    write_edits(&empty, &[]);
+
+    let mut taken = BTreeSet::new();
+    let mut driven = BTreeSet::new();
+    for example in examples {
+        let kind = example["kind"].as_str().expect("a kind").to_string();
+        let mut negated = example.clone();
+        if let Some(delta) = example["delta_ticks"].as_i64() {
+            negated["delta_ticks"] = json!(-delta);
+        }
+        let edits = dir.path().join(format!("{kind}.json"));
+        let take = dir.path().join(format!("{kind}.mid"));
+        let applies = [example, negated].into_iter().any(|edit| {
+            std::fs::write(&edits, json!({ "edits": [edit] }).to_string()).expect("writable");
+            mid()
+                .arg("apply")
+                .arg(common)
+                .arg(&edits)
+                .arg("-o")
+                .arg(&take)
+                .output()
+                .expect("mid runs")
+                .status
+                .success()
+        });
+        assert!(applies, "the example of `{kind}` applies to no common Take");
+
+        let out = mid()
+            .arg("combine")
+            .arg(common)
+            .arg("--side")
+            .arg(&take)
+            .arg(&edits)
+            .arg("--side")
+            .arg(common)
+            .arg(&empty)
+            .arg("-o")
+            .arg(dir.path().join(format!("D-{kind}.mid")))
+            .output()
+            .expect("mid runs");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            !stderr.contains("does not apply to the common Take")
+                && !stderr.contains("is not what its Edit Set makes"),
+            "`{kind}` never reached the subset check: {stderr}"
+        );
+        if !stderr.contains("combine does not take up") {
+            taken.insert(kind.clone());
+        }
+        driven.insert(kind);
+    }
+    assert_eq!(
+        driven,
+        every_kind(),
+        "every kind was driven through combine"
+    );
+
+    let help = String::from_utf8(
+        mid()
+            .args(["combine", "--help"])
+            .output()
+            .expect("mid runs")
+            .stdout,
+    )
+    .expect("UTF-8");
+    let named: BTreeSet<String> = every_kind()
+        .into_iter()
+        .filter(|kind| help.contains(&format!("`{kind}`")))
+        .collect();
+    assert_eq!(
+        named, taken,
+        "`mid combine --help` names other kinds than combine takes up"
+    );
+}
