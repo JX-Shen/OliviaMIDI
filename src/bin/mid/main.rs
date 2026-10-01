@@ -9,6 +9,7 @@
 //! library rather than a folder the CLI happens to keep its code in.
 
 mod apply;
+mod combine;
 mod diff;
 mod info;
 mod inspect;
@@ -38,6 +39,7 @@ enum Command {
     Info(info::Args),
     Inspect(inspect::Args),
     Apply(apply::Args),
+    Combine(combine::Args),
     Diff(diff::Args),
     Play(play::Args),
 }
@@ -54,6 +56,7 @@ fn main() {
         Command::Info(args) => info::run(args),
         Command::Inspect(args) => inspect::run(args),
         Command::Apply(args) => apply::run(args),
+        Command::Combine(args) => combine::run(args),
         Command::Diff(args) => diff::run(args),
         Command::Play(args) => play::run(args),
     };

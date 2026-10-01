@@ -950,3 +950,116 @@ pub fn unranked(lines: Option<BarLines>, row: &battuta::Unranked) -> String {
         ),
     }
 }
+
+/// That a side of a combination replayed to exactly the Take supplied for it.
+///
+/// Counted from 0, as `--json` counts them, so that a line here and an entry
+/// there name a side the same way; the paths are beside it for a reader who
+/// does not count.
+pub fn verified_side(side: usize, take: &std::path::Path, edits: &std::path::Path) -> String {
+    format!(
+        "verified: side {side} {} is what {} makes of the common Take",
+        take.display(),
+        edits.display()
+    )
+}
+
+/// What a field of a note is called in a line about a combination.
+fn field(field: battuta::Field) -> &'static str {
+    match field {
+        battuta::Field::Velocity => "velocity",
+        battuta::Field::Duration => "duration",
+    }
+}
+
+/// A request that asked a note for what it already had.
+pub fn no_effect(entry: &battuta::NoEffect) -> String {
+    format!(
+        "no effect: side {} asks {} for the {} it already has in the common Take",
+        entry.side,
+        entry.id,
+        field(entry.field)
+    )
+}
+
+/// A site where the convention, not either side, decided an order.
+///
+/// It says what the convention was, because a judgement made for the human is
+/// stated with its answer (ADR-0004), and how to decline it.
+pub fn disclosed_site(lines: Option<BarLines>, site: &battuta::DisclosedSite) -> String {
+    format!(
+        "disclosed: {}  track {}  {}  the two sides wrote events here in opposite orders the \
+         file gives no meaning to; ordered by where their notes begin in the common Take. Narrow \
+         an Edit Set to choose the other",
+        at(lines, site.tick),
+        site.track,
+        channel(site.channel)
+    )
+}
+
+/// An End-of-Track the combination moved.
+pub fn track_end(lines: Option<BarLines>, end: &battuta::TrackEnd) -> String {
+    format!(
+        "track end: track {} moved from {} to {}",
+        end.track,
+        at(lines, end.before),
+        at(lines, end.after)
+    )
+}
+
+/// That the combined Take is the common Take, event for event.
+pub fn unchanged() -> String {
+    "unchanged: the combined Take holds exactly the events of the common Take".to_string()
+}
+
+/// One conflict, with what each side asked for.
+pub fn conflict(conflict: &battuta::Conflict) -> String {
+    match conflict {
+        battuta::Conflict::Field {
+            id,
+            field: which,
+            demands,
+        } => format!(
+            "conflict: {id} {}: {}",
+            field(*which),
+            demands
+                .iter()
+                .map(|demand| format!("side {} asks {}", demand.side, demand.value))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        battuta::Conflict::DeleteAgainstChange {
+            id,
+            deleted_by,
+            changes,
+        } => format!(
+            "conflict: {id}: {}; {}",
+            deleted_by
+                .iter()
+                .map(|side| format!("side {side} deletes it"))
+                .collect::<Vec<_>>()
+                .join(", "),
+            changes
+                .iter()
+                .map(|change| format!(
+                    "side {} asks {} {}",
+                    change.side,
+                    field(change.field),
+                    change.value
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    }
+}
+
+/// One ranked pair the two sides wrote in opposite orders.
+pub fn order_contradiction(contradiction: &battuta::OrderContradiction) -> String {
+    format!(
+        "contradiction: track {}  tick {}  {}  {}: the two sides wrote it in opposite orders",
+        contradiction.track,
+        contradiction.tick,
+        channel(contradiction.channel),
+        contradiction.pair.named()
+    )
+}

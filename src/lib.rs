@@ -10,6 +10,7 @@
 
 pub mod bars;
 pub mod bend;
+pub mod combine;
 pub mod controller;
 pub mod diff;
 pub mod edit;
@@ -27,6 +28,10 @@ pub mod unranked;
 
 pub use bars::{BarLines, BarRange, Position, TickSpan};
 pub use bend::{Bend, BendExtremes, Bends, StatedBend};
+pub use combine::{
+    combine, Combined, Conflict, Demand, DisclosedSite, Field, FieldChange, NoEffect,
+    OrderContradiction, TrackEnd,
+};
 pub use controller::{
     spec_name, Controller, ControllerPeak, Controllers, StatedController, FIRST_CHANNEL_MODE,
 };
