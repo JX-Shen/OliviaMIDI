@@ -216,6 +216,12 @@ different agent is none of those.
   not configured it fails rather than guessing; do not work around this by
   picking a soundfont.
 
+## Tests
+
+What makes a test evidence here — the boundary it drives, where its expected
+result comes from, and how a test of existing behaviour shows it can fail — is
+`docs/agents/testing.md`. Read it before adding, changing or removing a test.
+
 ## Releasing
 
 0.1.1 was tagged and published from a commit whose `AGENTS.md` told agents not
