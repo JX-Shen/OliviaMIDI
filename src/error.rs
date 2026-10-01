@@ -453,11 +453,10 @@ pub enum Error {
     SourceEvidenceMismatch { side: usize, take: PathBuf },
 
     #[error(
-        "side {side} ({take}): Edit {edit} of its Edit Set, counted from 0, changes something \
-         other than an existing note's velocity, duration or presence, and those three — \
-         `set_velocity`, `resize_note` and `delete_note` — are all combine takes up in this \
-         release. Nothing has been written. Leave that Edit out of the Alternative and apply it \
-         to the combined Take afterwards."
+        "side {side} ({take}): Edit {edit} of its Edit Set, counted from 0, is of a kind \
+         combine does not take up in this release; `mid combine --help` names the kinds it does. \
+         Nothing has been written. Leave that Edit out of the Alternative and apply it to the \
+         combined Take afterwards."
     )]
     EditOutsideCombination {
         side: usize,
