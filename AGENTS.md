@@ -304,6 +304,8 @@ release that changed anything an agent is told about.
   survive; the script itself is promoted to `docs/` or `tests/` only by a
   decision. A sourced file whose licence the crate could not carry (#35) may
   sit there too: ignored is neither tracked nor distributed.
+- **Nothing that survives cites a path under `.scratch/`.** What a record
+  names, it names by content; `docs/agents/issue-tracker.md` says how.
 
 ## Agent skills
 
