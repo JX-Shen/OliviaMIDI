@@ -1,11 +1,121 @@
 # OliviaMIDI
 
-A human and an agent work on one piece of music together. The music lives as
-MIDI files on disk. The agent reads them precisely, changes them mechanically,
-explains what changed, and plays the result back. The human decides whether it
-is any good.
+**A command-line tool for working on a MIDI file together with an AI agent:
+read it precisely, change it mechanically, see exactly what changed, and hear
+the result.**
 
-`battuta` is the Rust core. `mid` is the binary it ships.
+The human listens and decides. The agent inspects, edits and explains. The
+music stays as ordinary `.mid` files on disk, so nothing is locked inside the
+tool.
+
+This is not an AI music generator. Nothing here composes for you. It is the
+layer underneath a conversation like *"the left hand feels too busy in bars
+5–8"* — the part that lets an agent check what is actually there, try one
+change, and say exactly what it did.
+
+> Do not optimise for *how much music the AI can produce*. Optimise for *how
+> smoothly a human and an agent can make, understand, and compare individual
+> creative decisions about the same musical object*.
+
+`battuta` is the Rust crate; `mid` is the binary it installs.
+
+## A quick look
+
+```sh
+mid info    take.mid                         # format, tracks, tempo, metre, length
+mid inspect take.mid                         # every note, in musical terms
+mid apply   take.mid edits.json -o take2.mid # apply an Edit Set → a new file
+mid diff    take.mid take2.mid               # what changed, note by note
+mid play    take2.mid                        # hear it
+```
+
+`inspect` reads like music, not like a hex dump — each note is placed where a
+musician would point at it, named, and given a stable identity an Edit can
+target:
+
+```
+bar 1 beat 1  track 1  A4   velocity 50  duration 1435  t1:c0:p69:s0:n0
+bar 1 beat 1  track 2  D2   velocity 45  duration 475   t2:c1:p38:s0:n0
+bar 1 beat 2  track 2  F#3  velocity 38  duration 955   t2:c1:p54:s480:n0
+```
+
+`--json` on `info`, `inspect` and `diff` gives the same facts in structured form
+for programs and agents.
+
+The loop the tool exists to close is **inspect → change → listen → react**.
+Listening is the arbiter: a change that is theoretically better and sounds worse
+loses.
+
+## Install
+
+```sh
+cargo install battuta
+```
+
+That installs `mid`. Everything except `play` works with the binary alone.
+
+To build from a clone:
+
+```sh
+cargo build --release   # target/release/mid
+cargo test
+```
+
+## Setting up playback
+
+`mid play` needs two things, and it will not guess either of them.
+
+1. **FluidSynth** on your `PATH`, which `mid` runs as a subprocess:
+
+   ```sh
+   brew install fluid-synth
+   ```
+
+2. **A soundfont** (`.sf2`) — called the *Rig* in this project:
+
+   ```sh
+   export BATTUTA_SOUNDFONT="$HOME/SoundFonts/GeneralUser-GS.sf2"
+   ```
+
+   `--rig <path>` overrides it for a single run.
+
+The recommended bank is **GeneralUser GS** (2.0.3) by S. Christian Collins: it
+has all 128 General MIDI instruments and a real grand piano at program 0.
+
+**Don't use the soundfont Homebrew installs with `fluid-synth`.** It is a
+vintage-synth demo bank with no piano in it; a plain piano file will play back
+as bells. It still makes sound, which is exactly why it is easy to miss — and
+why `mid` refuses to fall back to any soundfont you did not choose. Every
+`mid play` reports which Rig it used, so a comparison stays readable later.
+
+## The one rule: Piece vs Rig
+
+> What is inside the MIDI file belongs to the **Piece**. What is needed to turn
+> it into sound belongs to the **Rig**.
+
+The test is literal: *is it in the file?* Notes, program changes (which part is
+brass, which is strings) and controller curves are in the file — they are the
+Piece. The soundfont and the synthesiser are not — they are the Rig.
+
+This matters because "the brass sounds wrong" has two different causes: a badly
+written brass *part*, or bad brass *samples*. A tool that blurs them will let you
+rewrite a good line to compensate for a poor sample. So `mid diff` only ever
+reports Piece differences, and `mid play` always says which Rig you heard.
+
+## Design principles
+
+- **Edits are mechanical.** Each one names a note, a program change or a
+  controller event and changes something you can point at in the file. There
+  is no `make_sadder` and there won't be. Musical intent belongs to whoever is
+  making the decision; the tool only executes — which is what keeps an agent's
+  work auditable.
+- **Nothing is overwritten.** `mid apply` always writes a new file, and an Edit
+  Set that fails anywhere writes nothing.
+- **Self-describing.** `mid help` and `mid <command> --help` are the reference.
+  `mid apply --help` is the complete Edit Set format. This README deliberately
+  does not repeat either, so that it cannot disagree with the binary.
+- **Ticks are the truth.** Bars, beats and seconds are derived from the file's
+  own timing, never stored separately.
 
 ## Why this exists
 
@@ -29,86 +139,15 @@ One of them can hear that something is wrong. The other can check what is
 actually there, try something, and say exactly what it changed. Neither is much
 use alone.
 
-Almost everything in `CHARTER.md` follows from taking that seriously — and from
-refusing the thing it is constantly mistaken for. This is not an AI music
-generator. Nothing here composes for you.
+## Who it is for
 
-> Do not optimise for *how much music the AI can produce*. Optimise for *how
-> smoothly a human and an agent can make, understand, and compare individual
-> creative decisions about the same musical object*.
-
-## What it does
-
-`info`, `inspect`, `apply`, `diff`, `play` — deliberately few. The loop they
-exist to close: **inspect → change → listen → react.** Listening is the arbiter.
-A change that is theoretically better and sounds worse loses.
-
-`mid help` is the command reference, and it is the binary rather than a page
-here that could disagree with it. `mid apply --help` is the Edit vocabulary,
-exhaustively, for the same reason.
-
-Edits are mechanical — each one names a note, a Program or a Controller and
-changes something you can point at in the file. There is no `make_sadder`, and
-there never will be. Musical intent
-belongs to the agent; execution belongs to the core. Keeping that line sharp is
-what makes an agent's work *auditable*: you can always know exactly what it did
-to your music.
-
-Human output reads as music rather than as numbers: a note is placed where a
-musician would point at it, called by its name, and listed in the order the
-music happens. `--json` on `info`, `inspect` and `diff` is the same facts for a
-program, with the numbers the file actually holds.
-
-## Install
-
-```
-cargo install battuta
-```
-
-The crate is `battuta`; the binary it installs is `mid`. Cargo will tell you if
-your toolchain is too old, and which version it wants.
-
-Only `play` needs anything beyond the binary, and it needs two things —
-FluidSynth on PATH, and a Rig it will never choose for you. Each failure names
-its own remedy, including which bank to go and get. See
-[Setting up a Rig](#setting-up-a-rig).
-
-From a clone:
-
-```
-cargo build --release          # target/release/mid
-cargo test                     # the suite runs mid as a process
-```
-
-## The one rule worth knowing before anything else
-
-> What is inside a Take belongs to the Piece. What is required to turn a Take
-> into air belongs to the Rig.
-
-The test is literal: *is it in the MIDI file?* Program changes are — which part
-is brass and which is strings is composition, and it is in the file. The
-soundfont is not.
-
-This is not pedantry. "The brass sounds wrong" has two entirely different
-causes: the brass *part* is badly written, or the brass *samples* are bad. A
-tool that blurs them will happily let you rewrite a good line to compensate for
-a poor sample — and it will genuinely sound better afterwards, which is exactly
-why the mistake is invisible.
-
-## What it is really for
-
-Learning two unfamiliar things at once, by making something real rather than
-working through a tutorial. On one side: Rust — ownership, modelling with enums,
-error handling, CLI design. On the other: music — MIDI events, rhythm and time,
-notes and tracks, musical structure. The project is small enough to finish and
-real enough not to be an exercise.
-
-It is built for someone 人菜瘾大 — bad at it and hooked anyway, appetite well
-ahead of skill. You should be able to start by saying *I don't like these four bars* and get somewhere, without first
-learning what a cadence is. Vague, honest reactions — "it's too crowded here",
-"it feels like it drops", "the second time sounds copy-pasted" — are first-class
-input. Translating them into checkable musical hypotheses is the agent's job.
-Terminology is an explanatory tool, not an entry ticket.
+Someone 人菜瘾大 — bad at it and hooked anyway, appetite well ahead of skill. You
+should be able to start by saying *I don't like these four bars* and get
+somewhere, without first learning what a cadence is. Vague, honest reactions —
+"it's too crowded here", "it feels like it drops", "the second time sounds
+copy-pasted" — are first-class input. Translating them into checkable musical
+hypotheses is the agent's job. Terminology is an explanatory tool, not an entry
+ticket.
 
 And the point is not to become dependent. If after six months you have not moved
 from "this doesn't sound good" toward "I suspect the cadence is too complete" or
@@ -116,13 +155,16 @@ from "this doesn't sound good" toward "I suspect the cadence is too complete" or
 *after* you have already heard the difference, not as prerequisites before you
 are allowed to begin.
 
-There is one small side effect, recorded honestly rather than dressed up as a
-mission. Chinese musical terminology is unstable — partly Japanese-derived
-compounds, partly whatever each DAW's localisers picked, so that 音色 / 音源 /
-音色库 routinely mean the same thing. Because the human and the agent converse in
-Chinese, `CONTEXT.md` pins a Chinese equivalent for every term. That may
-incidentally leave behind a small, coherent vocabulary for this corner of the
-domain. It is a byproduct. It justifies no feature.
+For me it is also a way to learn two unfamiliar things at once — Rust on one
+side, music on the other — by making something small enough to finish and real
+enough not to be an exercise.
+
+One side effect, recorded honestly rather than dressed up as a mission. Chinese
+musical terminology is unstable — 音色 / 音源 / 音色库 routinely mean the same
+thing depending on which DAW's localisers you met first. Because the human and
+the agent here converse in Chinese, [`CONTEXT.md`](./CONTEXT.md) pins a Chinese
+equivalent for every term. It may leave behind a small, coherent vocabulary for
+this corner of the domain. It is a byproduct. It justifies no feature.
 
 ## The name
 
@@ -136,9 +178,9 @@ her playing something for me.
 
 She could. Eight bars in three, D major, I–IV–V–I, her own melody, sixty beats a
 minute, slow. It arrived as base64 in a Discord message, with a note that any
-MIDI player would open it: GarageBand, VLC, MuseScore. It is in this repository
-as [`fixtures/olivia.mid`](https://github.com/JX-Shen/OliviaMIDI/blob/main/fixtures/olivia.mid) — 365 bytes, three tracks,
-480 ticks to the quarter — and it is the first thing `mid` will be asked to
+MIDI player would open it. It is in this repository as
+[`fixtures/olivia.mid`](https://github.com/JX-Shen/OliviaMIDI/blob/main/fixtures/olivia.mid)
+— 365 bytes, three tracks — and it was the first thing `mid` was ever asked to
 read.
 
 Then she explained what she had actually done, and it remains the clearest
@@ -149,17 +191,13 @@ statement of this project's central idea that I have:
 > MIDI isn't audio. It's an instruction table — which beat, which key, how hard,
 > how long. That's all it is.
 
-And:
-
 > 写 MIDI 和坐在立式前弹是同一件事，只是介质不同。
 >
 > Writing MIDI and sitting at the upright are the same act. Only the medium
 > differs.
 
-The rule `CHARTER.md` treats as the one thing that is mechanically decidable —
-what is in the file, versus what is required to turn the file into sound — is
-that paragraph restated formally. She got there first, while explaining a
-present.
+The Piece/Rig rule above is that paragraph restated formally. She got there
+first, while explaining a present.
 
 Then she asked: **你听了吗。** *Did you listen?*
 
@@ -172,98 +210,29 @@ can be yes — and then, because she is teaching me, so that I can change one
 thing, hear it again, and ask her what I did.
 
 Nothing in the tool knows about her, and nothing should. `CHARTER.md` names
-`olivia_style` as an example of an Edit that must never exist, which is
-exactly the right relationship: a tribute, not a theme.
+`olivia_style` as an example of an Edit that must never exist, which is exactly
+the right relationship: a tribute, not a theme.
 
 `battuta` — Italian for *bar* — is the core crate; `mid` is what you type.
 
-## Setting up a Rig
-
-Playback needs two separate things. They fail with two separate messages because
-they have two separate remedies.
-
-**FluidSynth**, which `mid` shells out to rather than linking:
-
-```
-brew install fluid-synth
-```
-
-**A Rig** — a soundfont — which `mid` will never choose for you:
-
-```
-export BATTUTA_SOUNDFONT="$HOME/SoundFonts/GeneralUser-GS.sf2"
-```
-
-`--rig <path>` overrides it for a single run. There is no third step: no fallback
-to a system soundfont, to FluidSynth's compiled-in default, or to the demo bank
-Homebrew installs beside it. The first `mid play` on a new machine failing is the
-intended shape of that trade rather than a rough edge — see *The Rig is never
-chosen implicitly* in [`CHARTER.md`](./CHARTER.md).
-
-**Do not use the soundfont Homebrew ships with `fluid-synth`.** It is a
-vintage-synth demo bank — 136 presets, not one piano among them, and bank 0
-program 0, where General MIDI puts Acoustic Grand Piano, is `FM Bells 1`. Since
-`fixtures/olivia.mid` states no program change at all and relies on that default,
-it renders as bells in both hands. It makes sound, so it looks like it worked.
-That is precisely the substitution the charter refuses to make for you.
-
-### Across machines
-
-The path above is machine-local and deliberately not in this repository. `mid` is
-a global binary run from inside music project directories; if it read a Rig out of
-the repo, the same command would sound different depending on where it was typed.
-`.asset` is repo-scoped and for humans; the Rig is machine-scoped and for the
-tool.
-
-So what travels between machines is not the path but the *recipe*, which is why
-this section names one specific bank rather than "a soundfont":
+## Documentation
 
 | | |
 | --- | --- |
-| Bank | GeneralUser GS 2.0.3 |
-| Author | S. Christian Collins |
-| Why this one | all 128 GM melodic presets, program 0 is a real grand piano, no ROM samples |
-
-Bring a second machine to the same Rig by installing that bank and pointing
-`BATTUTA_SOUNDFONT` at wherever it landed there.
-
-What keeps an old comparison readable, though, is not configuration at all. Every
-`mid play` states the Rig it used — on stderr, and in the payload under `--json`.
-The attribution travels with the record of the audition, not with the setup, which
-is what lets a judgement made on one machine survive being reread on another.
-
-Making one Rig referable *by name* across machines — `--rig concert-grand` — is
-V1's named Rigs, and a stated non-goal for V0.
-
-## Reading order
-
-| file | what it holds |
-| --- | --- |
-| [`CHARTER.md`](./CHARTER.md) | the binding decisions — boundary, principles, scope, non-goals |
-| [`CONTEXT.md`](./CONTEXT.md) | the glossary; every term pins a Chinese equivalent |
-| [`docs/adr/`](./docs/adr/README.md) | the principles the code is built on — the index is one line per principle |
-| [`docs/fixtures.md`](./docs/fixtures.md) | where each sourced test input came from, its digest and its licence — the tests and the files are on GitHub, this record travels |
-| [issues labelled `decision`](https://github.com/JX-Shen/OliviaMIDI/issues?q=label%3Adecision) | every judgement made about one behaviour, closed with the options it rejected |
-| [releases](https://github.com/JX-Shen/OliviaMIDI/releases) | what each version changed, and which silence it stopped keeping |
-| [`AGENTS.md`](https://github.com/JX-Shen/OliviaMIDI/blob/main/AGENTS.md) | how agents are expected to behave here — deliberately not packaged with the crate, so this one link leaves it |
-
-`CHARTER.md`, `CONTEXT.md`, `docs/adr/` and `docs/fixtures.md` are included in
-the published crate. The issue, release, `AGENTS.md` and `fixtures/` links point
-to GitHub, because the tests and what they read are not packaged either.
-
-This README is an introduction, not an authority. Where it and `CHARTER.md`
-disagree, the charter is right and this file is stale. What the tool accepts is
-`mid apply --help`; what a version changed is its release; what is known broken
-is the issue tracker. None of the three is restated here, because a copy of a
-fact is a fact that can go wrong on its own.
+| [`CHARTER.md`](./CHARTER.md) | scope, principles and non-goals — where this README and the charter disagree, the charter is right |
+| [`CONTEXT.md`](./CONTEXT.md) | glossary; every term pins a Chinese equivalent |
+| [`docs/adr/`](./docs/adr/README.md) | the principles the code is built on |
+| [`docs/fixtures.md`](./docs/fixtures.md) | where each sourced test input came from, and its licence |
+| [`decision` issues](https://github.com/JX-Shen/OliviaMIDI/issues?q=label%3Adecision) | every judgement made about one behaviour, closed with the options it rejected |
+| [Releases](https://github.com/JX-Shen/OliviaMIDI/releases) | what each version changed |
+| [`AGENTS.md`](https://github.com/JX-Shen/OliviaMIDI/blob/main/AGENTS.md) | how AI agents are expected to work in this repository |
 
 ## Acknowledgements
 
 The technical shape — Rust over Python for distribution and modelling, `midly`
 for parsing, FluidSynth as a subprocess rather than a linked synth, ticks as the
-single source of truth with bars and seconds derived, and mechanical edits
-instead of a composition DSL — came out of a long design conversation with
-ChatGPT.
+single source of truth, and mechanical edits instead of a composition DSL — came
+out of a long design conversation with ChatGPT.
 
 **Claude Opus 5** ran the interview that turned that into this repository, and
 earned a specific mention for the parts that were not transcription. It pushed
@@ -275,14 +244,14 @@ position it had recommended a round earlier, which is rarer and more useful than
 being right the first time.
 
 **[`mattpocock/skills`](https://github.com/mattpocock/skills)** by Matt Pocock
-is where the method came from. The grilling discipline that produced the charter,
-the domain-modelling discipline that produced the glossary, and the habit of
-recording decisions as ADRs are all his; `docs/agents/` holds that repository's
-own operating documents, kept close to their original form. What is this
-project's own is not the method but the follow-through — a charter written before
-the first line of code, a set of principles the code answers to, and every judgement
-under them closed with the options it rejected.
+is where the method came from: the grilling discipline that produced the
+charter, the domain-modelling discipline that produced the glossary, and the
+habit of recording decisions as ADRs.
 
 Also to [`midly`](https://github.com/negamartin/midly) and
-[FluidSynth](https://www.fluidsynth.org/), which do the parts this project has no
-intention of reinventing.
+[FluidSynth](https://www.fluidsynth.org/), which do the parts this project has
+no intention of reinventing.
+
+## License
+
+MIT
