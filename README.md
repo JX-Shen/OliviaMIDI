@@ -46,6 +46,29 @@ The loop the tool exists to close is **inspect → change → listen → react**
 Listening is the arbiter: a change that is theoretically better and sounds worse
 loses.
 
+## See it
+
+<a href="https://jxshen.me/essays/making-midi-diffs-readable">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/JX-Shen/OliviaMIDI/main/docs/images/diff-explorer-dark.png">
+    <img src="https://raw.githubusercontent.com/JX-Shen/OliviaMIDI/main/docs/images/diff-explorer-light.png" width="520" alt="The opening A4 of olivia.mid lowered to G4: a small piano roll keeps the original pitch as a dashed outline, and mid diff reports 'changed bar 1 beat 1 track 1 A4 transposed to G4'.">
+  </picture>
+</a>
+
+A set of essays shows `mid` at work on real files, with recorded output, the
+MIDI and audio to compare:
+
+- [**Making a MIDI diff readable as music**](https://jxshen.me/essays/making-midi-diffs-readable)
+  — change the opening note of [`olivia.mid`](https://github.com/JX-Shen/OliviaMIDI/blob/main/fixtures/olivia.mid)
+  and read what `diff` says about it (pictured).
+- [**Keeping changes from two musical experiments**](https://jxshen.me/essays/keeping-changes-from-two-experiments)
+  — four versions of a passage from Burgmüller's *L'Arabesque*, switchable
+  while you listen.
+- [**Why the instrument change didn't change the sound**](https://jxshen.me/essays/accepting-ambiguity)
+  — a Program change the file reported and the synthesiser never heard.
+- [**The eight bars I built a MIDI tool around**](https://jxshen.me/essays/the-eight-bars-behind-battuta)
+  — where this started, and the file itself.
+
 ## Install
 
 ```sh
