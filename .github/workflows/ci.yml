@@ -36,6 +36,17 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      # CHARTER.md, "The repository is the whole record, on any machine". A path
+      # that resolves on one machine only — a home directory, a temporary one —
+      # or a private host name. `$HOME` and `~` in setup instructions are not
+      # matched; they are the reader's own machine. The bracketed letters keep
+      # this file from matching itself.
+      - name: nothing tracked names a path on one machine
+        run: |
+          if git grep -n -I -E '/[U]sers/[A-Za-z]|/[h]ome/[a-z]|/[p]rivate/(tmp|var)|/[v]ar/folders/|(^|[^A-Za-z0-9_.$])/[t]mp/[A-Za-z0-9]|[A-Za-z]:\\[U]sers\\|\.[t]s\.net' -- . ':!Cargo.lock'; then
+            echo "These name something on one machine; name it by content instead (CHARTER.md)." >&2
+            exit 1
+          fi
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test

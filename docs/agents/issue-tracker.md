@@ -33,11 +33,12 @@ visible.
 - **Read an issue**: `gh issue view <number> --comments`, filtering comments by `jq` and also fetching labels.
 - **List issues**: `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` with appropriate `--label` and `--state` filters.
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
-- **Record a probe by content, never by a `.scratch/` path.** An issue
+- **Record a probe by content, never by a path on one machine.** An issue
   comment, a Decision, a commit message and a doc all outlive the working
-  tree; `.scratch/` does not, so a path under it is a reference nothing the
-  next reader can open, and an issue that leans on one has not recorded the
-  recipe. Name what the probe used by what it is — a tracked fixture, a hash,
+  tree and are read on other machines; `.scratch/`, `/tmp` and a home
+  directory do not travel, so a path under any of them is a reference nothing
+  the next reader can open, and an issue that leans on one has not recorded
+  the recipe (`CHARTER.md`, *The repository is the whole record*). Name what the probe used by what it is — a tracked fixture, a hash,
   the Edit Set written out, the commit the binary was built from — so that
   the record rebuilds the input rather than pointing at where it once sat.
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`

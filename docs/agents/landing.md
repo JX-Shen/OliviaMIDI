@@ -142,7 +142,7 @@ list in `CLAUDE.md`. Leave it.
 Run the `ci.yml` jobs locally as a **pre-filter**:
 
 ```sh
-export PATH="$HOME/.cargo/bin:$PATH"   # cargo is not on an agent shell's PATH here
+export PATH="$HOME/.cargo/bin:$PATH"   # if an agent shell does not have cargo on its PATH
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test

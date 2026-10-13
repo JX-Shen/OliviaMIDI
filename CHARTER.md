@@ -307,6 +307,26 @@ decline now. Attribution is a cost worth paying and is paid in the record;
 NonCommercial and ShareAlike are not, and material under them is left where it
 is. #35 is where the fixtures now in the tree were judged against this.
 
+**The repository is the whole record, on any machine.** This project is public
+and meant to be read by people who will never see the machine it was built on,
+so everything tracked here has to mean the same thing to them as to its author.
+Nothing tracked names something that exists on only one machine — a path under
+somebody's home or a temporary directory, a user name, a host — whether as a
+dependency, as configuration, or as the evidence for a claim. A record that
+points at a file nobody else can open has not recorded it. What a probe used is
+named by what it is — a tracked fixture, a digest, the Edit Set written out, the
+commit a binary was built from — so that the record rebuilds its input rather
+than pointing at where it once sat.
+
+What is genuinely machine-scoped is not forbidden; it is routed. The Rig is the
+standing example: it belongs to the machine, it reaches `mid` only through a
+declared interface — an environment variable or a flag — and what the repository
+keeps is the recipe, never the path. An instruction telling a reader how to set
+up *their* machine, written with `$HOME` or `~`, is of this kind and is allowed;
+a path that resolves on one machine only is not. The tree half of this is
+mechanical and `ci.yml` checks it. Issue comments and Decisions are bound by the
+same rule and checked by nobody, which is why it is written here.
+
 Prebuilt binaries, a Homebrew tap and Rigs referable by name are all downstream
 of this, and none of them is V0.
 

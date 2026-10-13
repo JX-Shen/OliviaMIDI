@@ -139,9 +139,8 @@ at HEAD or to the historical `b82c3b0`.
 | Sparse, 365 bytes | `e158107d28a3d596c2a5a146e6cd4533b9bb44a07b433f4fcb9701f8a0bdae3e` |
 | Dense, 153,701 bytes | `e40321a887fd3570458158a114eea8d6ed86c10c07a98ba2ebb0b1d7cb30b29d` |
 
-The normal run's temporary directory was
-`/var/folders/vb/lh5g8w2s06vgx9pqt5lbchhw0000gn/T/tmp.yuR2OanRDM`;
-scaling used `tmp.NoV6rxHwAY` under the same parent. In the commands below,
+The normal run and the scaling run each worked in a fresh temporary directory
+made by the script. In the commands below,
 `work` denotes the respective directory, `mid` is `$work/build/release/mid`,
 and `take` is `fixtures/olivia.mid` or `$work/dense.mid`. These paths were removed
 when each script finished.
@@ -259,10 +258,9 @@ above; those injected checks were not rerun for this observation.
 The entry commands were `docs/performance/measure.sh` followed by
 `docs/performance/measure.sh --scaling`. Build flags, generator parameters,
 measured commands, output validation and timing boundaries are exactly the
-recipes above. The normal run used
-`/var/folders/vb/lh5g8w2s06vgx9pqt5lbchhw0000gn/T/tmp.z8vXRUjUN8`;
-scaling used `tmp.sjIcOyXhl4` under that same parent. Substitute these for `work`
-in the recorded commands; both directories were removed on successful exit.
+recipes above. Each run again worked in a fresh temporary directory made by the
+script; substitute it for `work` in the recorded commands. Both directories were
+removed on successful exit.
 
 | Path | Wall (s) | Peak (MiB) |
 | --- | --- | --- |

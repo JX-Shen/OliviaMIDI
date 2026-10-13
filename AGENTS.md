@@ -241,6 +241,9 @@ that disagrees with the binary.
 - `tests/contract.rs` — that `mid apply --help` lists exactly the Edit kinds the
   binary accepts, in both directions. The list of kinds is read out of the type,
   never written down beside it.
+- the machine-local scan — that nothing tracked names a path or host on one
+  machine. A red one is a record to rewrite by content, not a pattern to
+  loosen.
 - `cargo package` — that the crate holds the files it needs. A file missing from
   the package is a fact about the commit, and finding it out while tagging is
   finding it out too late.
@@ -304,8 +307,11 @@ release that changed anything an agent is told about.
   survive; the script itself is promoted to `docs/` or `tests/` only by a
   decision. A sourced file whose licence the crate could not carry (#35) may
   sit there too: ignored is neither tracked nor distributed.
-- **Nothing that survives cites a path under `.scratch/`.** What a record
-  names, it names by content; `docs/agents/issue-tracker.md` says how.
+- **Nothing that survives names a path on one machine** — not `.scratch/`,
+  not `/tmp`, not a home directory. That is *The repository is the whole
+  record, on any machine* in `CHARTER.md`. What a record names, it names by
+  content; `docs/agents/issue-tracker.md` says how. `ci.yml` checks the tree;
+  an issue comment or a commit message is checked by nobody but its writer.
 
 ## Agent skills
 
