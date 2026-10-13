@@ -111,6 +111,34 @@ as bells. It still makes sound, which is exactly why it is easy to miss — and
 why `mid` refuses to fall back to any soundfont you did not choose. Every
 `mid play` reports which Rig it used, so a comparison stays readable later.
 
+## Using it with your agent
+
+`mid` is meant to be driven by an agent such as Claude Code or Codex, working
+in the directory where your music lives. Paste this into that project's
+`CLAUDE.md` or `AGENTS.md`:
+
+```markdown
+## MIDI work
+
+This project's music is MIDI files, worked on with `mid` (crate `battuta`).
+
+- Run `mid help` first; `mid <command> --help` is the reference for each
+  command. Run `mid apply --help` before writing any Edit Set — it is the
+  complete format. Do not guess the schema from memory or from examples.
+- Prefer `--json` on `info`, `inspect` and `diff` when reading results.
+- `mid apply` always writes a new file; keep the original for comparison.
+- After a change, show me the `mid diff` and play the passage. I decide
+  whether it sounds better.
+- If `mid play` fails because no soundfont is configured, tell me. Do not
+  pick one yourself.
+```
+
+Then start with something like *"I don't like bars 5–8 of this, the left hand
+feels too busy"* and let the agent take it from there.
+
+Tried it? [Tell us where it got stuck](https://github.com/JX-Shen/OliviaMIDI/issues/new?template=trial.md)
+— three questions, a sentence each.
+
 ## The one rule: Piece vs Rig
 
 > What is inside the MIDI file belongs to the **Piece**. What is needed to turn
