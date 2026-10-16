@@ -154,6 +154,32 @@ impl<T: Copy + Eq> Timeline<T> {
             .unwrap_or(Reading::Unstated)
     }
 
+    /// How many times what is in force changes after it is first stated.
+    ///
+    /// A restatement of what is already in force changes nothing (ADR-0007), and
+    /// neither does an indeterminate reading restated with the same candidates at
+    /// a later Tick: candidates are compared by track and value, not by where
+    /// they were written.
+    pub(crate) fn changes(&self) -> usize {
+        let same = |a: &Reading<T>, b: &Reading<T>| match (a, b) {
+            (Reading::Determinate { value: a }, Reading::Determinate { value: b }) => a == b,
+            (
+                Reading::Indeterminate { candidates: a },
+                Reading::Indeterminate { candidates: b },
+            ) => {
+                a.len() == b.len()
+                    && a.iter()
+                        .zip(b)
+                        .all(|(a, b)| a.track == b.track && a.value == b.value)
+            }
+            _ => false,
+        };
+        self.moments
+            .windows(2)
+            .filter(|pair| !same(&pair[0].1, &pair[1].1))
+            .count()
+    }
+
     pub(crate) fn unranked(&self, from: u32, until: Option<u32>) -> Vec<UnrankedSpan<T>> {
         self.moments
             .iter()

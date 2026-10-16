@@ -278,6 +278,194 @@ fn info_and_diff_agree_that_cross_track_tempos_are_indeterminate() {
     }
 }
 
+/// The tempo row of a Take that changes tempo says that it does, and how many
+/// times: a bare `120 bpm` is the form for a Take at 120 throughout — #65,
+/// ADR-0009. Built as #65's first reproduction: 3/4 at 120, then 60 at Bar 3.
+#[test]
+fn a_take_that_changes_tempo_says_so_on_the_tempo_row() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_setting(
+        &dir.path().join("tempo-changes.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[common::tempo(2880, 1_000_000)],
+        &[(4320, 1440, 60)],
+    );
+    let path = take.to_str().unwrap();
+
+    assert_eq!(
+        common::human_output(&["info", path]),
+        "\
+format          1
+tracks          2
+ppq             480
+tempo           120 bpm (500000 us per quarter), then 1 change
+time signature  3/4
+length          5760 ticks (4 bars)
+"
+    );
+
+    let info = common::info_json(&take);
+    assert_eq!(info["tempo"]["kind"], "determinate");
+    assert_eq!(info["tempo"]["value"]["micros_per_quarter"], 500_000);
+    assert_eq!(info["tempo_stated_from"], 0);
+    assert_eq!(info["tempo_changes"], 1);
+}
+
+/// A Take whose first tempo is stated part way in states none before it, and a
+/// Take stating no tempo is a different Piece from one at 60: the row says where
+/// the first statement is rather than reading 60 from the start — #65's second
+/// reproduction.
+#[test]
+fn a_tempo_first_stated_part_way_in_leaves_the_opening_unstated() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_stating_no_tempo(
+        &dir.path().join("tempo-starts-late.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[common::tempo(2880, 1_000_000)],
+        &[(4320, 1440, 60)],
+    );
+    let path = take.to_str().unwrap();
+
+    assert_eq!(
+        common::human_output(&["info", path]),
+        "\
+format          1
+tracks          2
+ppq             480
+tempo           unstated until tick 2880, then 60 bpm (1000000 us per quarter)
+time signature  3/4
+length          5760 ticks (4 bars)
+"
+    );
+
+    let info = common::info_json(&take);
+    assert_eq!(info["tempo"]["value"]["micros_per_quarter"], 1_000_000);
+    assert_eq!(info["tempo_stated_from"], 2880);
+    assert_eq!(info["tempo_changes"], 0);
+}
+
+/// A Take in 3/4 for two Bars and 4/4 after is not in 3/4: the row says the time
+/// signature changes, and the length line gives the reason there is no Bar count
+/// that is true of this Take — it states two, not none. #65's third
+/// reproduction.
+#[test]
+fn a_take_that_changes_time_signature_says_so() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("time-signature-changes.mid"),
+        480,
+        &[(0, 3, 4), (2880, 4, 4)],
+        &[(4320, 1440, 60)],
+    );
+    let path = take.to_str().unwrap();
+
+    assert_eq!(
+        common::human_output(&["info", path]),
+        "\
+format          1
+tracks          2
+ppq             480
+tempo           120 bpm (500000 us per quarter)
+time signature  3/4, then 1 change
+length          5760 ticks (bars need one time signature throughout)
+"
+    );
+
+    let info = common::info_json(&take);
+    assert_eq!(info["time_signature"]["numerator"], 3);
+    assert_eq!(info["time_signature_stated_from"], 0);
+    assert_eq!(info["time_signature_changes"], 1);
+}
+
+/// A Take whose only time signature arrives at Bar 3 of what would be 3/4 states
+/// exactly one, so "bars need one stated time signature" is false of it: the
+/// row says the opening is unstated and the length line says what is missing.
+/// #65's fourth reproduction.
+#[test]
+fn a_time_signature_first_stated_part_way_in_leaves_the_opening_unstated() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("time-signature-starts-late.mid"),
+        480,
+        &[(2880, 3, 4)],
+        &[(4320, 1440, 60)],
+    );
+    let path = take.to_str().unwrap();
+
+    assert_eq!(
+        common::human_output(&["info", path]),
+        "\
+format          1
+tracks          2
+ppq             480
+tempo           120 bpm (500000 us per quarter)
+time signature  unstated until tick 2880, then 3/4
+length          5760 ticks (bars need a time signature stated at tick 0)
+"
+    );
+
+    let info = common::info_json(&take);
+    assert_eq!(info["time_signature"]["numerator"], 3);
+    assert_eq!(info["time_signature_stated_from"], 2880);
+    assert_eq!(info["time_signature_changes"], 0);
+}
+
+/// Some exports restate the tempo and the time signature at every Bar. Saying
+/// what is already in force changes nothing (ADR-0007), so such a Take is at one
+/// tempo in one time signature and reads exactly as one that says each once —
+/// #65.
+#[test]
+fn restating_the_tempo_and_time_signature_in_force_is_not_a_change() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take_setting(
+        &dir.path().join("restated-each-bar.mid"),
+        480,
+        &[(0, 3, 4), (1440, 3, 4), (2880, 3, 4)],
+        &[common::tempo(1440, 500_000), common::tempo(2880, 500_000)],
+        &[(4320, 1440, 60)],
+    );
+    let path = take.to_str().unwrap();
+
+    assert_eq!(
+        common::human_output(&["info", path]),
+        "\
+format          1
+tracks          2
+ppq             480
+tempo           120 bpm (500000 us per quarter)
+time signature  3/4
+length          5760 ticks (4 bars)
+"
+    );
+
+    let info = common::info_json(&take);
+    assert_eq!(info["tempo_changes"], 0);
+    assert_eq!(info["time_signature_changes"], 0);
+}
+
+/// A time signature of no Beats is stated at Tick 0 and never changes, so neither
+/// reason above is true of it; the length line says only that no Bars could be
+/// derived, and where the reason is — #65.
+#[test]
+fn a_time_signature_bars_cannot_be_derived_from_is_not_called_missing() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("no-beats.mid"),
+        480,
+        &[(0, 0, 4)],
+        &[(0, 480, 60)],
+    );
+
+    let human = common::human_output(&["info", take.to_str().unwrap()]);
+    assert!(
+        human.contains("time signature  0/4\n")
+            && human.contains("(bars cannot be derived; mid inspect --bars says why)"),
+        "{human}"
+    );
+}
+
 /// The whole block, because the layout is the thing under test: which facts are
 /// reported, in what order, and lined up so the values form a column.
 #[test]

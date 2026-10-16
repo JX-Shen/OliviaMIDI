@@ -37,8 +37,18 @@ pub struct Info {
     pub ppq: u16,
     /// The reading at the earliest stated Tempo Tick, or Unstated — #42.
     pub tempo: Reading<Tempo>,
-    /// Absent when the Take never states a time signature.
+    /// The Tick `tempo` is first stated at, absent when it never is. Before it
+    /// the Take states no tempo, whatever `tempo` reads — #65.
+    pub tempo_stated_from: Option<u32>,
+    /// How many times the tempo in force changes after `tempo` — #65.
+    pub tempo_changes: usize,
+    /// The earliest stated, absent when the Take never states a time signature.
     pub time_signature: Option<TimeSignature>,
+    /// The Tick `time_signature` is stated at, absent when it never is — #65.
+    pub time_signature_stated_from: Option<u32>,
+    /// How many times a different time signature is stated after
+    /// `time_signature`; restating the one in force is not a change — #65.
+    pub time_signature_changes: usize,
     /// The largest tick any track reaches, end-of-track included.
     pub length_ticks: u32,
     /// The same length in Bars, when the Take states one time signature
@@ -325,6 +335,11 @@ impl Take {
             length_ticks = length_ticks.max(tick);
         }
 
+        let stated_tempos = self.stated_tempos()?;
+        let tempo_stated_from = stated_tempos.first().map(|first| first.tick);
+        let tempos = tempo_timeline(&stated_tempos);
+        let time_signatures = self.time_signatures()?;
+
         Ok(Info {
             format: match smf.header.format {
                 Format::SingleTrack => 0,
@@ -333,14 +348,17 @@ impl Take {
             },
             tracks: smf.tracks.len(),
             ppq,
-            tempo: {
-                let stated = self.stated_tempos()?;
-                let opening = stated.first().map_or(0, |first| first.tick);
-                tempo_timeline(&stated)
-                    .at(opening)
-                    .map(Tempo::from_micros_per_quarter)
-            },
-            time_signature: self.time_signatures()?.first().map(|&(_, ts)| ts),
+            tempo: tempos
+                .at(tempo_stated_from.unwrap_or(0))
+                .map(Tempo::from_micros_per_quarter),
+            tempo_stated_from,
+            tempo_changes: tempos.changes(),
+            time_signature: time_signatures.first().map(|&(_, ts)| ts),
+            time_signature_stated_from: time_signatures.first().map(|&(tick, _)| tick),
+            time_signature_changes: time_signatures
+                .windows(2)
+                .filter(|pair| pair[0].1 != pair[1].1)
+                .count(),
             length_ticks,
             // Every reason a Bar length cannot be derived means the same thing
             // here — no Bar count — so they collapse to `None`. `info` describes
