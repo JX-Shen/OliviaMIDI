@@ -500,6 +500,8 @@ fn the_payload_gains_two_lists_and_moves_nothing() {
         vec![
             "bends",
             "controllers",
+            // #67's count of notes sounding into the passage, added the same way.
+            "held_in",
             "notes",
             "programs",
             "stated_bends",

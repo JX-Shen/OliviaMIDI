@@ -105,6 +105,16 @@ pub fn note(lines: Option<BarLines>, note: &Note) -> Vec<String> {
     row
 }
 
+/// How many notes struck before a passage are still sounding as it begins —
+/// the ones its listing leaves out (#67).
+pub fn held_in(count: usize) -> String {
+    if count == 1 {
+        "1 note started earlier sounds into this passage, not listed".to_string()
+    } else {
+        format!("{count} notes started earlier sound into this passage, not listed")
+    }
+}
+
 /// Print rows as columns, each as wide as the widest thing in it.
 ///
 /// A row's last cell sets no width, and is never padded. That is what lets rows

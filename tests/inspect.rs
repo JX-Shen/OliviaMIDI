@@ -464,7 +464,8 @@ bar 25 beat 1  track 1  G9   velocity 64  duration 96    t1:c0:p127:s46080:n0
 }
 
 /// A passage with nothing in it says so. Silence would read as a command that
-/// had not run.
+/// had not run. What it says is that no note *starts* there, which is all #4's
+/// membership rule establishes — #67.
 #[test]
 fn says_when_a_passage_holds_no_notes() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -476,6 +477,121 @@ fn says_when_a_passage_holds_no_notes() {
     );
     assert_eq!(
         common::human_output(&["inspect", take.to_str().expect("a path"), "--bars", "2:2"]),
-        "no notes\n"
+        "no notes start in this passage\n"
     );
+}
+
+/// #67's reproduction: an A4 struck on Bar 1 Beat 1 of a 3/4 Take lasts 2880
+/// Ticks, through the whole of Bar 2, and nothing is struck in Bar 2. The
+/// passage is not silent, so it does not read as silent: no note starts in it,
+/// and one sounds into it.
+#[test]
+fn counts_a_note_sounding_through_a_passage_no_note_starts_in() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("held.mid"),
+        480,
+        &[(0, 3, 4)],
+        &[(0, 2880, 69)],
+    );
+    assert_eq!(
+        common::human_output(&["inspect", take.to_str().expect("a path"), "--bars", "2:2"]),
+        "\
+1 note started earlier sounds into this passage, not listed
+no notes start in this passage
+"
+    );
+}
+
+/// A passage that does list notes is not thereby the whole of what sounds in
+/// it. Bar 2 of this 4/4 Take starts at Tick 1920; the C4 and the G4 were
+/// struck in Bar 1 and are still sounding there, and the E4 is released at
+/// Tick 1920 exactly, so it is not.
+#[test]
+fn counts_the_notes_sounding_into_a_passage_beside_the_ones_listed() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("held.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[
+            (0, 2400, 60),
+            (480, 1440, 64),
+            (960, 1200, 67),
+            (2400, 240, 62),
+        ],
+    );
+    assert_eq!(
+        common::human_output(&["inspect", take.to_str().expect("a path"), "--bars", "2:2"]),
+        "\
+no programs stated
+
+no controllers stated
+
+2 notes started earlier sound into this passage, not listed
+bar 2 beat 2  track 1  D4  velocity 64  duration 240  t1:c0:p62:s2400:n0
+"
+    );
+}
+
+/// Where nothing sounds into the passage, nothing is added. The E4 released at
+/// Bar 2's first Tick is the edge: it has stopped sounding as the passage
+/// begins.
+#[test]
+fn says_nothing_more_when_no_note_sounds_into_a_passage() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("released.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[(480, 1440, 64), (2400, 240, 62)],
+    );
+    assert_eq!(
+        common::human_output(&["inspect", take.to_str().expect("a path"), "--bars", "2:2"]),
+        "\
+no programs stated
+
+no controllers stated
+
+bar 2 beat 2  track 1  D4  velocity 64  duration 240  t1:c0:p62:s2400:n0
+"
+    );
+}
+
+/// The count is in the payload too, on every passage — nought where nothing
+/// sounds in — and beside the keys that were already there.
+#[test]
+fn carries_the_count_of_notes_sounding_into_a_passage_in_json() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = common::build_take(
+        &dir.path().join("held.mid"),
+        480,
+        &[(0, 4, 4)],
+        &[
+            (0, 2400, 60),
+            (480, 1440, 64),
+            (960, 1200, 67),
+            (2400, 240, 62),
+        ],
+    );
+    let path = take.to_str().expect("a path");
+
+    let passage: serde_json::Value = serde_json::from_str(&common::json_output(&[
+        "inspect", path, "--bars", "2:2", "--json",
+    ]))
+    .expect("inspect --json is JSON");
+    assert_eq!(passage["held_in"], 2);
+    let ids: Vec<&str> = passage["notes"]
+        .as_array()
+        .expect("notes is an array")
+        .iter()
+        .map(|note| note["id"].as_str().expect("id is a string"))
+        .collect();
+    assert_eq!(ids, ["t1:c0:p62:s2400:n0"]);
+
+    let opening: serde_json::Value = serde_json::from_str(&common::json_output(&[
+        "inspect", path, "--bars", "1:1", "--json",
+    ]))
+    .expect("inspect --json is JSON");
+    assert_eq!(opening["held_in"], 0);
 }

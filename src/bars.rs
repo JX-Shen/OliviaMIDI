@@ -97,6 +97,26 @@ impl Take {
             .collect())
     }
 
+    /// How many notes started before a Bar range are still sounding at its
+    /// first Tick — the notes `notes_in` leaves out of the passage while they
+    /// sound in it (#67). A note released at that Tick exactly has stopped.
+    ///
+    /// Nought for the whole Take: nothing starts before Tick 0.
+    pub fn notes_held_into(&self, bars: Option<BarRange>) -> Result<usize> {
+        let Some(bars) = bars else {
+            return Ok(0);
+        };
+        let span = self.tick_span(bars)?;
+        Ok(self
+            .notes()?
+            .iter()
+            .filter(|note| {
+                note.start < span.start
+                    && u64::from(note.start) + u64::from(note.duration) > u64::from(span.start)
+            })
+            .count())
+    }
+
     /// The Ticks a Bar range covers in this Take.
     ///
     /// The one shared capability behind every `--bars`: `inspect` filters notes

@@ -8,7 +8,9 @@ use std::path::PathBuf;
 ///
 /// `--bars 5:8` narrows it to a passage: Bars are 1-indexed and the range
 /// includes both ends, so that is four Bars. A note belongs to the Bar it
-/// *starts* in, even when it sustains across the Bar line.
+/// *starts* in, even when it sustains across the Bar line. One started earlier
+/// and still sounding as the passage begins is not listed; how many there are
+/// is said above the listing, and `held_in` carries the count in `--json`.
 ///
 /// Above the notes it says which Program each channel of the passage is on — the
 /// state the passage *begins* in, including one the Take set many Bars earlier —
@@ -110,11 +112,16 @@ struct Listing {
     unranked: Vec<battuta::Unranked>,
     unranked_tempos: Vec<battuta::UnrankedSpan<battuta::Tempo>>,
     notes: Vec<battuta::Note>,
+    /// How many notes started before the passage are still sounding as it
+    /// begins, and so are not in `notes` (#67). Nought for a whole Take.
+    /// Appended, and nothing above moved.
+    held_in: usize,
 }
 
 pub fn run(args: Args) -> battuta::Result<()> {
     let take = battuta::Take::read(&args.take)?;
     let notes = take.notes_in(args.bars)?;
+    let held_in = take.notes_held_into(args.bars)?;
     let programs = take.programs_in(args.bars)?;
     let controllers = take.controllers_in(args.bars)?;
     let bends = take.bends_in(args.bars)?;
@@ -134,6 +141,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
                 unranked,
                 unranked_tempos,
                 notes,
+                held_in,
             })
         );
         return Ok(());
@@ -168,10 +176,10 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // `unstated` per channel appears where it tells one channel from another.
     //
     // A passage holding no channels at all has nothing to say nothing about, and
-    // `no notes` below is the whole of the answer.
+    // the note lines below are the whole of the answer.
     // Both blocks speak, or neither does. A passage with no channels at all has
-    // nothing to say nothing about — `no notes` below is the whole of the answer
-    // — and a Controller line there would be answering about channels the
+    // nothing to say nothing about — the note lines below are the whole of the
+    // answer — and a Controller line there would be answering about channels the
     // Program block had just declined to mention.
     let has_channels = !programs.programs.is_empty()
         || !programs.stated.is_empty()
@@ -337,8 +345,18 @@ pub fn run(args: Args) -> battuta::Result<()> {
         println!();
     }
 
+    // Above the listing, because those notes are already sounding at the
+    // passage's first Tick; and only where there are some (#67).
+    if held_in > 0 {
+        println!("{}", crate::wording::held_in(held_in));
+    }
+
     if notes.is_empty() {
-        println!("no notes");
+        if args.bars.is_some() {
+            println!("no notes start in this passage");
+        } else {
+            println!("no notes");
+        }
         return Ok(());
     }
 
