@@ -333,15 +333,12 @@ pub fn controller(lines: Option<BarLines>, held: &Controller, inside: bool) -> V
     let mut row = vec![
         channel(held.channel),
         controller_number(held.controller),
-        match &held.value {
-            battuta::Reading::Unstated => "unstated".to_string(),
-            battuta::Reading::Determinate { value } => value.to_string(),
-            battuta::Reading::Indeterminate { candidates } => format!(
-                "indeterminate ({})",
-                state_candidates(candidates, controller_value)
-            ),
-            battuta::Reading::Reset { at } => reset(lines, *at),
-        },
+        state_reading(
+            lines,
+            &held.value,
+            |value| value.to_string(),
+            controller_value,
+        ),
     ];
     let mut said = Vec::new();
     let mut clauses: Vec<(u32, String)> = Vec::new();
@@ -397,16 +394,25 @@ pub fn controller_value(value: &Option<u8>) -> String {
     }
 }
 
-/// A reset is placed in Ticks here, having no Bar lines to hand; `controller`,
-/// which is where one is read, places it in Bars.
-pub fn state_reading<T>(reading: &battuta::Reading<T>, format: impl Fn(&T) -> String) -> String {
+/// One state reading as a cell: its value, `unstated`, its candidates, or the
+/// reset that left it. `candidate` words what a candidate holds, which for a
+/// Controller is not the value's own type.
+pub fn state_reading<T, C>(
+    lines: Option<BarLines>,
+    reading: &battuta::Reading<T, C>,
+    value: impl Fn(&T) -> String,
+    candidate: impl Fn(&C) -> String,
+) -> String {
     match reading {
         battuta::Reading::Unstated => "unstated".to_string(),
-        battuta::Reading::Determinate { value } => format(value),
+        battuta::Reading::Determinate { value: held } => value(held),
         battuta::Reading::Indeterminate { candidates } => {
-            format!("indeterminate ({})", state_candidates(candidates, format))
+            format!(
+                "indeterminate ({})",
+                state_candidates(candidates, candidate)
+            )
         }
-        battuta::Reading::Reset { at } => reset(None, *at),
+        battuta::Reading::Reset { at } => reset(lines, *at),
     }
 }
 
@@ -493,14 +499,12 @@ pub fn bend(lines: Option<BarLines>, held: &battuta::Bend, inside: bool) -> Vec<
         battuta::Reading::Determinate { value } => Some(*value),
         _ => None,
     };
-    let mut cell = match &held.value {
-        battuta::Reading::Unstated => "unstated".to_string(),
-        battuta::Reading::Determinate { value } => value.to_string(),
-        battuta::Reading::Indeterminate { candidates } => {
-            format!("indeterminate ({})", bend_candidates(candidates))
-        }
-        battuta::Reading::Reset { at } => reset(lines, *at),
-    };
+    let mut cell = state_reading(
+        lines,
+        &held.value,
+        |value| value.to_string(),
+        |value| value.to_string(),
+    );
     match held.extremes {
         battuta::BendExtremes::Incomplete => {
             cell.push_str("; extremes not summarised across unranked intervals")
@@ -1015,10 +1019,11 @@ pub fn bend_rows(lines: Option<BarLines>, difference: &BendDifference) -> Vec<Ve
 }
 
 /// What one channel is on: the state a passage begins in.
-pub fn programs(state: &Program) -> Vec<String> {
+pub fn programs(lines: Option<BarLines>, state: &Program) -> Vec<String> {
+    let named = |value: &u8| program(state.channel, Some(*value));
     vec![
         channel(state.channel),
-        state_reading(&state.program, |value| program(state.channel, Some(*value))),
+        state_reading(lines, &state.program, named, named),
     ]
 }
 

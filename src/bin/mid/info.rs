@@ -48,7 +48,12 @@ pub fn run(args: Args) -> battuta::Result<()> {
         vec![
             "tempo".to_string(),
             stated_course(
-                crate::wording::state_reading(&info.tempo, crate::wording::tempo_value),
+                crate::wording::state_reading(
+                    None,
+                    &info.tempo,
+                    crate::wording::tempo_value,
+                    crate::wording::tempo_value,
+                ),
                 info.tempo_stated_from,
                 info.tempo_changes,
             ),

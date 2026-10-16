@@ -214,7 +214,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
             let rows: Vec<Vec<String>> = programs
                 .programs
                 .iter()
-                .map(crate::wording::programs)
+                .map(|state| crate::wording::programs(lines, state))
                 .collect();
             crate::wording::table(&rows);
         }
