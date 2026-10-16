@@ -50,5 +50,5 @@ pub use reading::{Candidate, Reading, UnrankedComparison, UnrankedSpan};
 pub use rig::{Audition, Rig};
 pub use take::{Info, StatedTempo, Take, Tempo, TimeSignature};
 pub use temporary::remove_temporary_takes_on_signals;
-pub use uncompared::{NotCompared, Uncompared};
+pub use uncompared::{Counted, NotCompared, Uncompared};
 pub use unranked::{Against, State, Unranked};

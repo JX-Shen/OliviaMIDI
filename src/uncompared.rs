@@ -50,16 +50,26 @@ pub enum Uncompared {
 }
 
 /// One kind of content `diff` did not compare, where the two Takes differ in
-/// it, and how much of it each holds.
+/// it, and how much of it is counted.
 ///
 /// Only that they differ, never what differs: saying what would be comparing
-/// it. The counts are of events, except for `ReleaseVelocity`, which counts the
-/// notes released with one.
+/// it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct NotCompared {
     pub kind: Uncompared,
-    pub before: usize,
-    pub after: usize,
+    #[serde(flatten)]
+    pub count: Counted,
+}
+
+/// What a `NotCompared` counts, in its own unit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum Counted {
+    /// How many events of the kind each Take holds.
+    Events { before: usize, after: usize },
+    /// How many matched notes differ in it: `ReleaseVelocity`, which is read
+    /// through the notes rather than as events.
+    Notes { notes_differing: usize },
 }
 
 /// Which kind of content `diff` does not compare an event is, or `None` where
@@ -127,15 +137,16 @@ pub(crate) fn not_compared(
     let after_events = events(&after_smf);
 
     let mut found = BTreeMap::new();
+    let events_of = |before, after| Counted::Events { before, after };
     for (&kind, mine) in &before_events {
         let theirs = after_events.get(&kind);
         if Some(mine) != theirs {
-            found.insert(kind, (count(mine), theirs.map_or(0, count)));
+            found.insert(kind, events_of(count(mine), theirs.map_or(0, count)));
         }
     }
     for (&kind, theirs) in &after_events {
         if !before_events.contains_key(&kind) {
-            found.insert(kind, (0, count(theirs)));
+            found.insert(kind, events_of(0, count(theirs)));
         }
     }
 
@@ -147,34 +158,22 @@ pub(crate) fn not_compared(
         } => Some(vel.as_int()),
         _ => None,
     };
-    let differs = before_notes
+    let notes_differing = before_notes
         .iter()
         .zip(matched_to)
         .filter_map(|(note, partner)| partner.map(|partner| (note, &after_notes[partner])))
-        .any(|(mine, theirs)| release(&before_smf, mine) != release(&after_smf, theirs));
-    if differs {
-        let released = |smf, notes: &[Note]| {
-            notes
-                .iter()
-                .filter(|note| release(smf, note).is_some())
-                .count()
-        };
+        .filter(|(mine, theirs)| release(&before_smf, mine) != release(&after_smf, theirs))
+        .count();
+    if notes_differing > 0 {
         found.insert(
             Uncompared::ReleaseVelocity,
-            (
-                released(&before_smf, before_notes),
-                released(&after_smf, after_notes),
-            ),
+            Counted::Notes { notes_differing },
         );
     }
 
     Ok(found
         .into_iter()
-        .map(|(kind, (before, after))| NotCompared {
-            kind,
-            before,
-            after,
-        })
+        .map(|(kind, count)| NotCompared { kind, count })
         .collect())
 }
 

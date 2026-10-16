@@ -113,13 +113,39 @@ fn expressive_with(dir: &Path, name: &str, change: impl FnOnce(&mut Tracks)) -> 
     path
 }
 
-/// One kind's example: what the human output calls it, how many of it each
-/// Take holds, and the change that makes the after Take.
+/// One kind's example: what the human output calls it, how much of it is
+/// counted, and the change that makes the after Take.
 struct Example {
     words: &'static str,
-    before: usize,
-    after: usize,
+    count: Count,
     change: fn(&mut Tracks),
+}
+
+/// How much of a kind is counted, in the unit the kind is counted in.
+enum Count {
+    /// How many events of it each Take holds.
+    Events(usize, usize),
+    /// How many matched notes differ in it.
+    NotesDiffering(usize),
+}
+
+impl Count {
+    fn json(&self, kind: &str) -> Value {
+        match *self {
+            Count::Events(before, after) => {
+                json!({ "kind": kind, "before": before, "after": after })
+            }
+            Count::NotesDiffering(notes) => json!({ "kind": kind, "notes_differing": notes }),
+        }
+    }
+
+    fn said(&self) -> String {
+        match *self {
+            Count::Events(before, after) => format!("before {before}, after {after}"),
+            Count::NotesDiffering(1) => "1 matched note differs".to_string(),
+            Count::NotesDiffering(notes) => format!("{notes} matched notes differ"),
+        }
+    }
 }
 
 /// The example for a kind, by the name the type gives it. `None` is a kind this
@@ -128,8 +154,7 @@ fn example(kind: &str) -> Option<Example> {
     let example = |words, before, after, change| {
         Some(Example {
             words,
-            before,
-            after,
+            count: Count::Events(before, after),
             change,
         })
     };
@@ -223,26 +248,29 @@ fn example(kind: &str) -> Option<Example> {
             )
         }),
         // Track 1's first note-off, `80 45 00` at Tick 1440, given a release
-        // velocity: `80 45 40`. Every note in the fixture is released by a
-        // note-off, so both Takes hold twelve.
-        "release_velocity" => example("release velocity", 12, 12, |tracks| {
-            let (_, kind) = tracks[1]
-                .iter_mut()
-                .find(|(tick, kind)| {
-                    *tick == 1440
-                        && matches!(
-                            kind,
-                            TrackEventKind::Midi {
-                                message: MidiMessage::NoteOff { .. },
-                                ..
-                            }
-                        )
-                })
-                .expect("track 1 releases a note at Tick 1440");
-            *kind = on_channel_0(MidiMessage::NoteOff {
-                key: u7::new(69),
-                vel: u7::new(64),
-            });
+        // velocity: `80 45 40`. One matched note now differs in it.
+        "release_velocity" => Some(Example {
+            words: "release velocity",
+            count: Count::NotesDiffering(1),
+            change: |tracks| {
+                let (_, kind) = tracks[1]
+                    .iter_mut()
+                    .find(|(tick, kind)| {
+                        *tick == 1440
+                            && matches!(
+                                kind,
+                                TrackEventKind::Midi {
+                                    message: MidiMessage::NoteOff { .. },
+                                    ..
+                                }
+                            )
+                    })
+                    .expect("track 1 releases a note at Tick 1440");
+                *kind = on_channel_0(MidiMessage::NoteOff {
+                    key: u7::new(69),
+                    vel: u7::new(64),
+                });
+            },
         }),
         // Track 3 ends a beat after its last note-off, where it ended at it:
         // two Takes of different lengths, alike in every other event.
@@ -313,8 +341,7 @@ fn every_kind_not_compared_is_named_rather_than_no_differences() {
     for kind in kinds() {
         let Example {
             words,
-            before,
-            after,
+            count,
             change,
         } = example(&kind)
             .unwrap_or_else(|| panic!("`{kind}` is not compared and has no example here"));
@@ -330,18 +357,15 @@ fn every_kind_not_compared_is_named_rather_than_no_differences() {
         }
         assert_eq!(
             diff["not_compared"],
-            json!([{ "kind": kind, "before": before, "after": after }]),
+            json!([count.json(&kind)]),
             "`{kind}` is not disclosed as it should be"
         );
 
         assert_eq!(
-            common::human_output(&[
-                "diff",
-                common::EXPRESSIVE,
-                take.to_str().expect("a path")
-            ]),
+            common::human_output(&["diff", common::EXPRESSIVE, take.to_str().expect("a path")]),
             format!(
-                "no determinate differences; not compared: {words} (before {before}, after {after})\n"
+                "no determinate differences; not compared: {words} ({})\n",
+                count.said()
             ),
             "`{kind}`"
         );

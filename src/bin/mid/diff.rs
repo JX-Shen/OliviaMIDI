@@ -13,9 +13,12 @@ use std::path::PathBuf;
 ///
 ///     no determinate differences; not compared: key signature (before 0, after 1)
 ///
-/// That line says only that the Takes differ in that kind, never how. In
+/// That line says only that the Takes differ in that kind, never how. The
+/// counts are of events, except for a release velocity, which is read through
+/// the notes `diff` matched: `release velocity (2 matched notes differ)`. In
 /// `--json` the same is `not_compared`, one entry per kind with its `kind` and
-/// the `before` and `after` counts.
+/// the `before` and `after` counts of events, or for `release_velocity`
+/// `notes_differing`.
 ///
 /// Notes are matched in two passes. First by identity — same track, channel,
 /// pitch and start Tick — and then, among whatever is left over, by nearest

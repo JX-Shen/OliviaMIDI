@@ -1105,18 +1105,24 @@ pub fn frame(before_lines: Option<BarLines>) -> String {
     .to_string()
 }
 
-/// The kinds a diff did not compare and the two Takes differ in, each with how
-/// much of it each Take holds — #62.
+/// The kinds a diff did not compare and the two Takes differ in, each with its
+/// count in its own unit — #62.
 pub fn not_compared(kinds: &[battuta::NotCompared]) -> String {
     let named = kinds
         .iter()
         .map(|entry| {
-            format!(
-                "{} (before {}, after {})",
-                uncompared(entry.kind),
-                entry.before,
-                entry.after
-            )
+            let count = match entry.count {
+                battuta::Counted::Events { before, after } => {
+                    format!("before {before}, after {after}")
+                }
+                battuta::Counted::Notes { notes_differing: 1 } => {
+                    "1 matched note differs".to_string()
+                }
+                battuta::Counted::Notes { notes_differing } => {
+                    format!("{notes_differing} matched notes differ")
+                }
+            };
+            format!("{} ({count})", uncompared(entry.kind))
         })
         .collect::<Vec<_>>()
         .join(", ");
