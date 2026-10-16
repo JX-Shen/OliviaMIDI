@@ -76,7 +76,11 @@ use std::path::PathBuf;
 ///
 /// What a row does not state is the shape: how many times a Take rose or fell
 /// between those values. For that, run `mid inspect --bars` over the span on
-/// both Takes, which lists every statement.
+/// both Takes, which lists every statement. `inspect` places a Take in its own
+/// Bar lines, so where this diff says the time signatures differ, the span's
+/// Bars are the before Take's and name other Ticks in the after Take: find the
+/// span there by its Ticks, `from` and `until` in `--json`, which `mid inspect
+/// --json` on the after Take carries as `tick` on every statement.
 ///
 /// Tempo and pitch bend are compared the same way, as what is in force rather
 /// than as the events that set it. A tempo row covers the stretch the two Takes
