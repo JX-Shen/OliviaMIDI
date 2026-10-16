@@ -475,9 +475,9 @@ fn states_the_tolerance_it_matched_with() {
 /// that was transposed *and* softened are on the one line, because it is one
 /// note.
 ///
-/// The note is named the way `inspect` names it and the way an added or removed
-/// note is described — position, track, pitch — because a row that named only a
-/// position would be true of every note of a chord. See #14.
+/// The note is named the way an added or removed note is described — position,
+/// track, channel, pitch — because a row that named only a position would be
+/// true of every note of a chord. See #14, and #66 for the channel.
 ///
 /// A pitch change reads as *transposed to*, for the reason a `start` change
 /// reads as *moved to*: the row opens with the note as it was, so naming the
@@ -501,7 +501,7 @@ fn reads_as_a_description_of_what_changed() {
     );
     assert_eq!(
         common::human_output(&["diff", FIXTURE, after.to_str().expect("a path")]),
-        "changed  bar 1 beat 1  track 1  A4  transposed to G4, velocity 50 -> 40\n"
+        "changed  bar 1 beat 1  track 1  channel 0  A4  transposed to G4, velocity 50 -> 40\n"
     );
 }
 
@@ -521,7 +521,7 @@ fn says_where_a_moved_note_went_in_bars_and_beats() {
     );
     assert_eq!(
         common::human_output(&["diff", FIXTURE, after.to_str().expect("a path")]),
-        "changed  bar 1 beat 1  track 1  A4  moved to bar 1 beat 1+60\n"
+        "changed  bar 1 beat 1  track 1  channel 0  A4  moved to bar 1 beat 1+60\n"
     );
 }
 
@@ -543,7 +543,7 @@ fn names_the_note_of_a_chord_that_changed() {
     );
     assert_eq!(
         common::human_output(&["diff", FIXTURE, after.to_str().expect("a path")]),
-        "changed  bar 7 beat 2  track 2  F#3  velocity 38 -> 60\n",
+        "changed  bar 7 beat 2  track 2  channel 1  F#3  velocity 38 -> 60\n",
         "the row does not say which note of the chord changed"
     );
 }
@@ -568,10 +568,72 @@ fn names_which_of_a_collision_changed() {
     assert_eq!(
         common::human_output(&["diff", common::STACKED, after.to_str().expect("a path")]),
         "\
-changed  bar 1 beat 1  track 1  C4 n1  moved to bar 1 beat 1+120
-changed  bar 1 beat 3  track 1  E4 n1  velocity 30 -> 99
+changed  bar 1 beat 1  track 1  channel 0  C4 n1  moved to bar 1 beat 1+120
+changed  bar 1 beat 3  track 1  channel 0  E4 n1  velocity 30 -> 99
 ",
         "the row does not say which note of the collision changed"
+    );
+}
+
+/// A note moved to another channel of its own track reads as that: the note
+/// that arrived and the note that left differ in their channel, and the rows
+/// say so.
+///
+/// `fixtures/orchestrated.mid` holds an A4 at Bar 1 on track 1, channel 0,
+/// velocity 70 for 480 Ticks. The Edit Set below takes it off channel 0 and
+/// writes the same note on channel 1, which states no Program where channel 0
+/// is on a violin — a different instrument. Without the channel the two rows
+/// were the same sentence twice. See #66.
+#[test]
+fn a_note_moved_to_another_channel_reads_as_moved_there() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let after = derived_from(
+        dir.path(),
+        common::ORCHESTRATED,
+        "rechannelled",
+        r#"{ "kind": "delete_note", "id": "t1:c0:p69:s0:n0" },
+           { "kind": "add_note", "track": 1, "channel": 1, "pitch": 69,
+             "start": 0, "duration": 480, "velocity": 70 }"#,
+    );
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            common::ORCHESTRATED,
+            after.to_str().expect("a path")
+        ]),
+        "\
+added    bar 1 beat 1  track 1  channel 1  A4  velocity 70  duration 480
+removed  bar 1 beat 1  track 1  channel 0  A4  velocity 70  duration 480
+",
+        "the rows do not say which channel the note left and arrived on"
+    );
+}
+
+/// Two A4s at one Bar on one track, one per channel: they do not collide, so no
+/// occurrence index separates them, and a `changed` row that left the channel
+/// off was true of both. The channel is what says which one got softer. See
+/// #66, and #14 for the promise that a row is never true of two notes.
+#[test]
+fn names_which_channel_a_changed_note_is_on() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let doubled = derived_from(
+        dir.path(),
+        common::ORCHESTRATED,
+        "doubled",
+        r#"{ "kind": "add_note", "track": 1, "channel": 1, "pitch": 69,
+             "start": 0, "duration": 480, "velocity": 70 }"#,
+    );
+    let doubled = doubled.to_str().expect("a path");
+    let softened = derived_from(
+        dir.path(),
+        doubled,
+        "softened",
+        r#"{ "kind": "set_velocity", "id": "t1:c1:p69:s0:n0", "velocity": 30 }"#,
+    );
+    assert_eq!(
+        common::human_output(&["diff", doubled, softened.to_str().expect("a path")]),
+        "changed  bar 1 beat 1  track 1  channel 1  A4  velocity 70 -> 30\n",
+        "the row does not say which of the two A4s changed"
     );
 }
 
@@ -592,7 +654,7 @@ fn does_not_disambiguate_a_note_nothing_collides_with() {
     );
     assert_eq!(
         common::human_output(&["diff", common::STACKED, after.to_str().expect("a path")]),
-        "changed  bar 2 beat 1  track 1  D4  velocity 80 -> 20\n"
+        "changed  bar 2 beat 1  track 1  channel 0  D4  velocity 80 -> 20\n"
     );
 }
 
@@ -614,8 +676,8 @@ fn describes_an_added_and_a_removed_note_as_notes() {
     assert_eq!(
         common::human_output(&["diff", FIXTURE, after.to_str().expect("a path")]),
         "\
-added    bar 3 beat 1  track 1  B4  velocity 60  duration 480
-removed  bar 1 beat 1  track 1  A4  velocity 50  duration 1435
+added    bar 3 beat 1  track 1  channel 0  B4  velocity 60  duration 480
+removed  bar 1 beat 1  track 1  channel 0  A4  velocity 50  duration 1435
 "
     );
 }

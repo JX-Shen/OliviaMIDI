@@ -340,11 +340,13 @@ is a television station. 声部 is already the track: a channel is not a part, a
 the two come apart in both directions — three tracks may write one channel, and
 one track may write three.
 
-A channel is not printed on a note's line, and is printed on a Program's. The
-rule behind both is one rule: say what is needed to point at the thing. Two notes
-differing only in channel do not collide, so a note is pointed at without it; a
-Program has no subject but the channel, so `program 40` on its own points at
-nothing.
+A channel is printed on a Program's line, and on a note's line unless the note's
+identity is printed beside it. The rule behind both is one rule: say what is
+needed to point at the thing. Two notes differing only in channel do not
+collide, so where the identity is on the line it points at the note and the
+channel can be left off; where it is not, a line without the channel is true of
+both notes. A Program has no subject but the channel, so `program 40` on its own
+points at nothing.
 
 **Program**:
 Which of a bank's instruments a channel is set to play, as the MIDI program

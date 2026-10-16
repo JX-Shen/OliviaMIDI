@@ -368,7 +368,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
     let rows: Vec<Vec<String>> = notes
         .iter()
         .map(|note| {
-            let mut row = crate::wording::note(lines, note);
+            let mut row = crate::wording::listed(lines, note);
             // Last, and so never padded: it is the one thing on the line meant
             // to be copied rather than read.
             row.push(note.id.to_string());

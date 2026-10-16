@@ -349,7 +349,7 @@ fn a_note_change_and_an_ordering_change_are_both_reported() {
         "rank     bar 1 beat 1  channel 0  program before its notes  before follows the rule, \
          after does not; track 1 program 40 occurrence 0 vs strike t1:c0:p69:s0:n0: \
          state before note -> state after note\n\
-         changed  bar 1 beat 1  track 1    A4                        duration 480 -> 960\n"
+         changed  bar 1 beat 1  track 1    channel 0                 A4  duration 480 -> 960\n"
     );
 }
 

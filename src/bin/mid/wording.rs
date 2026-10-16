@@ -5,12 +5,13 @@
 //! applied twice more: the fact is `battuta`'s, the sentence is `mid`'s.
 //!
 //! `names` says which note, and `note` is that plus how hard it was struck and
-//! how long it lasts. Every line `inspect` and `diff` print is built out of one
-//! or the other, so the two commands cannot drift into two vocabularies for the
-//! same thing. They surround it differently — a listing ends with the identity
-//! an Edit Set copies, a diff opens with what became of the note — and a diff
-//! row describing a change stops at `names`, because the fields it goes on to
-//! talk about are the ones `note` would have printed.
+//! how long it lasts; `listed` is `note` for a line that ends with the
+//! identity. Every note line `inspect` and `diff` print is built out of these
+//! cells, so the two commands cannot drift into two vocabularies for the same
+//! thing. They surround it differently — a listing ends with the identity an
+//! Edit Set copies, a diff opens with what became of the note — and a diff row
+//! describing a change stops at `names`, because the fields it goes on to talk
+//! about are the ones `note` would have printed.
 //!
 //! Not `render`: `CHARTER.md` reserves `mid render` for turning a Take into
 //! audio, and a module in this directory taking that name would be sitting in
@@ -53,32 +54,23 @@ pub fn pitch(pitch: u8) -> String {
     format!("{}{}{}", name.letter, accidental, name.octave)
 }
 
-/// The cells that *name* a note: where it is, whose part it is on, and what it
-/// is called. Everything a musician would say to point at one note and no other.
+/// The cells that *name* a note on a line that does not print its identity:
+/// where it is, whose part it is on, which channel, and what it is called — one
+/// note and no other. A `diff` row is such a line.
 ///
-/// These are exactly the components of the identity that have a musical
-/// rendering. Track and start Tick and pitch do; channel and occurrence index do
-/// not. Velocity and duration are not part of an identity at all, which is why
-/// they are not here — they are properties of the note a diff talks *about*,
-/// not part of pointing at it.
+/// These are the components of the identity, each in its own spelling. The
+/// channel is here although a human reading music does not use it, because two
+/// notes differing only in channel do not collide, and a row without it is
+/// true of both. See #66. Velocity and duration are not part of an identity at
+/// all, which is why they are not here — they are properties of the note a diff
+/// talks *about*, not part of pointing at it.
 ///
 /// `among` is how many notes share this one's address in the Take being
-/// described. Where it is more than one the three cells above cannot name a
-/// note, because the notes collide on every one of them, and the occurrence
-/// index is all that separates them. It has no musical name, so it is spelled
-/// the way the identity spells it: `E4 n1` is the note `inspect` lists as
+/// described. Where it is more than one the cells above cannot name a note,
+/// because the notes collide on every one of them, and the occurrence index is
+/// all that separates them. It has no musical name, so it is spelled the way
+/// the identity spells it: `E4 n1` is the note `inspect` lists as
 /// `t1:c0:p64:s960:n1`.
-///
-/// The channel is never on a note's line. It is a fact a human reading music
-/// does not use — the part is the track — and two notes differing only in
-/// channel do not collide, so nothing becomes ambiguous by leaving it out.
-///
-/// That argument is about notes and does not reach a Program, which is held by
-/// the channel and has no other subject: `program 40` without a channel is a
-/// sentence missing the thing it is about, and the track cannot stand in, since
-/// three tracks may write one channel and one track may write three. So
-/// `program` below names the channel and this does not, and the two are the same
-/// rule — say what is needed to point at the thing — rather than two.
 pub fn names(lines: Option<BarLines>, note: &Note, among: usize) -> Vec<String> {
     let mut called = pitch(note.pitch);
     if among > 1 {
@@ -87,22 +79,41 @@ pub fn names(lines: Option<BarLines>, note: &Note, among: usize) -> Vec<String> 
     vec![
         at(lines, note.start),
         format!("track {}", note.track),
+        channel(note.channel),
         called,
     ]
 }
 
 /// One note, described: what names it, then how hard it was struck and how long
-/// it lasts.
+/// it lasts. What `diff` says of a note that arrived or left.
 ///
-/// A listing never needs the disambiguator `names` can add, because `inspect`
-/// ends every line with the identity itself, and `diff` says of an added or
-/// removed note how loud and how long it is — which is what tells two notes at
-/// one address apart when they differ at all.
+/// It never needs the disambiguator `names` can add: the row says how loud and
+/// how long the note is, which is what tells two notes at one address apart
+/// when they differ at all.
 pub fn note(lines: Option<BarLines>, note: &Note) -> Vec<String> {
     let mut row = names(lines, note, 1);
-    row.push(format!("velocity {}", note.velocity));
-    row.push(format!("duration {}", note.duration));
+    row.extend(struck(note));
     row
+}
+
+/// One note as `inspect` lists it: `note` without the channel, because the
+/// listing ends every line with the identity, which carries it and points at
+/// the note on its own.
+pub fn listed(lines: Option<BarLines>, note: &Note) -> Vec<String> {
+    let mut row = vec![
+        at(lines, note.start),
+        format!("track {}", note.track),
+        pitch(note.pitch),
+    ];
+    row.extend(struck(note));
+    row
+}
+
+fn struck(note: &Note) -> [String; 2] {
+    [
+        format!("velocity {}", note.velocity),
+        format!("duration {}", note.duration),
+    ]
 }
 
 /// How many notes struck before a passage are still sounding as it begins —
