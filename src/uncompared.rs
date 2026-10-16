@@ -1,9 +1,5 @@
-//! What `diff` does not compare, and whether two Takes differ in it — #62.
-//!
-//! Everything in the file is the Piece, and `diff` compares some of it: notes,
-//! Programs, Controllers, Tempo, Bend and the Rank of causal pairs. The rest is
-//! not compared yet, and a diff that found nothing among what it compared is
-//! not entitled to say *no differences* while the rest differs (ADR-0009).
+//! What `diff` does not compare, and whether two Takes differ in it — #62,
+//! under ADR-0009.
 //!
 //! `uncompared` is the one place that says, for every event the format can
 //! hold, whether `diff` compares it. Its match names every variant and has no
@@ -50,10 +46,7 @@ pub enum Uncompared {
 }
 
 /// One kind of content `diff` did not compare, where the two Takes differ in
-/// it, and how much of it is counted.
-///
-/// Only that they differ, never what differs: saying what would be comparing
-/// it.
+/// it, and how much of it is counted. Never what differs — #62.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct NotCompared {
     pub kind: Uncompared,
@@ -180,11 +173,9 @@ pub(crate) fn not_compared(
 /// How many of each event, by track and Tick, of each kind not compared.
 type Events<'a> = HashMap<(usize, u32, TrackEventKind<'a>), usize>;
 
-///
-/// An end of track counts only where it falls after the last event before it.
-/// One at that event's own Tick says nothing the event does not: a note moved
-/// later takes the end of its track with it, and that is a note that moved, not
-/// a track that lasts longer.
+/// Every event of a kind `diff` does not compare, counted by track, Tick and
+/// content. An end of track counts only where it falls after the event before
+/// it — #62.
 fn events<'a>(smf: &midly::Smf<'a>) -> HashMap<Uncompared, Events<'a>> {
     let mut found: HashMap<Uncompared, Events<'a>> = HashMap::new();
     for (track, events) in smf.tracks.iter().enumerate() {

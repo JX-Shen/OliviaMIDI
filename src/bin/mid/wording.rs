@@ -74,10 +74,8 @@ pub fn track(number: usize, names: &[String]) -> String {
 /// where it is, whose part it is on, which channel, and what it is called — one
 /// note and no other. A `diff` row is such a line.
 ///
-/// These are the components of the identity, each in its own spelling. The
-/// channel is here although a human reading music does not use it, because two
-/// notes differing only in channel do not collide, and a row without it is
-/// true of both. See #66. Velocity and duration are not part of an identity at
+/// These are the components of the identity, each in its own spelling, the
+/// channel included (#66). Velocity and duration are not part of an identity at
 /// all, which is why they are not here — they are properties of the note a diff
 /// talks *about*, not part of pointing at it.
 ///

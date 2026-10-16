@@ -129,13 +129,8 @@ impl std::fmt::Display for TimeSignature {
 }
 
 /// The names a track states: the text of every track name meta event in it, in
-/// written order — none, one, or several. See #61.
-///
-/// Every one of them, because a track stating two names and shown with one
-/// would read as stating one (ADR-0009). Handed over as the file has them and
-/// never trimmed or improved. Bytes that are not UTF-8 arrive as U+FFFD, which
-/// is the sign that something could not be read rather than a guess at what it
-/// was.
+/// written order — none, one, or several — as the file has them. Bytes that are
+/// not UTF-8 arrive as U+FFFD. See #61.
 pub(crate) fn track_names(events: &[midly::TrackEvent]) -> Vec<String> {
     events
         .iter()

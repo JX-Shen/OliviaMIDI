@@ -1,11 +1,6 @@
 //! The name a track states, beside the number `inspect` and `diff` print for it
-//! — #61.
-//!
-//! A track name meta event is in the file, so it is the Piece, and until this
-//! nothing `mid` printed showed one: an orchestral diff read as a column of
-//! track numbers. Every name a track states is quoted as the file states it,
-//! in written order, and attached to the track only. A channel may be written from several tracks, so a row keyed by
-//! the channel carries no track's name (ADR-0009).
+//! — #61: every name, quoted as the file states it, in written order, and on a
+//! track's row only, never on a channel's.
 //!
 //! Every expected name here is read from the Take with `midly` or written into
 //! a Take built for the test, never asked of `battuta`.
