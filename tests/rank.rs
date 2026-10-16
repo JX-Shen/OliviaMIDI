@@ -378,6 +378,9 @@ fn the_two_new_payload_fields_are_additive() {
         keys,
         vec![
             "added",
+            // #64's, which says whether the after Take's Bar lines differ from
+            // the before Take's, which every position is read against.
+            "bar_lines_differ",
             // #32's two, which joined the inventory the same way and are
             // asserted here for the same reason: this list is the whole of the
             // payload, so a field added anywhere has to be added here too.
@@ -386,8 +389,6 @@ fn the_two_new_payload_fields_are_additive() {
             "controllers",
             // #62's, which says what was not compared rather than what differs.
             "not_compared",
-            // #64's, which says whose Bar lines a position is read against.
-            "positions",
             "programs",
             "rank_disagreements",
             "removed",

@@ -145,8 +145,9 @@ use std::path::PathBuf;
 ///     time signatures differ; every position is in the before Take's Bar lines
 ///
 /// It does not say how they differ. In `--json`, whose Ticks are never read as
-/// positions, the same is `positions`: `bar_lines` is always `before`, and
-/// `bar_lines_differ` says whether the two Takes' Bar lines differ.
+/// positions, the same is `bar_lines_differ`, true where the two Takes' Bar
+/// lines differ; a position read from those Ticks is read, as here, against the
+/// before Take's.
 ///
 /// Every name a track states is quoted beside the track's number, in written
 /// order, as the Take the row is about states them — the after Take for an
@@ -201,16 +202,11 @@ pub fn run(args: Args) -> battuta::Result<()> {
         return Ok(());
     }
 
-    // Every position on both sides is read against one Take's Bar lines, which
-    // the library names, and where the other Take's differ that is said once,
-    // before any row it frames: #64.
-    let lines = match diff.positions.bar_lines {
-        battuta::BarLinesOf::Before => before.bar_lines(),
-    };
-    let frame = diff
-        .positions
-        .bar_lines_differ
-        .then(|| crate::wording::frame(lines));
+    // Every position on both sides is read against the before Take's Bar
+    // lines, and where the after Take's differ that is said once, before any
+    // row it frames: #64.
+    let lines = before.bar_lines();
+    let frame = diff.bar_lines_differ.then(|| crate::wording::frame(lines));
 
     // The kinds this diff did not compare and the two Takes differ in, which
     // follow whatever else is printed: #62.

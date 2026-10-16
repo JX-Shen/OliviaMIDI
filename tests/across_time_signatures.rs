@@ -250,10 +250,10 @@ fn diff_json(before: &Path, after: &Path) -> Value {
     serde_json::from_str(&out).expect("diff --json is JSON")
 }
 
-/// `--json` names the frame and says whether the Bar lines differ. Its Ticks
-/// are the Ticks the files hold, as before.
+/// `--json` says whether the Bar lines differ. Its Ticks are the Ticks the
+/// files hold, as before.
 #[test]
-fn json_names_the_frame_and_keeps_its_ticks() {
+fn json_says_whether_bar_lines_differ_and_keeps_its_ticks() {
     let dir = tempfile::tempdir().expect("temp dir");
     let across = expressive_with(dir.path(), "four-four-moved", |tracks| {
         in_four_four(tracks);
@@ -263,17 +263,11 @@ fn json_names_the_frame_and_keeps_its_ticks() {
     let before = Path::new(EXPRESSIVE);
 
     let diff = diff_json(before, &across);
-    assert_eq!(
-        diff["positions"],
-        json!({ "bar_lines": "before", "bar_lines_differ": true })
-    );
+    assert_eq!(diff["bar_lines_differ"], json!(true));
     assert_eq!(diff["changed"][0]["before"]["start"], json!(1440));
     assert_eq!(diff["changed"][0]["after"]["start"], json!(1920));
 
-    assert_eq!(
-        diff_json(before, &within)["positions"],
-        json!({ "bar_lines": "before", "bar_lines_differ": false })
-    );
+    assert_eq!(diff_json(before, &within)["bar_lines_differ"], json!(false));
 }
 
 /// A before Take that states no time signature has no Bar lines, so the frame
