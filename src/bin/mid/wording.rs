@@ -365,14 +365,9 @@ pub fn controller(lines: Option<BarLines>, held: &Controller, inside: bool) -> V
         }
         _ => {}
     }
-    // A row with no reset keeps #58's `peak …, lowest …`; one with a reset
-    // states every clause in time order (#69).
-    if held.resets.is_empty() {
-        said.extend(clauses.into_iter().map(|(_, clause)| clause));
-    } else {
-        clauses.extend(held.resets.iter().map(|&tick| (tick, reset(lines, tick))));
-        said.extend(in_time_order(clauses));
-    }
+    // Every clause, extreme or reset, in time order — #69.
+    clauses.extend(held.resets.iter().map(|&tick| (tick, reset(lines, tick))));
+    said.extend(in_time_order(clauses));
     if !said.is_empty() {
         row.push(said.join(", "));
     }

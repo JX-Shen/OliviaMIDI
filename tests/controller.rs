@@ -118,7 +118,7 @@ fn lists_every_place_the_passage_states_a_controller() {
         "\
 no programs stated
 
-channel 0  CC11 (expression controller)  40  peak 100 at bar 2 beat 3+360, lowest 40 at bar 2 beat 1
+channel 0  CC11 (expression controller)  40  lowest 40 at bar 2 beat 1, peak 100 at bar 2 beat 3+360
 
 bar 2 beat 2+240  track 1  channel 0  CC11 (expression controller)  70
 bar 2 beat 3+360  track 1  channel 0  CC11 (expression controller)  100
@@ -163,7 +163,7 @@ fn states_where_the_passages_highest_value_falls() {
         "\
 no programs stated
 
-channel 0  CC11 (expression controller)  40  peak 100 at bar 2 beat 3, lowest 40 at bar 2 beat 1
+channel 0  CC11 (expression controller)  40  lowest 40 at bar 2 beat 1, peak 100 at bar 2 beat 3
 
 bar 2 beat 1+240  track 1  channel 0  CC11 (expression controller)  76
 bar 2 beat 2      track 1  channel 0  CC11 (expression controller)  80

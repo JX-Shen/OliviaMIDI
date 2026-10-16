@@ -28,8 +28,8 @@ use std::path::PathBuf;
 /// centre is not a channel never bent, as a Controller holding 0 is not one
 /// holding nothing. Where the passage states a Controller itself, the row says
 /// the highest and the lowest value it holds there and where each is first
-/// reached; how it moved between them is the events listed under it, which the
-/// row does not summarise. Where the passage bends a channel itself, the row
+/// reached, in the order they are reached; how it moved between them is the
+/// events listed under it, which the row does not summarise. Where the passage bends a channel itself, the row
 /// says how far it goes each way and where: a bend is signed about a centre,
 /// so a phrase that dips and returns never rises above where it began, and one
 /// extreme would be blind to the dive. The number is MIDI's own signed reading
