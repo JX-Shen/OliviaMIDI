@@ -257,7 +257,7 @@ fn resolve(
                     && i64::from(event.stated.controller) == controller
                     && i64::from(event.stated.tick) == tick
             })
-            .map(|event| Landing::NamedController(change, *event))
+            .map(|event| Landing::NamedController(change, event.clone()))
             .ok_or(Error::UnknownController {
                 track,
                 channel,

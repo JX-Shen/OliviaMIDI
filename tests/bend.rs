@@ -85,8 +85,8 @@ fn a_bend_conflict_is_inherited_until_a_determinate_overwrite() {
     assert_eq!(
         middle["bends"][0]["value"]["candidates"],
         serde_json::json!([
-            {"track": 1, "tick": 480, "value": -4000},
-            {"track": 2, "tick": 480, "value": 2000}
+            {"track": 1, "track_names": [], "tick": 480, "value": -4000},
+            {"track": 2, "track_names": [], "tick": 480, "value": 2000}
         ])
     );
     assert_eq!(middle["bends"][0]["extremes"]["kind"], "incomplete");
@@ -514,7 +514,7 @@ fn the_payload_gains_two_lists_and_moves_nothing() {
     assert_eq!(
         payload["stated_bends"],
         serde_json::json!([{
-            "track": 1,
+            "track": 1, "track_names": [],
             "channel": 0,
             "tick": 2400,
             "value": 3000,

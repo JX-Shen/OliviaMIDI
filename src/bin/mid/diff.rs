@@ -121,6 +121,17 @@ use std::path::PathBuf;
 /// positions, the same is `positions`: `bar_lines` is always `before`, and
 /// `bar_lines_differ` says whether the two Takes' Bar lines differ.
 ///
+/// Every name a track states is quoted beside the track's number, in written
+/// order, as the Take the row is about states them — the after Take for an
+/// added note or an `after` row, the before Take otherwise, and both where a
+/// rank row's statement is on a track the two Takes name differently. A row
+/// about a channel carries none. In JSON every object with a `track` carries
+/// `track_names`, and `against_track` `against_track_names`. A ranked statement
+/// and an unranked state site, each one object for both Takes, carry
+/// `before_track_names` and `after_track_names` instead (and the site
+/// `before_against_track_names` and `after_against_track_names`). Each is a
+/// list in written order, empty where the track states none.
+///
 /// The two Takes must count the same number of Ticks to the quarter note. Ticks
 /// are the truth here and are never converted, so Takes at two denominations
 /// are refused rather than compared as if a Tick meant the same thing in each.
@@ -332,11 +343,15 @@ fn unranked_state_rows(lines: Option<battuta::BarLines>, diff: &battuta::Diff) -
         }
     }
     for site in &diff.unranked_state_sites {
-        for (name, present) in [("before", site.in_before), ("after", site.in_after)] {
+        // Each side's row names the tracks as that Take names them (#61).
+        for (name, present, read) in [
+            ("before", site.in_before, site.site.as_before()),
+            ("after", site.in_after, site.site.as_after()),
+        ] {
             if present {
                 rows.push(vec![
                     name.to_string(),
-                    crate::wording::unranked(lines, &site.site),
+                    crate::wording::unranked(lines, &read),
                 ]);
             }
         }

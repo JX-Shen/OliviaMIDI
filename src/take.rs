@@ -87,9 +87,12 @@ impl Tempo {
 /// cross-track final values rather than choosing one — #42.
 ///
 /// Not `TempoChange`, for the reason `StatedController` is not `ControlChange`.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct StatedTempo {
     pub track: usize,
+    /// The names that track states, in written order; empty where it states
+    /// none. See #61.
+    pub track_names: Vec<String>,
     pub tick: u32,
     pub tempo: Tempo,
 }
@@ -106,9 +109,43 @@ impl std::fmt::Display for TimeSignature {
     }
 }
 
+/// The names a track states: the text of every track name meta event in it, in
+/// written order — none, one, or several. See #61.
+///
+/// Every one of them, because a track stating two names and shown with one
+/// would read as stating one (ADR-0009). Handed over as the file has them and
+/// never trimmed or improved. Bytes that are not UTF-8 arrive as U+FFFD, which
+/// is the sign that something could not be read rather than a guess at what it
+/// was.
+pub(crate) fn track_names(events: &[midly::TrackEvent]) -> Vec<String> {
+    events
+        .iter()
+        .filter_map(|event| match event.kind {
+            TrackEventKind::Meta(MetaMessage::TrackName(name)) => {
+                Some(String::from_utf8_lossy(name).into_owned())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+impl Take {
+    /// The names one track of this Take states — `track_names` of it, and
+    /// empty for a track the Take does not have.
+    pub(crate) fn names_of(&self, track: usize) -> Result<Vec<String>> {
+        Ok(self
+            .smf()?
+            .tracks
+            .get(track)
+            .map(|events| track_names(events))
+            .unwrap_or_default())
+    }
+}
+
 pub(crate) fn tempo_timeline(stated: &[StatedTempo]) -> Timeline<u32> {
     Timeline::read(stated.iter().map(|statement| Candidate {
         track: statement.track,
+        track_names: statement.track_names.clone(),
         tick: statement.tick,
         value: statement.tempo.micros_per_quarter,
     }))
@@ -285,12 +322,14 @@ impl Take {
         let mut found = Vec::new();
 
         for (track, events) in smf.tracks.iter().enumerate() {
+            let name = track_names(events);
             let mut tick = 0u32;
             for event in events {
                 tick += event.delta.as_int();
                 if let TrackEventKind::Meta(MetaMessage::Tempo(micros)) = event.kind {
                     found.push(StatedTempo {
                         track,
+                        track_names: name.clone(),
                         tick,
                         tempo: Tempo::from_micros_per_quarter(micros.as_int()),
                     });
@@ -517,6 +556,7 @@ impl Take {
         // of where a note starts, not of which of two collided notes ended first.
         pairs.sort_by_key(|p| (p.track, p.on_event));
 
+        let names: Vec<Vec<String>> = smf.tracks.iter().map(|track| track_names(track)).collect();
         let mut occurrences: HashMap<(usize, u8, u8, u32), u32> = HashMap::new();
         Ok(pairs
             .into_iter()
@@ -528,6 +568,7 @@ impl Take {
                     id: NoteId::new(p.track, p.channel, p.pitch, p.start, *occurrence),
                     occurrence: *occurrence,
                     track: p.track,
+                    track_names: names[p.track].clone(),
                     channel: p.channel,
                     pitch: p.pitch,
                     start: p.start,

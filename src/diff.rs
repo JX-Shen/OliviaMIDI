@@ -128,9 +128,57 @@ pub struct UnrankedController {
 /// A Channel-state/strike site present in either Take; not a value interval.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UnrankedStateSite {
-    pub site: crate::Unranked,
+    pub site: UnrankedAcross,
     pub in_before: bool,
     pub in_after: bool,
+}
+
+/// An unranked site as two Takes read it: `Unranked`'s fields, with each
+/// track's names as each Take states them.
+///
+/// One site, however the two Takes name its tracks. It is the same site by its
+/// tracks' numbers, as a ranked statement is, and each Take names those tracks
+/// for itself — so the names come in pairs of lists, as a `RankedStatement`'s
+/// do, rather than splitting the site in two. See #61.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UnrankedAcross {
+    pub tick: u32,
+    pub channel: Option<u8>,
+    pub controller: Option<u8>,
+    pub track: usize,
+    pub before_track_names: Vec<String>,
+    pub after_track_names: Vec<String>,
+    pub against_track: usize,
+    pub before_against_track_names: Vec<String>,
+    pub after_against_track_names: Vec<String>,
+    pub against: crate::Against,
+    pub state: crate::State,
+}
+
+impl UnrankedAcross {
+    /// The site as the before Take reads it.
+    pub fn as_before(&self) -> crate::Unranked {
+        self.as_named(&self.before_track_names, &self.before_against_track_names)
+    }
+
+    /// The site as the after Take reads it.
+    pub fn as_after(&self) -> crate::Unranked {
+        self.as_named(&self.after_track_names, &self.after_against_track_names)
+    }
+
+    fn as_named(&self, track_names: &[String], against_track_names: &[String]) -> crate::Unranked {
+        crate::Unranked {
+            tick: self.tick,
+            channel: self.channel,
+            controller: self.controller,
+            track: self.track,
+            track_names: track_names.to_vec(),
+            against_track: self.against_track,
+            against_track_names: against_track_names.to_vec(),
+            against: self.against,
+            state: self.state,
+        }
+    }
 }
 
 /// One stretch of the Piece and what tempo each Take is at across it.
@@ -822,8 +870,12 @@ fn state_sites(
                             tick,
                             channel: Some(channel),
                             controller,
+                            // Named below, once both Takes are read: a site
+                            // is matched across them by its tracks' numbers.
                             track: source_track,
+                            track_names: Vec::new(),
                             against_track: track,
+                            against_track_names: Vec::new(),
                             against: crate::Against::Notes,
                             state,
                         });
@@ -844,10 +896,10 @@ fn state_sites(
         found.dedup();
         Ok(found)
     };
-    let before = sites(before, before_notes)?;
-    let after = sites(after, after_notes)?;
-    let mut union = before.clone();
-    for site in &after {
+    let before_sites = sites(before, before_notes)?;
+    let after_sites = sites(after, after_notes)?;
+    let mut union = before_sites.clone();
+    for site in &after_sites {
         if !union.contains(site) {
             union.push(site.clone());
         }
@@ -862,14 +914,28 @@ fn state_sites(
             site.against_track,
         )
     });
-    Ok(union
+    union
         .into_iter()
-        .map(|site| UnrankedStateSite {
-            in_before: before.contains(&site),
-            in_after: after.contains(&site),
-            site,
+        .map(|site| {
+            Ok(UnrankedStateSite {
+                in_before: before_sites.contains(&site),
+                in_after: after_sites.contains(&site),
+                site: UnrankedAcross {
+                    tick: site.tick,
+                    channel: site.channel,
+                    controller: site.controller,
+                    track: site.track,
+                    before_track_names: before.names_of(site.track)?,
+                    after_track_names: after.names_of(site.track)?,
+                    against_track: site.against_track,
+                    before_against_track_names: before.names_of(site.against_track)?,
+                    after_against_track_names: after.names_of(site.against_track)?,
+                    against: site.against,
+                    state: site.state,
+                },
+            })
         })
-        .collect())
+        .collect()
 }
 
 /// A bend back from the scalar it was compared as. `stated_bends` is where the

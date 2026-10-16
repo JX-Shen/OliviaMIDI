@@ -38,8 +38,8 @@ pub use controller::{
 };
 pub use diff::{
     BarLinesOf, BendDifference, BendSide, Change, ControllerDifference, ControllerSide, Diff,
-    NoteChange, Positions, ProgramDifference, TempoDifference, TempoSide, UnrankedBend,
-    UnrankedController, UnrankedProgram, UnrankedStateSite,
+    NoteChange, Positions, ProgramDifference, TempoDifference, TempoSide, UnrankedAcross,
+    UnrankedBend, UnrankedController, UnrankedProgram, UnrankedStateSite,
 };
 pub use edit::{apply, apply_allowing, Edit, EditSet, Site};
 pub use error::{Error, Result};

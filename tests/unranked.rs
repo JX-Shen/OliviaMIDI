@@ -436,8 +436,8 @@ fn the_payload_carries_it_without_moving_anything_else() {
             "tick": 0,
             "channel": 0,
             "controller": null,
-            "track": 2,
-            "against_track": 1,
+            "track": 2, "track_names": [],
+            "against_track": 1, "against_track_names": [],
             "against": "notes",
             "state": "program"
         }])
@@ -589,8 +589,8 @@ fn a_bend_stated_where_another_track_strikes_that_channel_is_unranked() {
             "tick": 0,
             "channel": 0,
             "controller": null,
-            "track": 2,
-            "against_track": 1,
+            "track": 2, "track_names": [],
+            "against_track": 1, "against_track_names": [],
             "against": "notes",
             "state": "bend"
         }])
@@ -650,16 +650,16 @@ fn two_tracks_stating_a_tempo_at_one_tick_are_unranked_with_no_channel() {
             "tick": 0,
             "channel": null,
             "controller": null,
-            "track": 0,
-            "against_track": 2,
+            "track": 0, "track_names": [],
+            "against_track": 2, "against_track_names": [],
             "against": "value",
             "state": "tempo"
         }, {
             "tick": 0,
             "channel": null,
             "controller": null,
-            "track": 2,
-            "against_track": 0,
+            "track": 2, "track_names": [],
+            "against_track": 0, "against_track_names": [],
             "against": "value",
             "state": "tempo"
         }])

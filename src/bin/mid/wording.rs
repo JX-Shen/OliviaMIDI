@@ -54,6 +54,22 @@ pub fn pitch(pitch: u8) -> String {
     format!("{}{}{}", name.letter, accidental, name.octave)
 }
 
+/// Which track, and every name it states: `track 3`, `track 3 "viola"`, or
+/// `track 3 "Violin" "Vln I"` for a track stating two, in written order.
+///
+/// Quoted as the file has it, never trimmed or improved — an empty name prints
+/// as `""` and a `control track` as itself. The quotation is Rust's, so a quote
+/// mark or a control character inside a name is escaped rather than allowed to
+/// end the quotation or break the row. Only ever beside a track's number, never
+/// on a channel's row. See #61.
+pub fn track(number: usize, names: &[String]) -> String {
+    let mut said = format!("track {number}");
+    for name in names {
+        said.push_str(&format!(" {name:?}"));
+    }
+    said
+}
+
 /// The cells that *name* a note on a line that does not print its identity:
 /// where it is, whose part it is on, which channel, and what it is called — one
 /// note and no other. A `diff` row is such a line.
@@ -78,7 +94,7 @@ pub fn names(lines: Option<BarLines>, note: &Note, among: usize) -> Vec<String> 
     }
     vec![
         at(lines, note.start),
-        format!("track {}", note.track),
+        track(note.track, &note.track_names),
         channel(note.channel),
         called,
     ]
@@ -102,7 +118,7 @@ pub fn note(lines: Option<BarLines>, note: &Note) -> Vec<String> {
 pub fn listed(lines: Option<BarLines>, note: &Note) -> Vec<String> {
     let mut row = vec![
         at(lines, note.start),
-        format!("track {}", note.track),
+        track(note.track, &note.track_names),
         pitch(note.pitch),
     ];
     row.extend(struck(note));
@@ -210,9 +226,29 @@ pub fn rank_difference(difference: &battuta::RankDisagreement) -> String {
         } else {
             format!("{} -> {}", relation.before_note, relation.after_note)
         };
+        // One track, named by each Take for itself; both names where they
+        // differ, for the reason the note is given twice.
+        let statement = &relation.statement;
+        let named = if statement.before_track_names == statement.after_track_names {
+            track(statement.track, &statement.before_track_names)
+        } else {
+            let names = |names: &[String]| match names {
+                [] => "unnamed".to_string(),
+                names => names
+                    .iter()
+                    .map(|name| format!("{name:?}"))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            };
+            format!(
+                "track {} {} -> {}",
+                statement.track,
+                names(&statement.before_track_names),
+                names(&statement.after_track_names)
+            )
+        };
         text.push_str(&format!(
-            "; track {} {state} {} occurrence {} vs {event} {note}: {} -> {}",
-            relation.statement.track,
+            "; {named} {state} {} occurrence {} vs {event} {note}: {} -> {}",
             relation.statement.value,
             relation.statement.occurrence,
             direction(relation.before_state_first),
@@ -335,9 +371,9 @@ pub fn state_candidates<T>(
         .iter()
         .map(|candidate| {
             format!(
-                "{} from track {} at tick {}",
+                "{} from {} at tick {}",
                 format(&candidate.value),
-                candidate.track,
+                track(candidate.track, &candidate.track_names),
                 candidate.tick
             )
         })
@@ -481,7 +517,7 @@ pub fn unranked_bend(
 pub fn stated_bend(lines: Option<BarLines>, stated: &battuta::StatedBend) -> Vec<String> {
     vec![
         at(lines, stated.tick),
-        format!("track {}", stated.track),
+        track(stated.track, &stated.track_names),
         channel(stated.channel),
         "bend".to_string(),
         stated.value.to_string(),
@@ -563,7 +599,7 @@ fn trimmed(name: &str) -> String {
 pub fn stated_controller(lines: Option<BarLines>, stated: &StatedController) -> Vec<String> {
     vec![
         at(lines, stated.tick),
-        format!("track {}", stated.track),
+        track(stated.track, &stated.track_names),
         channel(stated.channel),
         controller_number(stated.controller),
         stated.value.to_string(),
@@ -921,7 +957,7 @@ pub fn programs(state: &Program) -> Vec<String> {
 pub fn stated_program(lines: Option<BarLines>, stated: &StatedProgram) -> Vec<String> {
     vec![
         at(lines, stated.tick),
-        format!("track {}", stated.track),
+        track(stated.track, &stated.track_names),
         channel(stated.channel),
         program(stated.channel, Some(stated.program)),
     ]
@@ -949,20 +985,20 @@ pub fn unranked(lines: Option<BarLines>, row: &battuta::Unranked) -> String {
         (battuta::State::Bend, _) => "the bend".to_string(),
         (battuta::State::Tempo, _) => "the tempo".to_string(),
     };
+    let against_track = track(row.against_track, &row.against_track_names);
     let against = match row.against {
-        battuta::Against::Notes => format!("notes of that channel on track {}", row.against_track),
-        battuta::Against::Value => {
-            format!("a different value for it on track {}", row.against_track)
-        }
+        battuta::Against::Notes => format!("notes of that channel on {against_track}"),
+        battuta::Against::Value => format!("a different value for it on {against_track}"),
     };
+    let on = track(row.track, &row.track_names);
     match row.channel {
         Some(channel) => format!(
-            "{}  {} for channel {} on track {} has no order the file states against {}  \
+            "{}  {} for channel {} on {} has no order the file states against {}  \
              (t{}:c{}:s{})",
             at(lines, row.tick),
             state,
             channel,
-            row.track,
+            on,
             against,
             row.track,
             channel,
@@ -974,10 +1010,10 @@ pub fn unranked(lines: Option<BarLines>, row: &battuta::Unranked) -> String {
         // offering an argument the flag would refuse would be advertising a
         // grammar that does not exist. See #42.
         None => format!(
-            "{}  {} on track {} has no order the file states against {}",
+            "{}  {} on {} has no order the file states against {}",
             at(lines, row.tick),
             state,
-            row.track,
+            on,
             against,
         ),
     }

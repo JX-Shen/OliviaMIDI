@@ -48,9 +48,12 @@ pub enum ControllerExtreme {
 /// Not `ControlChange`, although that is the MIDI event's own name, for the
 /// reason `StatedProgram` is not `ProgramChange`: two types under one name in
 /// one crate would read as one type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StatedController {
     pub track: usize,
+    /// The names that track states, in written order; empty where it states
+    /// none. See #61.
+    pub track_names: Vec<String>,
     pub channel: u8,
     pub controller: u8,
     pub tick: u32,
@@ -93,7 +96,7 @@ pub const FIRST_CHANNEL_MODE: u8 = 120;
 /// Crate-private, and a pairing rather than a field on `StatedController`: an
 /// index into one track's event list means something for the length of one
 /// `apply` and has no business in what the library hands a consumer.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct ControllerEvent {
     pub(crate) stated: StatedController,
     /// Counting every event of the track, meta events included — the numbering
@@ -109,6 +112,7 @@ pub(crate) fn timeline(stated: &[StatedController], channel: u8, controller: u8)
             .filter(|statement| statement.channel == channel && statement.controller == controller)
             .map(|statement| Candidate {
                 track: statement.track,
+                track_names: statement.track_names.clone(),
                 tick: statement.tick,
                 value: statement.value,
             }),
@@ -139,6 +143,7 @@ impl Take {
         let mut found = Vec::new();
 
         for (track, events) in smf.tracks.iter().enumerate() {
+            let name = crate::take::track_names(events);
             let mut tick = 0u32;
             for (index, event) in events.iter().enumerate() {
                 tick += event.delta.as_int();
@@ -153,6 +158,7 @@ impl Take {
                     found.push(ControllerEvent {
                         stated: StatedController {
                             track,
+                            track_names: name.clone(),
                             channel: channel.as_int(),
                             controller: controller.as_int(),
                             tick,

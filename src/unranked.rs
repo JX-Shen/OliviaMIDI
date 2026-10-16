@@ -44,8 +44,14 @@ pub struct Unranked {
     pub controller: Option<u8>,
     /// The track carrying the channel-state event.
     pub track: usize,
+    /// The names that track states, in written order; empty where it states
+    /// none. Appended beside the number, and nothing moved. See #61.
+    pub track_names: Vec<String>,
     /// The track carrying what it is unordered against.
     pub against_track: usize,
+    /// The names that track states, in written order; empty where it states
+    /// none. See #61.
+    pub against_track_names: Vec<String>,
     pub against: Against,
     /// Which state this is. Appended, and nothing above it moved: a consumer
     /// reading the rows #26 shipped finds every field where it left it. See
@@ -184,6 +190,11 @@ impl Take {
             }
         }
 
+        let names: Vec<Vec<String>> = smf
+            .tracks
+            .iter()
+            .map(|events| crate::take::track_names(events))
+            .collect();
         let mut found: Vec<Unranked> = Vec::new();
         for state in &stated {
             let mut against = |against_track: usize, against: Against| {
@@ -192,7 +203,9 @@ impl Take {
                     channel: state.channel,
                     controller: state.controller,
                     track: state.track,
+                    track_names: names[state.track].clone(),
                     against_track,
+                    against_track_names: names[against_track].clone(),
                     against,
                     state: state.state,
                 };

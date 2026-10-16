@@ -53,6 +53,13 @@ use std::path::PathBuf;
 /// because a reader can name one and ask. Nothing addresses a bend, so a Take
 /// that bends nothing says nothing about bends.
 ///
+/// Every name a track states is quoted beside the track's number, in the order
+/// the track writes them and exactly as the file states each — `track 3
+/// "viola"`, or `track 3 "Violin" "Vln I"` — and never trimmed or improved; a
+/// row about a channel carries no track's name. In JSON every object with a
+/// `track` carries `track_names` (and `against_track` `against_track_names`), a
+/// list in the same order, empty where the track states none.
+///
 /// The listing is in the order the music happens, so that reading down it reads
 /// down the passage: a chord's notes are adjacent and the Bar numbers only ever
 /// go forwards. `--json` keeps the Take's own order instead — track by track,

@@ -94,14 +94,29 @@ pub struct RankDisagreement {
 }
 
 /// A state statement within a disagreement's Tick, channel and pair. #33.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct RankedStatement {
     pub track: usize,
+    /// The names the statement's track states in each Take, in written order,
+    /// empty where it states none. Two lists, as the notes are two: the
+    /// statement corresponds across the Takes by its track's number, and each
+    /// Take names that track for itself. See #61.
+    pub before_track_names: Vec<String>,
+    pub after_track_names: Vec<String>,
     /// Program number or CC64 value, as selected by the enclosing pair kind.
     pub value: u8,
     /// Zero-based occurrence among statements with this track and value at
     /// the enclosing site, counted in their written order.
     pub occurrence: usize,
+}
+
+/// What a statement corresponds across the two Takes by: its track's number,
+/// never its name, and its value and occurrence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct Statement {
+    track: usize,
+    value: u8,
+    occurrence: usize,
 }
 
 /// One corresponding state/note relation whose direction changed. #33.
@@ -211,7 +226,7 @@ struct Sightings {
     /// (track, position) of each event the governing one is ranked against —
     /// the strikes, or the releases.
     governed: Vec<(usize, usize)>,
-    statements: Vec<(RankedStatement, usize)>,
+    statements: Vec<(Statement, usize)>,
     notes: Vec<(usize, usize)>,
 }
 
@@ -264,7 +279,7 @@ type Claims = BTreeMap<(u32, u8, RankedPairKind), Claim>;
 struct Claim {
     reading: Reading,
     /// Statement and index in the already matched note list -> state first.
-    relations: BTreeMap<(RankedStatement, usize), bool>,
+    relations: BTreeMap<(Statement, usize), bool>,
 }
 
 fn claims(take: &Take, notes: &[Note]) -> Result<Claims> {
@@ -304,7 +319,7 @@ fn claims(take: &Take, notes: &[Note]) -> Result<Claims> {
                     .entry((tick, channel, pair, track, value))
                     .or_insert(0);
                 sightings.statements.push((
-                    RankedStatement {
+                    Statement {
                         track,
                         value,
                         occurrence: *occurrence,
@@ -352,6 +367,7 @@ pub(crate) fn rank_differences(
 ) -> Result<(Vec<RankDisagreement>, Vec<UnrankedSite>)> {
     let before_claims = claims(before, before_notes)?;
     let after_claims = claims(after, after_notes)?;
+    let named = |take: &Take, track: usize| take.names_of(track);
     let mut disagreements = Vec::new();
     let mut sites = Vec::new();
     let all_sites: BTreeSet<_> = before_claims
@@ -388,7 +404,13 @@ pub(crate) fn rank_differences(
             };
             if before_state_first != after_state_first {
                 relations.push(RankRelationChange {
-                    statement,
+                    statement: RankedStatement {
+                        track: statement.track,
+                        before_track_names: named(before, statement.track)?,
+                        after_track_names: named(after, statement.track)?,
+                        value: statement.value,
+                        occurrence: statement.occurrence,
+                    },
                     before_note: before_notes[note].id.clone(),
                     after_note: after_notes[after_note].id.clone(),
                     before_state_first,

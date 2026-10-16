@@ -31,6 +31,10 @@ impl fmt::Display for NoteId {
 pub struct Note {
     pub id: NoteId,
     pub track: usize,
+    /// The names that track states, in written order; empty where it states
+    /// none. Not part of the identity: a name is what the track calls itself,
+    /// and the track is still the same track when it states another. See #61.
+    pub track_names: Vec<String>,
     pub channel: u8,
     pub pitch: u8,
     pub start: u32,

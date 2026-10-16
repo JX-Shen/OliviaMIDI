@@ -270,14 +270,14 @@ fn hands_an_agent_the_state_and_every_event() {
         stated,
         vec![
             serde_json::json!({
-                "track": 1,
+                "track": 1, "track_names": [],
                 "channel": 0,
                 "controller": 64,
                 "tick": 3360,
                 "value": 127,
             }),
             serde_json::json!({
-                "track": 1,
+                "track": 1, "track_names": [],
                 "channel": 0,
                 "controller": 64,
                 "tick": 4320,
@@ -466,10 +466,10 @@ fn set_controller_states_an_address_that_need_not_exist_yet() {
         stated,
         vec![
             serde_json::json!({
-                "track": 1, "channel": 0, "controller": 11, "tick": 1440, "value": 90,
+                "track": 1, "track_names": [], "channel": 0, "controller": 11, "tick": 1440, "value": 90,
             }),
             serde_json::json!({
-                "track": 1, "channel": 0, "controller": 11, "tick": 2880, "value": 20,
+                "track": 1, "track_names": [], "channel": 0, "controller": 11, "tick": 2880, "value": 20,
             }),
         ]
     );
@@ -501,7 +501,7 @@ fn delete_controller_takes_away_one_statement() {
     assert_eq!(
         stated,
         vec![serde_json::json!({
-            "track": 1, "channel": 0, "controller": 11, "tick": 2880, "value": 100,
+            "track": 1, "track_names": [], "channel": 0, "controller": 11, "tick": 2880, "value": 100,
         })]
     );
 }
@@ -537,7 +537,7 @@ fn move_controller_carries_a_statement_and_overwrites_the_destination() {
     assert_eq!(
         stated,
         vec![serde_json::json!({
-            "track": 1, "channel": 0, "controller": 11, "tick": 1440, "value": 100,
+            "track": 1, "track_names": [], "channel": 0, "controller": 11, "tick": 1440, "value": 100,
         })]
     );
 }

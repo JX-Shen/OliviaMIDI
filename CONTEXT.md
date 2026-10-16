@@ -348,6 +348,30 @@ channel can be left off; where it is not, a line without the channel is true of
 both notes. A Program has no subject but the channel, so `program 40` on its own
 points at nothing.
 
+**Track name**:
+The text a track states as its name, as the MIDI track name meta event carries
+it. Part of the Piece, not of the Rig. A track may state none, one, or several,
+and `mid` quotes every one beside the track's number in the order the track
+writes them — `track 3 "Violin" "Vln I"` — exactly as the file states each:
+empty, repeated on another track, or naming no part at all (`control track`),
+and never trimmed, translated or improved. Showing one of several would read as
+the track stating one (ADR-0009). On the first track of a Format 1 Take the same
+event conventionally names the whole sequence; it is still what that track
+states, and is quoted as such.
+
+Attached to a track and never to a channel. A channel may be written from
+several tracks, so a track's name on a channel's row would claim the channel is
+that part. See #61.
+_中文_: 轨道名
+_Avoid_: part name, instrument name; 声部名、乐器名
+
+The tool cannot know that the text names a part, or an instrument: it is
+whatever the author typed. *Part name* and 声部名 would make every `control
+track` a false statement about the music, where 轨道名 is a true one about what
+the file says. *Instrument name* is taken twice over — by MIDI's own
+`InstrumentName` meta event, a different piece of text, and by the GM name a
+**Program** carries.
+
 **Program**:
 Which of a bank's instruments a channel is set to play, as the MIDI program
 change event carries it: 0 to 127. Part of the Piece, not of the Rig — *which*

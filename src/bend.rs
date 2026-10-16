@@ -48,6 +48,7 @@ pub(crate) fn timeline(stated: &[StatedBend], channel: u8) -> Timeline<i16> {
             .filter(|statement| statement.channel == channel)
             .map(|statement| Candidate {
                 track: statement.track,
+                track_names: statement.track_names.clone(),
                 tick: statement.tick,
                 value: statement.value,
             }),
@@ -68,9 +69,12 @@ pub struct Bends {
 /// Not `PitchBend`, although that is the MIDI event's own name, for the reason
 /// `StatedController` is not `ControlChange`: two types under one name in one
 /// crate would read as one type.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StatedBend {
     pub track: usize,
+    /// The names that track states, in written order; empty where it states
+    /// none. See #61.
+    pub track_names: Vec<String>,
     pub channel: u8,
     pub tick: u32,
 
@@ -103,6 +107,7 @@ impl Take {
         let mut found = Vec::new();
 
         for (track, events) in smf.tracks.iter().enumerate() {
+            let name = crate::take::track_names(events);
             let mut tick = 0u32;
             for event in events {
                 tick += event.delta.as_int();
@@ -113,6 +118,7 @@ impl Take {
                 {
                     found.push(StatedBend {
                         track,
+                        track_names: name.clone(),
                         channel: channel.as_int(),
                         tick,
                         value: bend.as_int(),

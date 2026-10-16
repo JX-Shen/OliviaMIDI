@@ -113,7 +113,7 @@ fn the_payload_names_the_pair_and_says_which_take_follows_the_rule() {
             "before_is_correct": false,
             "after_is_correct": true,
             "relations": [{
-                "statement": { "track": 1, "value": 40, "occurrence": 0 },
+                "statement": { "track": 1, "before_track_names": [], "after_track_names": [], "value": 40, "occurrence": 0 },
                 "before_note": "t1:c0:p69:s0:n0",
                 "after_note": "t1:c0:p69:s0:n0",
                 "before_state_first": false,
@@ -577,13 +577,13 @@ fn two_mixed_program_sites_can_disagree_about_which_strike_precedes_the_program(
             rank["relations"],
             serde_json::json!([
                 {
-                    "statement": {"track": 1, "value": 40, "occurrence": 0},
+                    "statement": {"track": 1, "before_track_names": [], "after_track_names": [], "value": 40, "occurrence": 0},
                     "before_note": format!("t1:c0:p{first_pitch}:s480:n0"),
                     "after_note": format!("t1:c0:p{first_pitch}:s480:n0"),
                     "before_state_first": false, "after_state_first": true,
                 },
                 {
-                    "statement": {"track": 1, "value": 40, "occurrence": 0},
+                    "statement": {"track": 1, "before_track_names": [], "after_track_names": [], "value": 40, "occurrence": 0},
                     "before_note": format!("t1:c0:p{second_pitch}:s480:n0"),
                     "after_note": format!("t1:c0:p{second_pitch}:s480:n0"),
                     "before_state_first": true, "after_state_first": false,
@@ -713,7 +713,7 @@ fn duplicate_notes_and_statements_keep_their_corresponding_relations() {
     assert_eq!(
         payload["rank_disagreements"][0]["relations"],
         serde_json::json!([{
-            "statement": {"track": 1, "value": 40, "occurrence": 1},
+            "statement": {"track": 1, "before_track_names": [], "after_track_names": [], "value": 40, "occurrence": 1},
             "before_note": "t1:c0:p60:s0:n1", "after_note": "t1:c0:p60:s0:n1",
             "before_state_first": false, "after_state_first": true,
         }])
@@ -762,10 +762,10 @@ fn mixed_damper_sites_report_which_note_release_crossed_the_state() {
     assert_eq!(
         rank["relations"],
         serde_json::json!([
-            { "statement": {"track": 1, "value": 127, "occurrence": 0},
+            { "statement": {"track": 1, "before_track_names": [], "after_track_names": [], "value": 127, "occurrence": 0},
               "before_note": "t1:c0:p60:s0:n0", "after_note": "t1:c0:p60:s0:n0",
               "before_state_first": false, "after_state_first": true },
-            { "statement": {"track": 1, "value": 127, "occurrence": 0},
+            { "statement": {"track": 1, "before_track_names": [], "after_track_names": [], "value": 127, "occurrence": 0},
               "before_note": "t1:c0:p64:s240:n0", "after_note": "t1:c0:p64:s240:n0",
               "before_state_first": true, "after_state_first": false }
         ])

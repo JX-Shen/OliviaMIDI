@@ -7,6 +7,9 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Candidate<T> {
     pub track: usize,
+    /// The names that track states, in written order; empty where it states
+    /// none. See #61.
+    pub track_names: Vec<String>,
     pub tick: u32,
     pub value: T,
 }
@@ -31,6 +34,7 @@ impl<T> Reading<T> {
                     .into_iter()
                     .map(|candidate| Candidate {
                         track: candidate.track,
+                        track_names: candidate.track_names,
                         tick: candidate.tick,
                         value: f(candidate.value),
                     })
@@ -77,6 +81,7 @@ impl<T> UnrankedSpan<T> {
                 .into_iter()
                 .map(|candidate| Candidate {
                     track: candidate.track,
+                    track_names: candidate.track_names,
                     tick: candidate.tick,
                     value: f(candidate.value),
                 })
@@ -101,6 +106,7 @@ impl<T> UnrankedComparison<T> {
                 .into_iter()
                 .map(|candidate| Candidate {
                     track: candidate.track,
+                    track_names: candidate.track_names,
                     tick: candidate.tick,
                     value: f(candidate.value),
                 })
