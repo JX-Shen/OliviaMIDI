@@ -16,6 +16,7 @@ use crate::reading::{Candidate, Reading, Timeline, UnrankedSpan};
 use crate::take::Take;
 use midly::{MidiMessage, TrackEventKind};
 use serde::Serialize;
+use std::sync::Arc;
 
 /// A Controller's starting reading, both extremes' coverage and indeterminate
 /// intervals — #42.
@@ -65,7 +66,7 @@ pub struct StatedController {
     pub track: usize,
     /// The names that track states, in written order; empty where it states
     /// none. See #61.
-    pub track_names: Vec<String>,
+    pub track_names: Arc<[String]>,
     pub channel: u8,
     pub controller: u8,
     pub tick: u32,
@@ -125,7 +126,7 @@ pub(crate) struct ControllerEvent {
 pub(crate) struct ResetEvent {
     track: usize,
     /// The names that track states, as a candidate carries them — #61.
-    track_names: Vec<String>,
+    track_names: Arc<[String]>,
     channel: u8,
     tick: u32,
     event: usize,

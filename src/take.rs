@@ -5,6 +5,7 @@ use midly::{Format, MetaMessage, MidiMessage, Smf, Timing, TrackEventKind};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// One `.mid` file — a version of the Piece that can be heard.
 ///
@@ -111,7 +112,7 @@ pub struct StatedTempo {
     pub track: usize,
     /// The names that track states, in written order; empty where it states
     /// none. See #61.
-    pub track_names: Vec<String>,
+    pub track_names: Arc<[String]>,
     pub tick: u32,
     pub tempo: Tempo,
 }
@@ -131,7 +132,7 @@ impl std::fmt::Display for TimeSignature {
 /// The names a track states: the text of every track name meta event in it, in
 /// written order — none, one, or several — as the file has them. Bytes that are
 /// not UTF-8 arrive as U+FFFD. See #61.
-pub(crate) fn track_names(events: &[midly::TrackEvent]) -> Vec<String> {
+pub(crate) fn track_names(events: &[midly::TrackEvent]) -> Arc<[String]> {
     events
         .iter()
         .filter_map(|event| match event.kind {
@@ -146,7 +147,7 @@ pub(crate) fn track_names(events: &[midly::TrackEvent]) -> Vec<String> {
 impl Take {
     /// The names one track of this Take states — `track_names` of it, and
     /// empty for a track the Take does not have.
-    pub(crate) fn names_of(&self, track: usize) -> Result<Vec<String>> {
+    pub(crate) fn names_of(&self, track: usize) -> Result<Arc<[String]>> {
         Ok(self
             .smf()?
             .tracks
@@ -582,7 +583,7 @@ impl Take {
         // of where a note starts, not of which of two collided notes ended first.
         pairs.sort_by_key(|p| (p.track, p.on_event));
 
-        let names: Vec<Vec<String>> = smf.tracks.iter().map(|track| track_names(track)).collect();
+        let names: Vec<Arc<[String]>> = smf.tracks.iter().map(|track| track_names(track)).collect();
         let mut occurrences: HashMap<(usize, u8, u8, u32), u32> = HashMap::new();
         Ok(pairs
             .into_iter()

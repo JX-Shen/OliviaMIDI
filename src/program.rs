@@ -20,6 +20,7 @@ use crate::reading::{Candidate, Reading, Timeline, UnrankedSpan};
 use crate::take::Take;
 use midly::{MidiMessage, TrackEventKind};
 use serde::Serialize;
+use std::sync::Arc;
 
 /// A channel's starting Program reading and any indeterminate intervals — #42.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -40,7 +41,7 @@ pub struct StatedProgram {
     pub track: usize,
     /// The names that track states, in written order; empty where it states
     /// none. See #61.
-    pub track_names: Vec<String>,
+    pub track_names: Arc<[String]>,
     pub channel: u8,
     pub tick: u32,
     pub program: u8,

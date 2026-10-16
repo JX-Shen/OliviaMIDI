@@ -21,6 +21,7 @@
 use crate::error::Result;
 use crate::take::Take;
 use midly::{MetaMessage, MidiMessage, TrackEventKind};
+use std::sync::Arc;
 
 /// One place a Take leaves unordered, and what it is unordered against.
 ///
@@ -46,12 +47,12 @@ pub struct Unranked {
     pub track: usize,
     /// The names that track states, in written order; empty where it states
     /// none. Appended beside the number, and nothing moved. See #61.
-    pub track_names: Vec<String>,
+    pub track_names: Arc<[String]>,
     /// The track carrying what it is unordered against.
     pub against_track: usize,
     /// The names that track states, in written order; empty where it states
     /// none. See #61.
-    pub against_track_names: Vec<String>,
+    pub against_track_names: Arc<[String]>,
     pub against: Against,
     /// Which state this is. Appended, and nothing above it moved: a consumer
     /// reading the rows #26 shipped finds every field where it left it. See
@@ -190,7 +191,7 @@ impl Take {
             }
         }
 
-        let names: Vec<Vec<String>> = smf
+        let names: Vec<Arc<[String]>> = smf
             .tracks
             .iter()
             .map(|events| crate::take::track_names(events))

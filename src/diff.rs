@@ -4,6 +4,7 @@ use crate::rank::{RankDisagreement, UnrankedSite};
 use crate::take::{Take, Tempo};
 use serde::Serialize;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// What differs between two Takes, in the Piece's terms.
 ///
@@ -128,11 +129,11 @@ pub struct UnrankedAcross {
     pub channel: Option<u8>,
     pub controller: Option<u8>,
     pub track: usize,
-    pub before_track_names: Vec<String>,
-    pub after_track_names: Vec<String>,
+    pub before_track_names: Arc<[String]>,
+    pub after_track_names: Arc<[String]>,
     pub against_track: usize,
-    pub before_against_track_names: Vec<String>,
-    pub after_against_track_names: Vec<String>,
+    pub before_against_track_names: Arc<[String]>,
+    pub after_against_track_names: Arc<[String]>,
     pub against: crate::Against,
     pub state: crate::State,
 }
@@ -148,15 +149,19 @@ impl UnrankedAcross {
         self.as_named(&self.after_track_names, &self.after_against_track_names)
     }
 
-    fn as_named(&self, track_names: &[String], against_track_names: &[String]) -> crate::Unranked {
+    fn as_named(
+        &self,
+        track_names: &Arc<[String]>,
+        against_track_names: &Arc<[String]>,
+    ) -> crate::Unranked {
         crate::Unranked {
             tick: self.tick,
             channel: self.channel,
             controller: self.controller,
             track: self.track,
-            track_names: track_names.to_vec(),
+            track_names: track_names.clone(),
             against_track: self.against_track,
-            against_track_names: against_track_names.to_vec(),
+            against_track_names: against_track_names.clone(),
             against: self.against,
             state: self.state,
         }
@@ -876,9 +881,9 @@ fn state_sites(
                             // Named below, once both Takes are read: a site
                             // is matched across them by its tracks' numbers.
                             track: source_track,
-                            track_names: Vec::new(),
+                            track_names: Arc::default(),
                             against_track: track,
-                            against_track_names: Vec::new(),
+                            against_track_names: Arc::default(),
                             against: crate::Against::Notes,
                             state,
                         });

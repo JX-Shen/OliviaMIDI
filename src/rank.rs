@@ -26,6 +26,7 @@ use crate::take::Take;
 use midly::{MidiMessage, TrackEventKind};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 /// The MIDI controller number of the damper pedal.
 const DAMPER: u8 = 64;
@@ -101,8 +102,8 @@ pub struct RankedStatement {
     /// empty where it states none. Two lists, as the notes are two: the
     /// statement corresponds across the Takes by its track's number, and each
     /// Take names that track for itself. See #61.
-    pub before_track_names: Vec<String>,
-    pub after_track_names: Vec<String>,
+    pub before_track_names: Arc<[String]>,
+    pub after_track_names: Arc<[String]>,
     /// Program number or CC64 value, as selected by the enclosing pair kind.
     pub value: u8,
     /// Zero-based occurrence among statements with this track and value at

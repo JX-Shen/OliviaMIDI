@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::Arc;
 
 /// A note's identity, derived from its content: track, channel, pitch, start
 /// tick, and an occurrence index separating notes that collide on all four.
@@ -34,7 +35,7 @@ pub struct Note {
     /// The names that track states, in written order; empty where it states
     /// none. Not part of the identity: a name is what the track calls itself,
     /// and the track is still the same track when it states another. See #61.
-    pub track_names: Vec<String>,
+    pub track_names: Arc<[String]>,
     pub channel: u8,
     pub pitch: u8,
     pub start: u32,

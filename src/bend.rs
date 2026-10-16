@@ -17,6 +17,7 @@ use crate::reading::{Candidate, Reading, Timeline, UnrankedSpan};
 use crate::take::Take;
 use midly::{MidiMessage, TrackEventKind};
 use serde::Serialize;
+use std::sync::Arc;
 
 /// A channel's starting reading and the coverage of its interval summary — #42.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -74,7 +75,7 @@ pub struct StatedBend {
     pub track: usize,
     /// The names that track states, in written order; empty where it states
     /// none. See #61.
-    pub track_names: Vec<String>,
+    pub track_names: Arc<[String]>,
     pub channel: u8,
     pub tick: u32,
 

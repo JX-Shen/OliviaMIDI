@@ -2,6 +2,7 @@
 
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 /// A possible value after a Tick, from the last statement on this track.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -9,7 +10,7 @@ pub struct Candidate<T> {
     pub track: usize,
     /// The names that track states, in written order; empty where it states
     /// none. See #61.
-    pub track_names: Vec<String>,
+    pub track_names: Arc<[String]>,
     pub tick: u32,
     pub value: T,
 }
