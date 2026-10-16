@@ -457,8 +457,13 @@ used to be called — but no word of it is ever exchanged for a better one. The
 style label of its own — unlike a GM name, it does not depend on which bank is
 loaded. The convention that a value of 64 or more means a switch is *on* comes
 from that same table, and is a gloss rather than a reading the library makes.
-_中文_: 控制器 (the name: 规范名)
+_中文_: 控制器 (the name: 规范名; the reading after a Reset All Controllers: 复位)
 _Avoid_: CC message, control change, automation, envelope; 控制信号、自动化、包络
+_Avoid for the reset reading_: reset value, default; 重置、清零、归零
+
+A **reset** reading states that a reset happened and where, and no value, so
+nothing naming it may name a value: *reset value* and *default* both do, and
+清零 and 归零 say the value became 0, which the reading never states.
 
 自动化 and 包络 both belong to a DAW rather than to a MIDI file: an automation
 lane is a thing an editor draws and an envelope is a thing a synthesiser has,
