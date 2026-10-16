@@ -15,12 +15,30 @@ pub struct Candidate<T> {
 }
 
 /// What can be read at a Tick. Absence and uncertainty are distinct — #42.
+///
+/// `C` is what a candidate holds, which is the value's own type for every
+/// reading but a Controller's. A Controller's candidates are `Option<u8>`, and
+/// `None` is a track whose last word at that Tick is a Reset All Controllers.
+///
+/// `Reset` is a Controller after a Reset All Controllers on its channel, until
+/// the Take states that Controller again. It carries where the reset is and no
+/// value — #63. Only a Controller reading is ever one.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum Reading<T> {
+pub enum Reading<T, C = T> {
     Unstated,
     Determinate { value: T },
-    Indeterminate { candidates: Vec<Candidate<T>> },
+    Indeterminate { candidates: Vec<Candidate<C>> },
+    Reset { at: u32 },
+}
+
+/// A determinate reading, as two readings are compared: two resets are equal
+/// wherever each was sent — #63.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Settled<T> {
+    Unstated,
+    Value(T),
+    Reset,
 }
 
 impl<T> Reading<T> {
@@ -40,21 +58,32 @@ impl<T> Reading<T> {
                     })
                     .collect(),
             },
+            Self::Reset { at } => Reading::Reset { at },
         }
     }
 }
 
-impl<T: Copy> Reading<T> {
-    /// Outer None means indeterminate; inner None means unstated.
+impl<T: Copy, C> Reading<T, C> {
+    /// Outer None means indeterminate; inner None means no value — unstated,
+    /// or reset (#63).
     pub(crate) fn determinate(&self) -> Option<Option<T>> {
+        self.settled().map(|settled| match settled {
+            Settled::Value(value) => Some(value),
+            Settled::Unstated | Settled::Reset => None,
+        })
+    }
+
+    /// None means indeterminate.
+    pub(crate) fn settled(&self) -> Option<Settled<T>> {
         match self {
-            Self::Unstated => Some(None),
-            Self::Determinate { value } => Some(Some(*value)),
+            Self::Unstated => Some(Settled::Unstated),
+            Self::Determinate { value } => Some(Settled::Value(*value)),
             Self::Indeterminate { .. } => None,
+            Self::Reset { .. } => Some(Settled::Reset),
         }
     }
 
-    pub(crate) fn candidates(&self) -> &[Candidate<T>] {
+    pub(crate) fn candidates(&self) -> &[Candidate<C>] {
         match self {
             Self::Indeterminate { candidates } => candidates,
             _ => &[],

@@ -23,23 +23,35 @@ use serde::Serialize;
 /// The highest and the lowest value in force across the passage, each where it
 /// is first reached: #58, under ADR-0009. `lowest` was appended beside `peak`,
 /// which keeps its name and meaning.
+///
+/// `resets` is the Tick of every Reset All Controllers inside the passage that
+/// ends a value of this Controller, appended last: the extremes are values, and
+/// a passage reset part way through says so beside them — #63.
+///
+/// A candidate is `Option<u8>`: `None` is a track whose last word at that Tick
+/// is a Reset All Controllers — #63.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Controller {
     pub channel: u8,
     pub controller: u8,
-    pub value: Reading<u8>,
+    pub value: Reading<u8, Option<u8>>,
     pub peak: ControllerExtreme,
-    pub unranked: Vec<UnrankedSpan<u8>>,
+    pub unranked: Vec<UnrankedSpan<Option<u8>>>,
     pub lowest: ControllerExtreme,
+    pub resets: Vec<u32>,
 }
 
 /// One extreme of a complete interval, or a summary with unranked intervals —
 /// #42. Both extremes are incomplete together.
+///
+/// `NoValue` where the passage holds no value for the Controller anywhere,
+/// which only a reset in force from its start can leave — #63.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ControllerExtreme {
     Complete { value: u8, at: u32 },
     Incomplete,
+    NoValue,
 }
 
 /// One place a Take states a Controller: which track says it, on which channel,
@@ -72,17 +84,20 @@ pub struct Controllers {
 ///
 /// 120 to 127 are MIDI's channel mode messages — All Sound Off, All Notes Off,
 /// Reset All Controllers and their neighbours. They ride on the control change
-/// event type and are instructions rather than settings: they happen and are
-/// over, leaving nothing in force. Every reading this crate makes of channel
-/// state presupposes a value that holds until changed, so for these there is
-/// nothing to report rather than something dangerous to report.
+/// event type and are instructions rather than settings, so none of them is a
+/// Controller: no reading is ever of one, and no Edit reaches one.
 ///
 /// The boundary is drawn by what those readings require and lands where MIDI's
 /// own table breaks only because the specification's authors made the same
-/// distinction. A Take's mode messages are carried untouched (ADR-0003) and
-/// named by nothing; the hole is deliberate, and `fixtures/expressive.mid` pins
-/// it. See ADR-0007 and #13.
+/// distinction. A Take's mode messages are carried untouched (ADR-0003). All but
+/// `RESET_ALL_CONTROLLERS` are named by nothing; the hole is deliberate, and
+/// `fixtures/expressive.mid` pins it. See ADR-0007, #13 and #63.
 pub const FIRST_CHANNEL_MODE: u8 = 120;
+
+/// The channel mode message a Controller reading answers for: it ends the
+/// value in force of every Controller its channel holds, so a reading across
+/// it reads as reset — #63.
+const RESET_ALL_CONTROLLERS: u8 = 121;
 
 /// One place a Take states a Controller, and which event of its track says so.
 ///
@@ -105,18 +120,93 @@ pub(crate) struct ControllerEvent {
     pub(crate) event: usize,
 }
 
-pub(crate) fn timeline(stated: &[StatedController], channel: u8, controller: u8) -> Timeline<u8> {
-    Timeline::read(
-        stated
+/// One Reset All Controllers, and which event of its track sends it.
+#[derive(Debug, Clone)]
+pub(crate) struct ResetEvent {
+    track: usize,
+    /// The names that track states, as a candidate carries them — #61.
+    track_names: Vec<String>,
+    channel: u8,
+    tick: u32,
+    event: usize,
+}
+
+/// Everything one address is told, in the order a synthesiser meets it within
+/// each track: each statement of it as its value, and each reset of its channel
+/// as no value.
+///
+/// A reset ends only what is in force, so one before the address is first
+/// stated is left out: a Controller nothing had set is still unstated after
+/// it. One at the Tick of the first statement is kept, and its own track's
+/// order, or the other tracks' disagreement, decides what it leaves — #63.
+pub(crate) fn said(
+    statements: &[ControllerEvent],
+    resets: &[ResetEvent],
+    channel: u8,
+    controller: u8,
+) -> Vec<Candidate<Option<u8>>> {
+    let mut said: Vec<_> = statements
+        .iter()
+        .filter(|found| found.stated.channel == channel && found.stated.controller == controller)
+        .map(|found| {
+            let stated = &found.stated;
+            (
+                found.event,
+                Candidate {
+                    track: stated.track,
+                    track_names: stated.track_names.clone(),
+                    tick: stated.tick,
+                    value: Some(stated.value),
+                },
+            )
+        })
+        .collect();
+    let Some(first) = said.iter().map(|(_, said)| said.tick).min() else {
+        return Vec::new();
+    };
+    said.extend(
+        resets
             .iter()
-            .filter(|statement| statement.channel == channel && statement.controller == controller)
-            .map(|statement| Candidate {
-                track: statement.track,
-                track_names: statement.track_names.clone(),
-                tick: statement.tick,
-                value: statement.value,
+            .filter(|reset| reset.channel == channel && reset.tick >= first)
+            .map(|reset| {
+                (
+                    reset.event,
+                    Candidate {
+                        track: reset.track,
+                        track_names: reset.track_names.clone(),
+                        tick: reset.tick,
+                        value: None,
+                    },
+                )
             }),
-    )
+    );
+    said.sort_by_key(|(event, said)| (said.tick, said.track, *event));
+    said.into_iter().map(|(_, said)| said).collect()
+}
+
+/// What `said` leaves in force after each Tick. A Tick every track leaves on a
+/// reset reads as `Reset` there, never as a value — #63.
+pub(crate) fn timeline(said: &[Candidate<Option<u8>>]) -> Timeline<Option<u8>> {
+    let mut timeline = Timeline::read(said.iter().cloned());
+    for (tick, reading) in &mut timeline.moments {
+        if *reading == (Reading::Determinate { value: None }) {
+            *reading = Reading::Reset { at: *tick };
+        }
+    }
+    timeline
+}
+
+/// A Controller reading as `battuta` hands it over: a value, and candidates
+/// that may be a reset.
+fn handed_over(reading: Reading<Option<u8>>) -> Reading<u8, Option<u8>> {
+    match reading {
+        Reading::Unstated => Reading::Unstated,
+        Reading::Determinate { value: Some(value) } => Reading::Determinate { value },
+        // `timeline` has already read every one of these as `Reset`.
+        Reading::Determinate { value: None } => unreachable!("a reset read as a value"),
+        Reading::Indeterminate { candidates } => Reading::Indeterminate { candidates },
+        Reading::Reset { at } => Reading::Reset { at },
+    }
 }
 
 impl Take {
@@ -132,6 +222,35 @@ impl Take {
             .into_iter()
             .map(|event| event.stated)
             .collect())
+    }
+
+    /// Every Reset All Controllers the Take sends — #63.
+    pub(crate) fn reset_events(&self) -> Result<Vec<ResetEvent>> {
+        let smf = self.smf()?;
+        let mut found = Vec::new();
+        for (track, events) in smf.tracks.iter().enumerate() {
+            let names = crate::take::track_names(events);
+            let mut tick = 0u32;
+            for (index, event) in events.iter().enumerate() {
+                tick += event.delta.as_int();
+                if let TrackEventKind::Midi {
+                    channel,
+                    message: MidiMessage::Controller { controller, .. },
+                } = event.kind
+                {
+                    if controller.as_int() == RESET_ALL_CONTROLLERS {
+                        found.push(ResetEvent {
+                            track,
+                            track_names: names.clone(),
+                            channel: channel.as_int(),
+                            tick,
+                            event: index,
+                        });
+                    }
+                }
+            }
+        }
+        Ok(found)
     }
 
     /// The same, each with the event that states it.
@@ -193,7 +312,9 @@ impl Take {
             },
         };
 
-        let all = self.stated_controllers()?;
+        let events = self.controller_events()?;
+        let resets = self.reset_events()?;
+        let all: Vec<_> = events.iter().map(|event| event.stated.clone()).collect();
 
         let mut addresses: Vec<_> = all
             .iter()
@@ -205,9 +326,18 @@ impl Take {
         let controllers = addresses
             .into_iter()
             .map(|(channel, controller)| {
-                let reading = timeline(&all, channel, controller);
-                let value = reading.at(span.start);
+                let reading = timeline(&said(&events, &resets, channel, controller));
+                let value = handed_over(reading.at(span.start));
                 let unranked = reading.unranked(span.start, bars.map(|_| span.end));
+                let resets = reading
+                    .moments
+                    .iter()
+                    .filter(|(at, _)| span.start < *at && *at < span.end)
+                    .filter_map(|(_, held)| match held {
+                        Reading::Reset { at } => Some(*at),
+                        _ => None,
+                    })
+                    .collect();
                 let (peak, lowest) = if unranked.is_empty() {
                     let mut values = value
                         .determinate()
@@ -224,22 +354,26 @@ impl Take {
                                 })
                                 .map(|stated| (stated.tick, stated.value)),
                         );
-                    let first = values
-                        .next()
-                        .expect("a listed Controller is stated before the window ends");
-                    let (mut highest, mut lowest) = (first, first);
-                    // Strictly beyond, so a value reached twice is reported at
-                    // the first of the two.
-                    for (tick, next) in values {
-                        if next > highest.1 {
-                            highest = (tick, next);
-                        }
-                        if next < lowest.1 {
-                            lowest = (tick, next);
+                    // A reset in force from the passage's start, and nothing
+                    // stated inside it, leaves no value to have an extreme.
+                    match values.next() {
+                        None => (ControllerExtreme::NoValue, ControllerExtreme::NoValue),
+                        Some(first) => {
+                            let (mut highest, mut lowest) = (first, first);
+                            // Strictly beyond, so a value reached twice is
+                            // reported at the first of the two.
+                            for (tick, next) in values {
+                                if next > highest.1 {
+                                    highest = (tick, next);
+                                }
+                                if next < lowest.1 {
+                                    lowest = (tick, next);
+                                }
+                            }
+                            let complete = |(at, value)| ControllerExtreme::Complete { value, at };
+                            (complete(highest), complete(lowest))
                         }
                     }
-                    let complete = |(at, value)| ControllerExtreme::Complete { value, at };
-                    (complete(highest), complete(lowest))
                 } else {
                     (ControllerExtreme::Incomplete, ControllerExtreme::Incomplete)
                 };
@@ -250,6 +384,7 @@ impl Take {
                     peak,
                     unranked,
                     lowest,
+                    resets,
                 }
             })
             .collect();

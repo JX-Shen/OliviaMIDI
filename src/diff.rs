@@ -1,4 +1,3 @@
-use crate::controller::StatedController;
 use crate::error::{Error, Result};
 use crate::note::{Note, NoteId};
 use crate::rank::{RankDisagreement, UnrankedSite};
@@ -116,13 +115,15 @@ pub struct UnrankedProgram {
     pub interval: crate::UnrankedComparison<u8>,
 }
 
-/// Controller intervals excluded from value comparison — #42.
+/// Controller intervals excluded from value comparison — #42. A candidate of
+/// `None` is a track whose last word at that Tick is a Reset All Controllers —
+/// #63.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UnrankedController {
     pub channel: u8,
     pub controller: u8,
     #[serde(flatten)]
-    pub interval: crate::UnrankedComparison<u8>,
+    pub interval: crate::UnrankedComparison<Option<u8>>,
 }
 
 /// A Channel-state/strike site present in either Take; not a value interval.
@@ -269,7 +270,7 @@ pub struct BendSide {
 /// Nothing here claims that a stretch of events in one Take *is* a stretch in
 /// the other, moved. That claim would need a parameter under ADR-0004; the two
 /// sides are read separately and this only says where they differ.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ControllerDifference {
     pub channel: u8,
     pub controller: u8,
@@ -289,7 +290,14 @@ pub struct ControllerDifference {
 /// Every field is optional together, because a Take may hold nothing at all for
 /// this Controller across the span — the case a Take stating 0 must never be
 /// confused with.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+///
+/// A Reset All Controllers ends a value without stating one, so the value
+/// fields leave a reset out, and two fields appended last say where they did —
+/// #63. `reset_at_start` is the Tick of the reset in force where the span
+/// begins, which may be before it, and `at_start` is then null. `resets` is the
+/// Tick of every reset inside the span. A side with a reset in either and a
+/// null `at_end` ends the span reset, by the last of them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ControllerSide {
     pub at_start: Option<u8>,
     pub at_end: Option<u8>,
@@ -297,6 +305,8 @@ pub struct ControllerSide {
     pub peak_at: Option<u32>,
     pub lowest: Option<u8>,
     pub lowest_at: Option<u32>,
+    pub reset_at_start: Option<u32>,
+    pub resets: Vec<u32>,
 }
 
 /// One channel, one moment, and the two Programs the Takes have it on there.
@@ -587,7 +597,7 @@ fn compare<T: Copy + Eq>(
     for (index, &at) in moments.iter().enumerate() {
         let mine = before.at(at);
         let theirs = after.at(at);
-        let differs = match (mine.determinate(), theirs.determinate()) {
+        let differs = match (mine.settled(), theirs.settled()) {
             (Some(mine), Some(theirs)) => mine != theirs,
             _ => {
                 let until = moments.get(index + 1).copied();
@@ -653,7 +663,15 @@ struct Reading {
 /// a stretch the reading says nothing new in still holds something. Strictly
 /// beyond, so a value reached twice is reported at the first of the two — the
 /// rule `ControllerSide`'s peak already follows.
-fn reading(stated: &[(u32, i64)], from: u32, until: Option<u32>, moments: &[u32]) -> Reading {
+///
+/// A statement without a value is a reset, and is no value for either end or
+/// either extreme — #63.
+fn reading(
+    stated: &[(u32, Option<i64>)],
+    from: u32,
+    until: Option<u32>,
+    moments: &[u32],
+) -> Reading {
     let at_start = scalar_in_force(stated, from);
     let last = moments
         .iter()
@@ -663,9 +681,10 @@ fn reading(stated: &[(u32, i64)], from: u32, until: Option<u32>, moments: &[u32]
 
     let mut lowest = at_start.map(|value| (value, from));
     let mut highest = lowest;
-    for &(tick, value) in stated
+    for (tick, value) in stated
         .iter()
         .filter(|&&(tick, _)| from < tick && until.map(|until| tick < until).unwrap_or(true))
+        .filter_map(|&(tick, value)| Some((tick, value?)))
     {
         if lowest.map(|(low, _)| value < low).unwrap_or(true) {
             lowest = Some((value, tick));
@@ -684,12 +703,13 @@ fn reading(stated: &[(u32, i64)], from: u32, until: Option<u32>, moments: &[u32]
 }
 
 /// The scalar within an interval already proved determinate by `compare` — #42.
-fn scalar_in_force(stated: &[(u32, i64)], at: u32) -> Option<i64> {
+fn scalar_in_force(stated: &[(u32, Option<i64>)], at: u32) -> Option<i64> {
     stated
         .iter()
         .filter(|&&(tick, _)| tick <= at)
         .map(|&(_, value)| value)
         .next_back()
+        .flatten()
 }
 
 /// Compare Tempo only across determinate intervals — #42.
@@ -703,10 +723,15 @@ fn tempo_differences(
         &crate::take::tempo_timeline(&before_stated),
         &crate::take::tempo_timeline(&after_stated),
     );
-    let scalars = |stated: &[crate::StatedTempo]| -> Vec<(u32, i64)> {
+    let scalars = |stated: &[crate::StatedTempo]| -> Vec<(u32, Option<i64>)> {
         stated
             .iter()
-            .map(|stated| (stated.tick, i64::from(stated.tempo.micros_per_quarter)))
+            .map(|stated| {
+                (
+                    stated.tick,
+                    Some(i64::from(stated.tempo.micros_per_quarter)),
+                )
+            })
             .collect()
     };
     let before_values = scalars(&before_stated);
@@ -784,11 +809,11 @@ fn bend_differences(
         let comparison = compare(&before_timeline, &after_timeline);
         // Keep raw within-Tick excursions for determinate intervals, as the
         // existing summaries do. These lists never decide comparability — #42.
-        let on = |stated: &[crate::StatedBend]| -> Vec<(u32, i64)> {
+        let on = |stated: &[crate::StatedBend]| -> Vec<(u32, Option<i64>)> {
             stated
                 .iter()
                 .filter(|stated| stated.channel == channel)
-                .map(|stated| (stated.tick, i64::from(stated.value)))
+                .map(|stated| (stated.tick, Some(i64::from(stated.value))))
                 .collect()
         };
         let before_values = on(&before_stated);
@@ -1006,47 +1031,65 @@ fn controller_differences(
     before: &Take,
     after: &Take,
 ) -> Result<(Vec<ControllerDifference>, Vec<UnrankedController>)> {
-    let before_stated = before.stated_controllers()?;
-    let after_stated = after.stated_controllers()?;
+    let before_stated = before.controller_events()?;
+    let after_stated = after.controller_events()?;
+    let before_resets = before.reset_events()?;
+    let after_resets = after.reset_events()?;
     let mut pairs: Vec<_> = before_stated
         .iter()
         .chain(&after_stated)
-        .map(|stated| (stated.channel, stated.controller))
+        .map(|found| (found.stated.channel, found.stated.controller))
         .collect();
     pairs.sort_unstable();
     pairs.dedup();
     let mut differences = Vec::new();
     let mut unranked = Vec::new();
-    let side = |reading: Reading| ControllerSide {
-        at_start: reading.at_start.map(|value| value as u8),
-        at_end: reading.at_end.map(|value| value as u8),
-        peak: reading.highest.map(|(value, _)| value as u8),
-        peak_at: reading.highest.map(|(_, tick)| tick),
-        lowest: reading.lowest.map(|(value, _)| value as u8),
-        lowest_at: reading.lowest.map(|(_, tick)| tick),
-    };
     for (channel, controller) in pairs {
-        let comparison = compare(
-            &crate::controller::timeline(&before_stated, channel, controller),
-            &crate::controller::timeline(&after_stated, channel, controller),
-        );
-        let scalars = |stated: &[StatedController]| -> Vec<(u32, i64)> {
-            stated
+        let before_said =
+            crate::controller::said(&before_stated, &before_resets, channel, controller);
+        let after_said = crate::controller::said(&after_stated, &after_resets, channel, controller);
+        let before_timeline = crate::controller::timeline(&before_said);
+        let after_timeline = crate::controller::timeline(&after_said);
+        let comparison = compare(&before_timeline, &after_timeline);
+        let side = |said: &[crate::Candidate<Option<u8>>],
+                    timeline: &crate::reading::Timeline<Option<u8>>,
+                    from: u32,
+                    until: Option<u32>| {
+            let scalars: Vec<_> = said
                 .iter()
-                .filter(|stated| stated.channel == channel && stated.controller == controller)
-                .map(|stated| (stated.tick, i64::from(stated.value)))
-                .collect()
+                .map(|said| (said.tick, said.value.map(i64::from)))
+                .collect();
+            let reading = reading(&scalars, from, until, &comparison.moments);
+            ControllerSide {
+                at_start: reading.at_start.map(|value| value as u8),
+                at_end: reading.at_end.map(|value| value as u8),
+                peak: reading.highest.map(|(value, _)| value as u8),
+                peak_at: reading.highest.map(|(_, tick)| tick),
+                lowest: reading.lowest.map(|(value, _)| value as u8),
+                lowest_at: reading.lowest.map(|(_, tick)| tick),
+                reset_at_start: match timeline.at(from) {
+                    crate::Reading::Reset { at } => Some(at),
+                    _ => None,
+                },
+                resets: timeline
+                    .moments
+                    .iter()
+                    .filter(|(at, _)| from < *at && until.is_none_or(|until| *at < until))
+                    .filter_map(|(_, held)| match held {
+                        crate::Reading::Reset { at } => Some(*at),
+                        _ => None,
+                    })
+                    .collect(),
+            }
         };
-        let before_values = scalars(&before_stated);
-        let after_values = scalars(&after_stated);
-        for (from, until) in comparison.differences {
+        for (from, until) in comparison.differences.iter().copied() {
             differences.push(ControllerDifference {
                 channel,
                 controller,
                 from,
                 until,
-                before: side(reading(&before_values, from, until, &comparison.moments)),
-                after: side(reading(&after_values, from, until, &comparison.moments)),
+                before: side(&before_said, &before_timeline, from, until),
+                after: side(&after_said, &after_timeline, from, until),
             });
         }
         unranked.extend(

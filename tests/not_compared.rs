@@ -165,15 +165,18 @@ fn example(kind: &str) -> Option<Example> {
                 }),
             )
         }),
-        // `B0 79 00`, Reset All Controllers, on track 1 at Tick 3000. The
-        // fixture's own CC123 is the one before.
+        // `B0 7B 00`, All Notes Off, on track 1 at Tick 3000. The fixture's
+        // own CC123 is the one before. Not #62's own reproduction, a Reset All
+        // Controllers at the same place: since #63 that reset is also read as
+        // ending the CC11 channel 0 holds, which is a determinate Controller
+        // difference, while the event itself stays disclosed here.
         "channel_mode" => example("channel mode message", 1, 2, |tracks| {
             add(
                 tracks,
                 1,
                 3000,
                 on_channel_0(MidiMessage::Controller {
-                    controller: u7::new(121),
+                    controller: u7::new(123),
                     value: u7::new(0),
                 }),
             )

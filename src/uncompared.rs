@@ -30,7 +30,9 @@ pub enum Uncompared {
     KeySignature,
     ChannelPressure,
     PolyphonicKeyPressure,
-    /// Control changes 120 to 127, which are not Controllers (#13).
+    /// Control changes 120 to 127, which are not Controllers (#13). A Reset All
+    /// Controllers is one too: what it does to a Controller the Take had set is
+    /// compared, as that Controller's reading, and the event is not (#63).
     ChannelMode,
     /// The velocity a note-off carries. The release itself is compared, as the
     /// end of its note; this byte of it is not.

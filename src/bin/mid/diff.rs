@@ -56,9 +56,24 @@ use std::path::PathBuf;
 /// Where neither Take moves off the value it begins the stretch on, the
 /// difference is one line ending in the two values, before `->` after. In
 /// `--json` each side carries `at_start`, `at_end`, `peak`, `peak_at`, `lowest`
-/// and `lowest_at`. What a row does not state is the shape: how many times a
-/// Take rose or fell between those values. For that, run `mid inspect --bars`
-/// over the span on both Takes, which lists every statement.
+/// and `lowest_at`.
+///
+/// A Reset All Controllers (CC121) is compared as a state: after one, a
+/// Controller its channel held reads as reset until the Take states it again,
+/// and a reset differs from every value and from `unstated`, while two resets
+/// agree wherever each was sent. A side says a reset where it happens — `100 ->
+/// reset at bar 3 beat 1+120 (Reset All Controllers)` — and never a value for
+/// it, because what a reset returns a Controller to is the synthesiser's. In
+/// `--json` each side also carries `reset_at_start`, the Tick of the reset in
+/// force where the span begins (`at_start` is then null), and `resets`, the
+/// Ticks of those inside the span; a side with either and a null `at_end` ends
+/// the span reset. The reset event itself is still a channel mode message not
+/// compared, and is named as one where the Takes differ in it: what a reset does
+/// beyond the Controllers a Take had set is not compared.
+///
+/// What a row does not state is the shape: how many times a Take rose or fell
+/// between those values. For that, run `mid inspect --bars` over the span on
+/// both Takes, which lists every statement.
 ///
 /// Tempo and pitch bend are compared the same way, as what is in force rather
 /// than as the events that set it. A tempo row covers the stretch the two Takes
@@ -101,6 +116,8 @@ use std::path::PathBuf;
 /// under `unranked_programs`, `unranked_controllers`, `unranked_tempos` and
 /// `unranked_bends` in JSON; Channel-state/strike sites appear separately under
 /// `unranked_state_sites`. Determinate differences elsewhere remain reported.
+/// A Controller candidate whose `value` is null is a Reset All Controllers:
+/// that track's last word at that Tick is a reset, printed `reset from track N`.
 ///
 /// A matched note reports everything about it that differs, in the fixed order
 /// pitch, start, duration, velocity — a note that was both moved and softened
@@ -323,7 +340,7 @@ fn unranked_state_rows(lines: Option<battuta::BarLines>, diff: &battuta::Diff) -
             lines,
             format!("controller channel {} CC{}", item.channel, item.controller),
             &item.interval,
-            |value| value.to_string(),
+            crate::wording::controller_value,
         ));
     }
     for interval in &diff.unranked_bends {

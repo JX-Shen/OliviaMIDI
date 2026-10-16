@@ -323,12 +323,24 @@ pub fn program_difference(difference: &ProgramDifference) -> String {
 /// where the attribution for any name printed beside it sits.
 /// Show both complete extremes when the passage states another value — #58,
 /// under ADR-0009; always disclose incomplete coverage — #42.
+///
+/// Every reset inside the passage is said beside the extremes, which are values
+/// and cannot say it themselves — #63.
 pub fn controller(lines: Option<BarLines>, held: &Controller, inside: bool) -> Vec<String> {
     let mut row = vec![
         channel(held.channel),
         controller_number(held.controller),
-        state_reading(&held.value, |value| value.to_string()),
+        match &held.value {
+            battuta::Reading::Unstated => "unstated".to_string(),
+            battuta::Reading::Determinate { value } => value.to_string(),
+            battuta::Reading::Indeterminate { candidates } => format!(
+                "indeterminate ({})",
+                state_candidates(candidates, controller_value)
+            ),
+            battuta::Reading::Reset { at } => reset(lines, *at),
+        },
     ];
+    let mut said = Vec::new();
     use battuta::ControllerExtreme::{Complete, Incomplete};
     match (held.peak, held.lowest) {
         (
@@ -340,19 +352,40 @@ pub fn controller(lines: Option<BarLines>, held: &Controller, inside: bool) -> V
                 value: lowest,
                 at: lowest_at,
             },
-        ) if inside => row.push(format!(
+        ) if inside => said.push(format!(
             "peak {peak} at {}, lowest {lowest} at {}",
             at(lines, peak_at),
             at(lines, lowest_at)
         )),
         (Incomplete, _) | (_, Incomplete) => {
-            row.push("peak and lowest not summarised across unranked intervals".to_string())
+            said.push("peak and lowest not summarised across unranked intervals".to_string())
         }
         _ => {}
+    }
+    said.extend(held.resets.iter().map(|&tick| reset(lines, tick)));
+    if !said.is_empty() {
+        row.push(said.join(", "));
     }
     row
 }
 
+/// A reading a Reset All Controllers left: where the reset is, by the message's
+/// own name, and no value — #63.
+pub fn reset(lines: Option<BarLines>, tick: u32) -> String {
+    format!("reset at {} (Reset All Controllers)", at(lines, tick))
+}
+
+/// What a Controller candidate holds: a value, or `reset` where the track's
+/// last word at that Tick is a Reset All Controllers — #63.
+pub fn controller_value(value: &Option<u8>) -> String {
+    match value {
+        Some(value) => value.to_string(),
+        None => "reset".to_string(),
+    }
+}
+
+/// A reset is placed in Ticks here, having no Bar lines to hand; `controller`,
+/// which is where one is read, places it in Bars.
 pub fn state_reading<T>(reading: &battuta::Reading<T>, format: impl Fn(&T) -> String) -> String {
     match reading {
         battuta::Reading::Unstated => "unstated".to_string(),
@@ -360,6 +393,7 @@ pub fn state_reading<T>(reading: &battuta::Reading<T>, format: impl Fn(&T) -> St
         battuta::Reading::Indeterminate { candidates } => {
             format!("indeterminate ({})", state_candidates(candidates, format))
         }
+        battuta::Reading::Reset { at } => reset(None, *at),
     }
 }
 
@@ -452,6 +486,7 @@ pub fn bend(lines: Option<BarLines>, held: &battuta::Bend, inside: bool) -> Vec<
         battuta::Reading::Indeterminate { candidates } => {
             format!("indeterminate ({})", bend_candidates(candidates))
         }
+        battuta::Reading::Reset { at } => reset(lines, *at),
     };
     match held.extremes {
         battuta::BendExtremes::Incomplete => {
@@ -625,16 +660,16 @@ pub fn stated_controller(lines: Option<BarLines>, stated: &StatedController) -> 
 /// reading — an `unstated` side still says the extremes it reaches inside the
 /// span and where the span leaves it. That silence is the fault #32 inherited
 /// from this row and fixed one state over.
+///
+/// A reset is said where it happens, among the extremes in time order, and in
+/// place of a value where the span begins on one. A side ending reset says no
+/// `ends at`; its last clause is the reset — #63.
 pub fn controller_rows(
     lines: Option<BarLines>,
     difference: &ControllerDifference,
 ) -> Vec<Vec<String>> {
-    let side = |side: &ControllerSide| Side {
-        at_start: match side.at_start {
-            None => "unstated".to_string(),
-            Some(at_start) => at_start.to_string(),
-        },
-        excursions: extremes(
+    let side = |side: &ControllerSide| {
+        let mut excursions = extremes(
             [(side.peak, side.peak_at), (side.lowest, side.lowest_at)].map(
                 |(reached, reached_at)| {
                     let (reached, reached_at) = (reached?, reached_at?);
@@ -646,9 +681,18 @@ pub fn controller_rows(
                     })
                 },
             ),
-        ),
-        at_end: side.at_end.map(|at_end| at_end.to_string()),
-        ends_elsewhere: side.at_end != side.at_start,
+        );
+        excursions.extend(side.resets.iter().map(|&tick| (tick, reset(lines, tick))));
+        Side {
+            at_start: match (side.reset_at_start, side.at_start) {
+                (Some(tick), _) => reset(lines, tick),
+                (None, None) => "unstated".to_string(),
+                (None, Some(at_start)) => at_start.to_string(),
+            },
+            excursions,
+            at_end: side.at_end.map(|at_end| at_end.to_string()),
+            ends_elsewhere: side.at_end != side.at_start,
+        }
     };
     span_rows(
         "controller",

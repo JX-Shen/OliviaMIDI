@@ -38,6 +38,15 @@ use std::path::PathBuf;
 /// as Controllers; `mid` does not convert them into a bend in semitones. Where
 /// the file states no range, it depends on the Rig.
 ///
+/// After a Reset All Controllers (CC121), each Controller its channel held reads
+/// as reset, with where the reset is, until the Take states that Controller
+/// again: `reset at bar 3 beat 1+120 (Reset All Controllers)`. A reset reading
+/// states no value, because what a reset returns a Controller to is the
+/// synthesiser's. A reset inside the passage is said on the Controller's row,
+/// beside its extremes. In JSON the reading is `{"kind": "reset", "at": TICK}`,
+/// a Controller's `resets` lists the Ticks of those inside the passage, and its
+/// `peak` and `lowest` are `no_value` where the passage holds no value at all.
+///
 /// Program, Controller and Bend readings are unstated, determinate, or indeterminate. Conflicting values
 /// retain their source tracks and Ticks, including conflicts before the requested
 /// passage that have not been overwritten. A passage containing such intervals
@@ -46,7 +55,9 @@ use std::path::PathBuf;
 /// coverage, and `bends[].unranked` carries the intervals and candidate sources.
 /// Programs use `program.kind`; Controllers use `value.kind`, and `peak.kind`
 /// and `lowest.kind` for the two extremes.
-/// Both carry `unranked` intervals. `unranked_tempos` lists Tempo conflicts
+/// Both carry `unranked` intervals. A Controller candidate whose `value` is
+/// null is a Reset All Controllers: that track's last word at that Tick is a
+/// reset, printed `reset from track N`. `unranked_tempos` lists Tempo conflicts
 /// affecting the passage, including those inherited from earlier statements.
 ///
 /// The Program and Controller blocks answer even when the answer is nothing,
@@ -267,7 +278,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
                     lines,
                     format!("controller channel {} CC{}", held.channel, held.controller),
                     interval,
-                    |value| value.to_string(),
+                    crate::wording::controller_value,
                 )]);
             }
         }

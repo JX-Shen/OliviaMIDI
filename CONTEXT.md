@@ -416,12 +416,27 @@ the expression a phrase is shaped with is in the file; what that shaping
 
 Not every control change message is one. Numbers 120 to 127 are channel mode
 messages — All Notes Off and its neighbours — which ride on the same event type
-and are instructions rather than settings: they happen and are over, and leave
-no value in force to be reported, and reporting what is in force is the whole of
-what this tool does with channel state (ADR-0007). A Take's own are preserved
-untouched and read as nothing, which is a hole left deliberately — see #13.
-The hole is not hidden: where two Takes differ in them, `diff` says they were
-not compared (#62).
+and are instructions rather than settings. None of them is a Controller, and no
+Edit reaches one.
+
+One of them still changes what a Controller reading can say. Reset All
+Controllers (CC121) sets no value of its own, but it ends the value in force of
+every Controller its channel holds, so a reading taken across it is not empty
+but stale. After one, each Controller the channel held reads as **reset**, naming
+where the reset is, until the Take states that Controller again — a fourth
+reading beside unstated, determinate and indeterminate. A reset reading asserts
+no value: what each Controller returns to is the synthesiser's to decide, and so
+the **Rig**'s; that the reset was sent is in the file. A Controller nothing had
+set before the reset is still unstated after it. See #63, which corrected #13 on
+this.
+
+The others happen and are over as far as any Controller is concerned, and leave
+nothing a Controller reading has to answer for. A Take's own, CC121 among them,
+are preserved untouched, and beyond what a reset does to a Controller reading
+they are read as nothing, which is a hole left deliberately — see #13. The hole
+is not hidden: where two Takes differ in them, `diff` says they were not
+compared (#62) — a CC121 too, because a reset does more than a Controller
+reading can say.
 
 Musically it is a curve — one crescendo is dozens of events — but the curve is
 not a thing the file holds, and so is not a thing this project names. Nothing

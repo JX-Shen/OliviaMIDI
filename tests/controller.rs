@@ -264,6 +264,7 @@ fn hands_an_agent_the_state_and_every_event() {
             "peak": {"kind":"complete", "value":127, "at":3360},
             "unranked": [],
             "lowest": {"kind":"complete", "value":0, "at":4320},
+            "resets": [],
         })]
     );
     assert_eq!(
@@ -351,13 +352,16 @@ fn holds_the_last_of_two_values_written_at_one_address() {
             "peak": {"kind":"complete", "value":96, "at":2760},
             "unranked": [],
             "lowest": {"kind":"complete", "value":40, "at":1440},
+            "resets": [],
         })),
         "the state does not hold the second of the two values: {controllers:#?}"
     );
 }
 
-/// A channel mode message is not a Controller, and `inspect` never mentions one.
-/// `diff` names one only to say it was not compared (#62).
+/// A channel mode message is not a Controller, and `inspect` never mentions one
+/// — all but a Reset All Controllers, which a Controller reading answers for
+/// (#63, in `tests/reset.rs`). `diff` names one only to say it was not
+/// compared (#62).
 ///
 /// `EXPRESSIVE` states CC123 — All Notes Off — inside Bar 4, so this passage
 /// contains it and the silence is the rule at work rather than a Bar range
@@ -1719,7 +1723,9 @@ fn a_controller_difference_with_no_interior_stays_on_one_row() {
 /// #29's compatibility constraint has nothing to reach here.
 ///
 /// #58 then added `lowest` and `lowest_at` beside them, and only added them:
-/// the four fields above keep their names and their values.
+/// the four fields above keep their names and their values. #63 added
+/// `reset_at_start` and `resets` the same way, null and empty for a Take that
+/// sends no Reset All Controllers.
 #[test]
 fn the_controller_payload_is_unchanged_by_the_new_rows() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -1756,10 +1762,12 @@ fn the_controller_payload_is_unchanged_by_the_new_rows() {
             "before": {
                 "at_start": null, "at_end": 100, "peak": 100, "peak_at": 2880,
                 "lowest": 100, "lowest_at": 2880,
+                "reset_at_start": null, "resets": [],
             },
             "after": {
                 "at_start": 40, "at_end": 40, "peak": 40, "peak_at": 0,
                 "lowest": 40, "lowest_at": 0,
+                "reset_at_start": null, "resets": [],
             },
         }])
     );
@@ -1815,10 +1823,12 @@ controller  bar 2 beat 2+240 until bar 3 beat 2  channel 2  CC11 (expression con
             "before": {
                 "at_start": 80, "at_end": 80, "peak": 80, "peak_at": 2160,
                 "lowest": 80, "lowest_at": 2160,
+                "reset_at_start": null, "resets": [],
             },
             "after": {
                 "at_start": 70, "at_end": 70, "peak": 70, "peak_at": 2160,
                 "lowest": 50, "lowest_at": 2640,
+                "reset_at_start": null, "resets": [],
             },
         }])
     );
@@ -1898,6 +1908,7 @@ fn inspect_reports_the_lowest_value_a_passage_holds_and_where() {
             "peak": {"kind":"complete", "value":80, "at":1440},
             "unranked": [],
             "lowest": {"kind":"complete", "value":50, "at":2640},
+            "resets": [],
         })),
         "{controllers:#?}"
     );

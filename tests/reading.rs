@@ -123,9 +123,11 @@ fn same_track_final_values_and_cross_track_agreement_remain_determinate() {
                 read.programs_in(None).unwrap().programs[0].program,
                 expected
             ),
+            // A Controller's candidates may be a reset, so its reading is
+            // typed apart — #63.
             _ => assert_eq!(
                 read.controllers_in(None).unwrap().controllers[0].value,
-                expected
+                battuta::Reading::Determinate { value: high as u8 }
             ),
         }
         let same = battuta::diff::diff(&read, &battuta::Take::read(&b).unwrap(), None).unwrap();

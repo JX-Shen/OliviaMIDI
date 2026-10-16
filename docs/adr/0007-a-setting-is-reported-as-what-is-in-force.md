@@ -77,9 +77,14 @@ ranked against. See #42.
 **A thing with no value in force falls outside every command by
 construction.** MIDI's channel mode messages — All Notes Off and its neighbours
 — ride on the control change event type and are instructions rather than
-settings: they happen and are over. Nothing here has anything to say about them,
-which is a hole rather than an oversight, and it is recorded and pinned by a
-fixture in #13.
+settings, so none of them is reported as one. One of them still bears on a
+setting: Reset All Controllers ends the value in force of every Controller its
+channel holds, so a Controller reading taken across one reports the reset and
+where it is, and no value, because the value it leaves is the Rig's (#63). The
+rest happen and are over. Nothing here has anything to say about them, which is
+a hole rather than an oversight, and it is recorded and pinned by a fixture in
+#13. That `diff` names them where two Takes differ in them is ADR-0009's
+disclosure, not a reading (#62).
 
 **ADR-0004 carries an amendment because of this record.** It had predicted that
 summarising controller data would be an inference needing a parameter. The
@@ -88,8 +93,9 @@ Consequences now say which.
 
 The judgements arguing from this are #12, which made the choice for Programs;
 #13, which made it for Controllers and found the second case that turned it into
-a principle; and #32, which made it for tempo and pitch bend and is what
-occasioned the first amendment below.
+a principle; #32, which made it for tempo and pitch bend and is what
+occasioned the first amendment below; and #63, which found a channel mode
+message that ends a setting and occasioned the third.
 
 ## Amended by #32
 
@@ -136,3 +142,25 @@ inference and needs no parameter, and the sentence now names both. Amended
 
 What a summary owes about its own incompleteness is not this record's subject:
 it reaches summaries that report no setting at all, and it is ADR-0009.
+
+## Amended by #63
+
+One sentence was wrong, and it was not the principle.
+
+**It said every channel mode message happens and is over, and one does not.**
+*Consequences* put all of 120 to 127 outside every command, on the ground that
+an instruction leaves nothing in force. That holds for what each of them *is* —
+none is a setting — and failed for what one of them *does*. Reset All
+Controllers ends the value in force of every Controller its channel holds, so
+`mid inspect` went on reporting the value stated before a CC121 as in force
+after it, `mid diff` said nothing about a CC121 that changed what a Controller
+held, and `mid play` heard the reset all along. The reading across it was not
+empty but stale, which is this record's own failure — the value reported was not
+the value in force.
+
+The principle needed no change: a reading reports what is in force, and after a
+reset that is *reset*, with where it happened, and no value — the value it
+leaves is the synthesiser's, so asserting one would be describing the Piece with
+a Rig fact. The sentence now separates what a channel mode message is from what
+CC121 does. The others are still read as nothing, and the hole #13 pinned is
+still there for them. Amended 2026-10-16.
