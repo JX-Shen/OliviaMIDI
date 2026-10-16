@@ -37,9 +37,9 @@ pub use controller::{
     spec_name, Controller, ControllerExtreme, Controllers, StatedController, FIRST_CHANNEL_MODE,
 };
 pub use diff::{
-    BendDifference, BendSide, Change, ControllerDifference, ControllerSide, Diff, NoteChange,
-    ProgramDifference, TempoDifference, TempoSide, UnrankedBend, UnrankedController,
-    UnrankedProgram, UnrankedStateSite,
+    BarLinesOf, BendDifference, BendSide, Change, ControllerDifference, ControllerSide, Diff,
+    NoteChange, Positions, ProgramDifference, TempoDifference, TempoSide, UnrankedBend,
+    UnrankedController, UnrankedProgram, UnrankedStateSite,
 };
 pub use edit::{apply, apply_allowing, Edit, EditSet, Site};
 pub use error::{Error, Result};

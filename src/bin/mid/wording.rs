@@ -369,27 +369,23 @@ pub fn indeterminate_span<T>(
 }
 
 pub fn unranked_comparison<T>(
-    before_lines: Option<BarLines>,
-    after_lines: Option<BarLines>,
+    lines: Option<BarLines>,
     address: String,
     interval: &battuta::UnrankedComparison<T>,
     format: impl Fn(&T) -> String,
 ) -> Vec<Vec<String>> {
-    [
-        ("before", before_lines, &interval.before),
-        ("after", after_lines, &interval.after),
-    ]
-    .into_iter()
-    .filter(|(_, _, candidates)| !candidates.is_empty())
-    .map(|(side, lines, candidates)| {
-        vec![
-            format!("unranked {address}"),
-            side.to_string(),
-            span(lines, interval.from, interval.until),
-            format!("not compared: {}", state_candidates(candidates, &format)),
-        ]
-    })
-    .collect()
+    [("before", &interval.before), ("after", &interval.after)]
+        .into_iter()
+        .filter(|(_, candidates)| !candidates.is_empty())
+        .map(|(side, candidates)| {
+            vec![
+                format!("unranked {address}"),
+                side.to_string(),
+                span(lines, interval.from, interval.until),
+                format!("not compared: {}", state_candidates(candidates, &format)),
+            ]
+        })
+        .collect()
 }
 
 /// How far a channel is bent where the passage begins, and how far the passage
@@ -594,11 +590,10 @@ pub fn stated_controller(lines: Option<BarLines>, stated: &StatedController) -> 
 /// span and where the span leaves it. That silence is the fault #32 inherited
 /// from this row and fixed one state over.
 pub fn controller_rows(
-    before_lines: Option<BarLines>,
-    after_lines: Option<BarLines>,
+    lines: Option<BarLines>,
     difference: &ControllerDifference,
 ) -> Vec<Vec<String>> {
-    let side = |lines, side: &ControllerSide| Side {
+    let side = |side: &ControllerSide| Side {
         at_start: match side.at_start {
             None => "unstated".to_string(),
             Some(at_start) => at_start.to_string(),
@@ -621,13 +616,13 @@ pub fn controller_rows(
     };
     span_rows(
         "controller",
-        span(before_lines, difference.from, difference.until),
+        span(lines, difference.from, difference.until),
         vec![
             channel(difference.channel),
             controller_number(difference.controller),
         ],
-        side(before_lines, &difference.before),
-        side(after_lines, &difference.after),
+        side(&difference.before),
+        side(&difference.after),
     )
 }
 
@@ -769,13 +764,9 @@ fn span_rows(
 /// no tempo is not a Take at 120. It is not a reason to stop reading, either —
 /// an `unstated` side still says every extreme reached inside the span, since a
 /// span the other Take opens is a span this one may still move about in.
-pub fn tempo_rows(
-    before_lines: Option<BarLines>,
-    after_lines: Option<BarLines>,
-    difference: &TempoDifference,
-) -> Vec<Vec<String>> {
+pub fn tempo_rows(lines: Option<BarLines>, difference: &TempoDifference) -> Vec<Vec<String>> {
     let micros = beats_alone_collide(difference);
-    let side = |lines, side: &TempoSide| {
+    let side = |side: &TempoSide| {
         let start = side.at_start.map(|start| start.micros_per_quarter);
         Side {
             at_start: match side.at_start {
@@ -807,10 +798,10 @@ pub fn tempo_rows(
     };
     span_rows(
         "tempo",
-        span(before_lines, difference.from, difference.until),
+        span(lines, difference.from, difference.until),
         Vec::new(),
-        side(before_lines, &difference.before),
-        side(after_lines, &difference.after),
+        side(&difference.before),
+        side(&difference.after),
     )
 }
 
@@ -879,12 +870,8 @@ fn bpm(bpm: f64) -> String {
 /// carries two extremes: a bend is signed about a centre MIDI fixes, so a dive
 /// below the note and a rise above it are two facts and neither stands in for
 /// the other.
-pub fn bend_rows(
-    before_lines: Option<BarLines>,
-    after_lines: Option<BarLines>,
-    difference: &BendDifference,
-) -> Vec<Vec<String>> {
-    let side = |lines, side: &BendSide| Side {
+pub fn bend_rows(lines: Option<BarLines>, difference: &BendDifference) -> Vec<Vec<String>> {
+    let side = |side: &BendSide| Side {
         at_start: match side.at_start {
             None => "unstated".to_string(),
             Some(at_start) => at_start.to_string(),
@@ -909,10 +896,10 @@ pub fn bend_rows(
     };
     span_rows(
         "bend",
-        span(before_lines, difference.from, difference.until),
+        span(lines, difference.from, difference.until),
         vec![channel(difference.channel)],
-        side(before_lines, &difference.before),
-        side(after_lines, &difference.after),
+        side(&difference.before),
+        side(&difference.after),
     )
 }
 
@@ -994,6 +981,20 @@ pub fn unranked(lines: Option<BarLines>, row: &battuta::Unranked) -> String {
             against,
         ),
     }
+}
+
+/// That the two Takes of a diff have different Bar lines, and which every
+/// position it prints is read against: the before Take's, or Ticks where it has
+/// none — #64. Only that the time signatures differ, never how: #62 names them
+/// as not compared.
+pub fn frame(before_lines: Option<BarLines>) -> String {
+    match before_lines {
+        Some(_) => "time signatures differ; every position is in the before Take's Bar lines",
+        None => {
+            "time signatures differ; every position is a Tick, as the before Take has no Bar lines"
+        }
+    }
+    .to_string()
 }
 
 /// The kinds a diff did not compare and the two Takes differ in, each with how

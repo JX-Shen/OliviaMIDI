@@ -70,6 +70,32 @@ pub struct Diff {
     /// Takes differ — #62. Not differences, and `is_empty` does not consult it:
     /// it says what a diff that found nothing did not look for.
     pub not_compared: Vec<crate::NotCompared>,
+
+    /// Whose Bar lines a position read from this diff is placed against — #64.
+    /// Not a difference either, and `is_empty` does not consult it.
+    pub positions: Positions,
+}
+
+/// How a diff's Ticks are read as positions.
+///
+/// Every Tick here is the truth and is never converted; a position is one
+/// reading of a Tick, against one Take's Bar lines. Both Takes' Ticks are read
+/// against the same Take's, so that one position names one Tick throughout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Positions {
+    pub bar_lines: BarLinesOf,
+    /// Whether the two Takes' Bar lines differ, so that a Tick of the after
+    /// Take read against its own would be placed somewhere else. Two Takes
+    /// whose Bar lines differ differ in their time signatures; a Take with no
+    /// Bar lines and one with some differ.
+    pub bar_lines_differ: bool,
+}
+
+/// Which Take's Bar lines: the before Take's, always — #64.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BarLinesOf {
+    Before,
 }
 
 /// An uncomparable Bend interval. An empty side has no value conflict.
@@ -478,6 +504,10 @@ pub fn diff(before: &Take, after: &Take, tolerance: Option<u32>) -> Result<Diff>
         unranked_bends,
         unranked_state_sites: state_sites(before, after, &before_notes, &after_notes)?,
         not_compared,
+        positions: Positions {
+            bar_lines: BarLinesOf::Before,
+            bar_lines_differ: before.bar_lines() != after.bar_lines(),
+        },
     })
 }
 

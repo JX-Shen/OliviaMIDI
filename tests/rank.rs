@@ -386,6 +386,8 @@ fn the_two_new_payload_fields_are_additive() {
             "controllers",
             // #62's, which says what was not compared rather than what differs.
             "not_compared",
+            // #64's, which says whose Bar lines a position is read against.
+            "positions",
             "programs",
             "rank_disagreements",
             "removed",
