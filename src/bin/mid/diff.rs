@@ -63,7 +63,10 @@ use std::path::PathBuf;
 /// and a reset differs from every value and from `unstated`, while two resets
 /// agree wherever each was sent. A side says a reset where it happens — `100 ->
 /// reset at bar 3 beat 1+120 (Reset All Controllers)` — and never a value for
-/// it, because what a reset returns a Controller to is the synthesiser's. In
+/// it, because what a reset returns a Controller to is the synthesiser's. A
+/// side's extremes and resets are said in the order they happen, and an extreme
+/// reached after a reset is named `peak` or `lowest` rather than `up to` or
+/// `down to`: the value the side began on is no longer in force there. In
 /// `--json` each side also carries `reset_at_start`, the Tick of the reset in
 /// force where the span begins (`at_start` is then null), and `resets`, the
 /// Ticks of those inside the span; a side with either and a null `at_end` ends

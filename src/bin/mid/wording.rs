@@ -325,7 +325,7 @@ pub fn program_difference(difference: &ProgramDifference) -> String {
 /// under ADR-0009; always disclose incomplete coverage — #42.
 ///
 /// Every reset inside the passage is said beside the extremes, which are values
-/// and cannot say it themselves — #63.
+/// and cannot say it themselves — #63 — and in time order among them (#69).
 pub fn controller(lines: Option<BarLines>, held: &Controller, inside: bool) -> Vec<String> {
     let mut row = vec![
         channel(held.channel),
@@ -341,6 +341,7 @@ pub fn controller(lines: Option<BarLines>, held: &Controller, inside: bool) -> V
         },
     ];
     let mut said = Vec::new();
+    let mut clauses: Vec<(u32, String)> = Vec::new();
     use battuta::ControllerExtreme::{Complete, Incomplete};
     match (held.peak, held.lowest) {
         (
@@ -352,17 +353,26 @@ pub fn controller(lines: Option<BarLines>, held: &Controller, inside: bool) -> V
                 value: lowest,
                 at: lowest_at,
             },
-        ) if inside => said.push(format!(
-            "peak {peak} at {}, lowest {lowest} at {}",
-            at(lines, peak_at),
-            at(lines, lowest_at)
-        )),
+        ) if inside => clauses.extend([
+            (peak_at, format!("peak {peak} at {}", at(lines, peak_at))),
+            (
+                lowest_at,
+                format!("lowest {lowest} at {}", at(lines, lowest_at)),
+            ),
+        ]),
         (Incomplete, _) | (_, Incomplete) => {
             said.push("peak and lowest not summarised across unranked intervals".to_string())
         }
         _ => {}
     }
-    said.extend(held.resets.iter().map(|&tick| reset(lines, tick)));
+    // A row with no reset keeps #58's `peak …, lowest …`; one with a reset
+    // states every clause in time order (#69).
+    if held.resets.is_empty() {
+        said.extend(clauses.into_iter().map(|(_, clause)| clause));
+    } else {
+        clauses.extend(held.resets.iter().map(|&tick| (tick, reset(lines, tick))));
+        said.extend(in_time_order(clauses));
+    }
     if !said.is_empty() {
         row.push(said.join(", "));
     }
@@ -498,7 +508,7 @@ pub fn bend(lines: Option<BarLines>, held: &battuta::Bend, inside: bool) -> Vec<
             furthest_up,
             furthest_up_at,
         } if inside => {
-            let went: Vec<String> = extremes(
+            let went = in_time_order(extremes(
                 [
                     (furthest_up, furthest_up_at),
                     (furthest_down, furthest_down_at),
@@ -511,10 +521,8 @@ pub fn bend(lines: Option<BarLines>, held: &battuta::Bend, inside: bool) -> Vec<
                         )
                     })
                 }),
-            )
-            .into_iter()
-            .map(|(_, clause)| clause)
-            .collect();
+                &[],
+            ));
             if !went.is_empty() {
                 cell = format!("{cell} ({})", went.join(", "));
             }
@@ -663,7 +671,8 @@ pub fn stated_controller(lines: Option<BarLines>, stated: &StatedController) -> 
 ///
 /// A reset is said where it happens, among the extremes in time order, and in
 /// place of a value where the span begins on one. A side ending reset says no
-/// `ends at`; its last clause is the reset — #63.
+/// `ends at`; its last clause is the reset — #63. An extreme after a reset has
+/// no direction — see `extremes` (#69).
 pub fn controller_rows(
     lines: Option<BarLines>,
     difference: &ControllerDifference,
@@ -681,6 +690,7 @@ pub fn controller_rows(
                     })
                 },
             ),
+            &side.resets,
         );
         excursions.extend(side.resets.iter().map(|&tick| (tick, reset(lines, tick))));
         Side {
@@ -721,10 +731,10 @@ pub fn span(lines: Option<BarLines>, from: u32, until: Option<u32>) -> String {
 }
 
 /// One side of a span difference, and everything it has to say: what it holds
-/// where the span begins, every extreme it reaches inside, and what it holds
-/// where the span ends.
+/// where the span begins, every extreme it reaches and every reset inside, and
+/// what it holds where the span ends.
 ///
-/// The excursions are in time order rather than a fixed up-then-down, because a
+/// The excursions are in time order, through `in_time_order`, rather than a fixed up-then-down, because a
 /// reader follows a stretch forwards and two clauses in the order they happened
 /// are two facts rather than a shape. Saying which of them moved furthest, or
 /// calling the pair a rise or a fall, would be the inference ADR-0007 rejects;
@@ -751,7 +761,7 @@ impl Side {
     fn in_full(self) -> String {
         let interior = self.has_interior();
         let mut said = self.at_start;
-        for (_, excursion) in self.excursions {
+        for excursion in in_time_order(self.excursions) {
             said.push_str(", ");
             said.push_str(&excursion);
         }
@@ -778,21 +788,37 @@ impl Side {
 /// dropped for equalling where the span began, so there is a point to have moved
 /// from and the direction is read off it.
 ///
-/// In time order, for the reason `Side` gives. The order is decided here rather
-/// than by each caller so that `inspect`'s Bend row and `diff`'s sides cannot
-/// come to disagree about it (#68).
-fn extremes(reached: [Option<(u32, String)>; 2]) -> Vec<(u32, String)> {
+/// An extreme reached after one of `resets` has no such point: the reset ended
+/// the value the side began on. It is named `peak` or `lowest`, as `inspect`
+/// names a Controller's extremes, and carries no verb (#69).
+///
+/// Unordered: `in_time_order` orders them, with whatever else the side says.
+fn extremes(reached: [Option<(u32, String)>; 2], resets: &[u32]) -> Vec<(u32, String)> {
     let [up, down] = reached;
-    let mut clauses: Vec<(u32, String)> = match (up, down) {
+    let named = |(tick, said): (u32, String), verb: &str, name: &str| {
+        let after_reset = resets.iter().any(|&reset| reset < tick);
+        (
+            tick,
+            format!("{} {said}", if after_reset { name } else { verb }),
+        )
+    };
+    match (up, down) {
         (Some(up), Some(down)) if up == down => vec![(up.0, format!("reaching {}", up.1))],
         (up, down) => up
-            .map(|(tick, said)| (tick, format!("up to {said}")))
+            .map(|up| named(up, "up to", "peak"))
             .into_iter()
-            .chain(down.map(|(tick, said)| (tick, format!("down to {said}"))))
+            .chain(down.map(|down| named(down, "down to", "lowest")))
             .collect(),
-    };
+    }
+}
+
+/// Clauses each placed at a Tick, in the order they happen. The one place a
+/// row's clauses are ordered, so that `inspect`'s rows and `diff`'s sides cannot
+/// come to disagree about it (#68, #69). Stable: clauses at one Tick keep the
+/// order they were given in.
+fn in_time_order(mut clauses: Vec<(u32, String)>) -> Vec<String> {
     clauses.sort_by_key(|&(tick, _)| tick);
-    clauses
+    clauses.into_iter().map(|(_, clause)| clause).collect()
 }
 
 /// The rows one span difference occupies.
@@ -871,6 +897,7 @@ pub fn tempo_rows(lines: Option<BarLines>, difference: &TempoDifference) -> Vec<
                         )
                     })
                 }),
+                &[],
             ),
             at_end: side.at_end.map(|at_end| tempo_reading(at_end, micros)),
             ends_elsewhere: side.at_end.map(|at_end| at_end.micros_per_quarter) != start,
@@ -970,6 +997,7 @@ pub fn bend_rows(lines: Option<BarLines>, difference: &BendDifference) -> Vec<Ve
                     )
                 })
             }),
+            &[],
         ),
         at_end: side.at_end.map(|at_end| at_end.to_string()),
         ends_elsewhere: side.at_end != side.at_start,

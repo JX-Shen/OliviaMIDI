@@ -347,6 +347,98 @@ not compared: channel mode message (before 0, after 1)
     );
 }
 
+/// CC11 at 10 from Tick 300, a reset at Tick 600 and CC11 at 5 from Tick 900,
+/// on one track: Bar 1 beat 1+300, beat 2+120 and beat 2+420 in 4/4 at 480 PPQ.
+fn ten_reset_five(dir: &Path) -> PathBuf {
+    take(
+        dir,
+        "ten-reset-five.mid",
+        &[vec![
+            (0, strike(60)),
+            (300, control(0, 11, 10)),
+            (480, release(60)),
+            (600, reset(0)),
+            (900, control(0, 11, 5)),
+        ]],
+    )
+}
+
+/// A side's clauses are stated in the order they happen, resets among the
+/// extremes. And an extreme reached after a reset is not a fall or a rise from
+/// the value the side began on, which the reset ended: it is named as the
+/// lowest, with no direction — #69's review of #63 and #68.
+#[test]
+fn a_span_side_states_its_reset_in_time_order_and_no_fall_across_it() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = take(
+        dir.path(),
+        "twenty.mid",
+        &[vec![
+            (0, strike(60)),
+            (300, control(0, 11, 20)),
+            (480, release(60)),
+        ]],
+    );
+    let after = ten_reset_five(dir.path());
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path"),
+        ]),
+        "\
+controller  bar 1 beat 1+300 onwards  channel 0  CC11 (expression controller)
+  before    20
+  after     10, reset at bar 1 beat 2+120 (Reset All Controllers), lowest 5 at bar 1 beat 2+420, ends at 5
+not compared: channel mode message (before 0, after 1)
+"
+    );
+
+    // An extreme before the reset keeps its direction: the value it moved from
+    // is still in force there.
+    let dips_then_resets = take(
+        dir.path(),
+        "dips-then-resets.mid",
+        &[vec![
+            (0, strike(60)),
+            (300, control(0, 11, 10)),
+            (450, control(0, 11, 5)),
+            (480, release(60)),
+            (600, reset(0)),
+            (900, control(0, 11, 50)),
+        ]],
+    );
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            dips_then_resets.to_str().expect("a path"),
+        ]),
+        "\
+controller  bar 1 beat 1+300 onwards  channel 0  CC11 (expression controller)
+  before    20
+  after     10, down to 5 at bar 1 beat 1+450, reset at bar 1 beat 2+120 (Reset All Controllers), peak 50 at bar 1 beat 2+420, ends at 50
+not compared: channel mode message (before 0, after 1)
+"
+    );
+}
+
+/// `inspect`'s Controller row states its extremes and its resets in the order
+/// they happen, through the same ordering as `diff`'s sides.
+#[test]
+fn an_inspect_row_states_its_reset_in_time_order() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = ten_reset_five(dir.path());
+
+    assert_eq!(
+        controller_line(&take, "1:1"),
+        "channel 0  CC11 (expression controller)  unstated  \
+         peak 10 at bar 1 beat 1+300, reset at bar 1 beat 2+120 (Reset All Controllers), \
+         lowest 5 at bar 1 beat 2+420"
+    );
+}
+
 /// Two resets are one state wherever each was sent, as two equal values are
 /// wherever each was stated: a second reset over one already in force is no
 /// Controller difference.
