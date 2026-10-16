@@ -68,7 +68,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
             "length".to_string(),
             match info.length_bars {
                 Some(bars) => format!("{} ticks ({bars} bars)", info.length_ticks),
-                None => format!("{} ticks ({})", info.length_ticks, no_bars(&info)),
+                None => format!("{} ticks ({})", info.length_ticks, no_bars(info.no_bars)),
             },
         ],
     ]);
@@ -76,12 +76,15 @@ pub fn run(args: Args) -> battuta::Result<()> {
 }
 
 /// Why a Take has no Bar count, in terms of the time signature row above it.
-fn no_bars(info: &battuta::Info) -> &'static str {
-    match (info.time_signature_stated_from, info.time_signature_changes) {
-        (None, _) => "bars need one stated time signature",
-        (Some(1..), _) => "bars need a time signature stated at tick 0",
-        (Some(_), 1..) => "bars need one time signature throughout",
-        _ => "bars cannot be derived; mid inspect --bars says why",
+fn no_bars(reason: Option<battuta::NoBars>) -> &'static str {
+    use battuta::NoBars;
+    match reason {
+        Some(NoBars::NoTimeSignature) => "bars need one stated time signature",
+        Some(NoBars::TimeSignatureStartsLate) => "bars need a time signature stated at tick 0",
+        Some(NoBars::TimeSignatureChanges) => "bars need one time signature throughout",
+        Some(NoBars::TimeSignatureWithNoBeats | NoBars::BarNotWholeTicks) | None => {
+            "bars cannot be derived; mid inspect --bars says why"
+        }
     }
 }
 

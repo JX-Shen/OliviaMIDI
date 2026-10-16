@@ -55,6 +55,25 @@ pub struct Info {
     /// governing the whole of it. Absent rather than guessed when it does not —
     /// `mid inspect --bars` is where the reason and its remedy are.
     pub length_bars: Option<u32>,
+    /// Why `length_bars` is absent, absent where it is not. Not in `--json`,
+    /// whose fields above already say it.
+    #[serde(skip)]
+    pub no_bars: Option<NoBars>,
+}
+
+/// Why a Take has no Bar lines: each of the refusals `--bars` reports, as data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoBars {
+    /// `Error::NoTimeSignature`.
+    NoTimeSignature,
+    /// `Error::TimeSignatureStartsLate`.
+    TimeSignatureStartsLate,
+    /// `Error::TimeSignatureChanges`.
+    TimeSignatureChanges,
+    /// `Error::TimeSignatureWithNoBeats`.
+    TimeSignatureWithNoBeats,
+    /// `Error::BarNotWholeTicks`.
+    BarNotWholeTicks,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
@@ -374,6 +393,22 @@ impl Take {
             length_ticks = length_ticks.max(tick);
         }
 
+        let (length_bars, no_bars) = match self.bar_ticks(ppq) {
+            Ok(bar_ticks) => (Some(crate::bars::bar_count(length_ticks, bar_ticks)), None),
+            Err(refused) => (
+                None,
+                Some(match refused {
+                    Error::NoTimeSignature { .. } => NoBars::NoTimeSignature,
+                    Error::TimeSignatureStartsLate { .. } => NoBars::TimeSignatureStartsLate,
+                    Error::TimeSignatureChanges { .. } => NoBars::TimeSignatureChanges,
+                    Error::TimeSignatureWithNoBeats { .. } => NoBars::TimeSignatureWithNoBeats,
+                    Error::BarNotWholeTicks { .. } => NoBars::BarNotWholeTicks,
+                    // Not a reason about Bars: the Take was refused above already.
+                    other => return Err(other),
+                }),
+            ),
+        };
+
         let stated_tempos = self.stated_tempos()?;
         let tempo_stated_from = stated_tempos.first().map(|first| first.tick);
         let tempos = tempo_timeline(&stated_tempos);
@@ -399,14 +434,10 @@ impl Take {
                 .filter(|pair| pair[0].1 != pair[1].1)
                 .count(),
             length_ticks,
-            // Every reason a Bar length cannot be derived means the same thing
-            // here — no Bar count — so they collapse to `None`. `info` describes
-            // a Take rather than diagnosing it, and refusing to describe the
-            // Takes a human most needs to look at would be the wrong trade.
-            length_bars: self
-                .bar_ticks(ppq)
-                .ok()
-                .map(|bar_ticks| crate::bars::bar_count(length_ticks, bar_ticks)),
+            // A reason a Bar length cannot be derived is not a refusal here:
+            // `info` describes a Take rather than diagnosing it.
+            length_bars,
+            no_bars,
         })
     }
 

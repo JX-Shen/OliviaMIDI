@@ -48,7 +48,7 @@ pub use program::{gm_name, Program, Programs, StatedProgram, GM_PERCUSSION_CHANN
 pub use rank::{RankDisagreement, RankedPairKind, UnrankedSite};
 pub use reading::{Candidate, Reading, UnrankedComparison, UnrankedSpan};
 pub use rig::{Audition, Rig};
-pub use take::{Info, StatedTempo, Take, Tempo, TimeSignature};
+pub use take::{Info, NoBars, StatedTempo, Take, Tempo, TimeSignature};
 pub use temporary::remove_temporary_takes_on_signals;
 pub use uncompared::{Counted, NotCompared, Uncompared};
 pub use unranked::{Against, State, Unranked};
