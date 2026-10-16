@@ -122,13 +122,11 @@ pub struct TempoDifference {
 /// What one Take is doing with the tempo across a span: at its start, at its
 /// end, and the extremes it reaches anywhere in it.
 ///
-/// Both extremes, where `ControllerSide` carries only a peak. A Controller runs
-/// from nought upwards, so *the highest* is the whole of what a reader wants;
-/// a tempo has no such floor, and a span whose two sides agree at both ends
-/// would otherwise print two identical readings under a row asserting they
-/// differ. Named in the music's terms rather than the file's — `fastest` is the
-/// *smallest* number of microseconds per quarter note, and a field called
-/// `lowest` would be read as the opposite of what it holds.
+/// Both extremes, as every span side carries (ADR-0009): a span whose two sides
+/// agree at both ends would otherwise print two identical readings under a row
+/// asserting they differ. Named in the music's terms rather than the file's —
+/// `fastest` is the *smallest* number of microseconds per quarter note, and a
+/// field called `lowest` would be read as the opposite of what it holds.
 ///
 /// Every field is optional together, because a Take may state no tempo at all
 /// across the span — the case a Take stating 120 must never be confused with.
@@ -203,7 +201,11 @@ pub struct ControllerDifference {
 }
 
 /// What one Take holds for one Controller across a span: at its start, at its
-/// end, and the highest anywhere in it.
+/// end, and the highest and the lowest anywhere in it.
+///
+/// Both extremes, as a tempo and a bend carry: #58, under ADR-0009. `peak` and
+/// `peak_at` keep the names and meanings they shipped with, and `lowest` and
+/// `lowest_at` were appended beside them.
 ///
 /// Every field is optional together, because a Take may hold nothing at all for
 /// this Controller across the span — the case a Take stating 0 must never be
@@ -214,6 +216,8 @@ pub struct ControllerSide {
     pub at_end: Option<u8>,
     pub peak: Option<u8>,
     pub peak_at: Option<u32>,
+    pub lowest: Option<u8>,
+    pub lowest_at: Option<u32>,
 }
 
 /// One channel, one moment, and the two Programs the Takes have it on there.
@@ -547,7 +551,8 @@ fn compare<T: Copy + Eq>(
 /// Bars earlier, and is a place this stretch says nothing about. A reader
 /// addressing an Edit at the Tick reported here is addressing the stretch being
 /// described; a reader expecting the statement's own Tick is reading a field that
-/// was never offering one. `ControllerSide::peak_at` has always worked this way.
+/// was never offering one. `ControllerSide::peak_at` has always worked this way,
+/// and `lowest_at` beside it does too.
 struct Reading {
     at_start: Option<i64>,
     at_end: Option<i64>,
@@ -913,6 +918,8 @@ fn controller_differences(
         at_end: reading.at_end.map(|value| value as u8),
         peak: reading.highest.map(|(value, _)| value as u8),
         peak_at: reading.highest.map(|(_, tick)| tick),
+        lowest: reading.lowest.map(|(value, _)| value as u8),
+        lowest_at: reading.lowest.map(|(_, tick)| tick),
     };
     for (channel, controller) in pairs {
         let comparison = compare(

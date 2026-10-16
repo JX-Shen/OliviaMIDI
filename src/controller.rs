@@ -17,20 +17,27 @@ use crate::take::Take;
 use midly::{MidiMessage, TrackEventKind};
 use serde::Serialize;
 
-/// A Controller's starting reading, peak coverage and indeterminate intervals — #42.
+/// A Controller's starting reading, both extremes' coverage and indeterminate
+/// intervals — #42.
+///
+/// The highest and the lowest value in force across the passage, each where it
+/// is first reached: #58, under ADR-0009. `lowest` was appended beside `peak`,
+/// which keeps its name and meaning.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Controller {
     pub channel: u8,
     pub controller: u8,
     pub value: Reading<u8>,
-    pub peak: ControllerPeak,
+    pub peak: ControllerExtreme,
     pub unranked: Vec<UnrankedSpan<u8>>,
+    pub lowest: ControllerExtreme,
 }
 
-/// A complete interval's peak, or a summary with unranked intervals — #42.
+/// One extreme of a complete interval, or a summary with unranked intervals —
+/// #42. Both extremes are incomplete together.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ControllerPeak {
+pub enum ControllerExtreme {
     Complete { value: u8, at: u32 },
     Incomplete,
 }
@@ -195,7 +202,7 @@ impl Take {
                 let reading = timeline(&all, channel, controller);
                 let value = reading.at(span.start);
                 let unranked = reading.unranked(span.start, bars.map(|_| span.end));
-                let peak = if unranked.is_empty() {
+                let (peak, lowest) = if unranked.is_empty() {
                     let mut values = value
                         .determinate()
                         .flatten()
@@ -211,18 +218,24 @@ impl Take {
                                 })
                                 .map(|stated| (stated.tick, stated.value)),
                         );
-                    let (mut at, mut value) = values
+                    let first = values
                         .next()
                         .expect("a listed Controller is stated before the window ends");
+                    let (mut highest, mut lowest) = (first, first);
+                    // Strictly beyond, so a value reached twice is reported at
+                    // the first of the two.
                     for (tick, next) in values {
-                        if next > value {
-                            value = next;
-                            at = tick;
+                        if next > highest.1 {
+                            highest = (tick, next);
+                        }
+                        if next < lowest.1 {
+                            lowest = (tick, next);
                         }
                     }
-                    ControllerPeak::Complete { value, at }
+                    let complete = |(at, value)| ControllerExtreme::Complete { value, at };
+                    (complete(highest), complete(lowest))
                 } else {
-                    ControllerPeak::Incomplete
+                    (ControllerExtreme::Incomplete, ControllerExtreme::Incomplete)
                 };
                 Controller {
                     channel,
@@ -230,6 +243,7 @@ impl Take {
                     value,
                     peak,
                     unranked,
+                    lowest,
                 }
             })
             .collect();

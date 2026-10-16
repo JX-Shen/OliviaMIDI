@@ -750,7 +750,9 @@ fn a_pitch_bend_only_change_is_a_difference() {
 /// What `BendSide` carries two extremes for. The span opens on a difference of
 /// one unit and contains a dive of four thousand; a side reporting only a peak
 /// would print nothing about the dive, because a bend below where the span
-/// began never rises above it.
+/// began never rises above it. The side comes back to 101 and says so: a side
+/// that moves always says where it ends, even where that is where it began
+/// (#58).
 #[test]
 fn a_dive_inside_a_bend_span_is_reported_although_it_is_no_peak() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -792,7 +794,7 @@ fn a_dive_inside_a_bend_span_is_reported_although_it_is_no_peak() {
         ]),
         "bend      bar 1 beat 2 until bar 2 beat 1  channel 0\n\
          \x20 before  100\n\
-         \x20 after   101, down to -4096 at bar 1 beat 3\n"
+         \x20 after   101, down to -4096 at bar 1 beat 3, ends at 101\n"
     );
 }
 
@@ -907,7 +909,7 @@ fn a_ritardando_reports_the_slowest_tempo_reached_inside_the_span() {
         ]),
         "tempo     bar 1 beat 3 onwards\n\
          \x20 before  120\n\
-         \x20 after   150, down to 60 at bar 1 beat 4\n"
+         \x20 after   150, down to 60 at bar 1 beat 4, ends at 150\n"
     );
 }
 
@@ -946,7 +948,7 @@ fn a_tempo_span_that_moves_both_ways_states_both_extremes() {
         ]),
         "tempo     bar 1 beat 3 onwards\n\
          \x20 before  240\n\
-         \x20 after   120, up to 180 at bar 1 beat 4, down to 60 at bar 2 beat 1\n"
+         \x20 after   120, up to 180 at bar 1 beat 4, down to 60 at bar 2 beat 1, ends at 120\n"
     );
 }
 

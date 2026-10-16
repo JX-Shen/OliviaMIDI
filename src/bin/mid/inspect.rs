@@ -24,11 +24,14 @@ use std::path::PathBuf;
 /// something says otherwise is in force at the passage's first note whether or
 /// not the passage contains the event that set it. A channel bent back to the
 /// centre is not a channel never bent, as a Controller holding 0 is not one
-/// holding nothing. Where the passage bends a channel itself, the row says how
-/// far it goes each way and where: a bend is signed about a centre, so a phrase
-/// that dips and returns never rises above where it began, and one extreme
-/// would be blind to the dive. The number is MIDI's own signed reading and never
-/// semitones. The bend event carries no semitone range. A file can state one
+/// holding nothing. Where the passage states a Controller itself, the row says
+/// the highest and the lowest value it holds there and where each is first
+/// reached; how it moved between them is the events listed under it, which the
+/// row does not summarise. Where the passage bends a channel itself, the row
+/// says how far it goes each way and where: a bend is signed about a centre,
+/// so a phrase that dips and returns never rises above where it began, and one
+/// extreme would be blind to the dive. The number is MIDI's own signed reading
+/// and never semitones. The bend event carries no semitone range. A file can state one
 /// through RPN 0 Controllers, which remain part of the Piece and are reported
 /// as Controllers; `mid` does not convert them into a bend in semitones. Where
 /// the file states no range, it depends on the Rig.
@@ -39,7 +42,8 @@ use std::path::PathBuf;
 /// reports its extremes as incomplete and lists the affected intervals. In JSON,
 /// `bends[].value.kind` identifies the reading, `extremes.kind` identifies summary
 /// coverage, and `bends[].unranked` carries the intervals and candidate sources.
-/// Programs use `program.kind`; Controllers use `value.kind` and `peak.kind`.
+/// Programs use `program.kind`; Controllers use `value.kind`, and `peak.kind`
+/// and `lowest.kind` for the two extremes.
 /// Both carry `unranked` intervals. `unranked_tempos` lists Tempo conflicts
 /// affecting the passage, including those inherited from earlier statements.
 ///
@@ -229,10 +233,11 @@ pub fn run(args: Args) -> battuta::Result<()> {
                 .controllers
                 .iter()
                 .map(|held| {
-                    // The peak earns a cell only where the passage states
-                    // something for this Controller. Where it states nothing the
-                    // peak is the value already beside it, at the passage's own
-                    // first Tick, and the cell would be one fact printed twice.
+                    // The extremes earn a cell only where the passage states
+                    // something for this Controller. Where it states nothing
+                    // both are the value already beside it, at the passage's
+                    // own first Tick, and the cell would be one fact printed
+                    // twice.
                     let stated = controllers.stated.iter().any(|stated| {
                         stated.channel == held.channel && stated.controller == held.controller
                     });
@@ -283,8 +288,8 @@ pub fn run(args: Args) -> battuta::Result<()> {
                 // The excursions earn their clause only where the passage bends
                 // this channel. Where it does not, the furthest each way is the
                 // value already beside it, and the clause would be one fact
-                // printed twice — `controller` withholds its peak on the same
-                // test.
+                // printed twice — `controller` withholds its extremes on the
+                // same test.
                 let inside = bends
                     .stated
                     .iter()

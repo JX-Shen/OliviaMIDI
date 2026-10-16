@@ -33,7 +33,7 @@ pub use combine::{
     OrderContradiction, TrackEnd,
 };
 pub use controller::{
-    spec_name, Controller, ControllerPeak, Controllers, StatedController, FIRST_CHANNEL_MODE,
+    spec_name, Controller, ControllerExtreme, Controllers, StatedController, FIRST_CHANNEL_MODE,
 };
 pub use diff::{
     BendDifference, BendSide, Change, ControllerDifference, ControllerSide, Diff, NoteChange,

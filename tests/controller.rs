@@ -118,7 +118,7 @@ fn lists_every_place_the_passage_states_a_controller() {
         "\
 no programs stated
 
-channel 0  CC11 (expression controller)  40  peak 100 at bar 2 beat 3+360
+channel 0  CC11 (expression controller)  40  peak 100 at bar 2 beat 3+360, lowest 40 at bar 2 beat 1
 
 bar 2 beat 2+240  track 1  channel 0  CC11 (expression controller)  70
 bar 2 beat 3+360  track 1  channel 0  CC11 (expression controller)  100
@@ -131,10 +131,10 @@ bar 2 beat 1  track 1  A4  velocity 64  duration 480  t1:c0:p69:s1440:n0
 /// Where the passage's highest value for a Controller falls, beside what the
 /// channel holds when it begins.
 ///
-/// Two facts, not a summary of a shape: what is in force at the first note, and
-/// the highest thing in force anywhere in the passage. Both are read out of the
-/// file, which is why neither needs a parameter (ADR-0007, and the amendment it
-/// put on ADR-0004).
+/// Facts, not a summary of a shape: what is in force at the first note, and the
+/// highest and the lowest thing in force anywhere in the passage (#58). All are
+/// read out of the file, which is why none needs a parameter (ADR-0007, and the
+/// amendment it put on ADR-0004).
 ///
 /// The curve wobbles on purpose. A CC11 line recorded from a physical fader is
 /// not monotone — it reads 76, 80, 78, 100, 96 — and this is the only assertion
@@ -163,7 +163,7 @@ fn states_where_the_passages_highest_value_falls() {
         "\
 no programs stated
 
-channel 0  CC11 (expression controller)  40  peak 100 at bar 2 beat 3
+channel 0  CC11 (expression controller)  40  peak 100 at bar 2 beat 3, lowest 40 at bar 2 beat 1
 
 bar 2 beat 1+240  track 1  channel 0  CC11 (expression controller)  76
 bar 2 beat 2      track 1  channel 0  CC11 (expression controller)  80
@@ -209,7 +209,7 @@ fn says_unstated_for_a_controller_the_passage_names_and_nothing_set() {
         "\
 no programs stated
 
-channel 0  CC64 (damper pedal on/off (sustain))  unstated  peak 127 at bar 3 beat 2
+channel 0  CC64 (damper pedal on/off (sustain))  unstated  peak 127 at bar 3 beat 2, lowest 0 at bar 4 beat 1
 
 bar 3 beat 2  track 1  channel 0  CC64 (damper pedal on/off (sustain))  127
 bar 4 beat 1  track 1  channel 0  CC64 (damper pedal on/off (sustain))  0
@@ -263,6 +263,7 @@ fn hands_an_agent_the_state_and_every_event() {
             "value": {"kind":"unstated"},
             "peak": {"kind":"complete", "value":127, "at":3360},
             "unranked": [],
+            "lowest": {"kind":"complete", "value":0, "at":4320},
         })]
     );
     assert_eq!(
@@ -335,7 +336,8 @@ fn reports_a_controller_difference_as_a_span_over_what_is_in_force() {
 ///
 /// The peak in the same assertion is the wobble surviving: the curve reads 76,
 /// 80, 78, 84, 90, 88, 96 through Bar 2 and the highest of them is 96, not the
-/// end of the first stretch that happened to be rising.
+/// end of the first stretch that happened to be rising. Nothing in it goes
+/// below the 40 the passage opens on, so that is the lowest, where it begins.
 #[test]
 fn holds_the_last_of_two_values_written_at_one_address() {
     let json = common::json_output(&["inspect", common::EXPRESSIVE, "--bars", "2:2", "--json"]);
@@ -348,6 +350,7 @@ fn holds_the_last_of_two_values_written_at_one_address() {
             "value": {"kind":"determinate", "value":40},
             "peak": {"kind":"complete", "value":96, "at":2760},
             "unranked": [],
+            "lowest": {"kind":"complete", "value":40, "at":1440},
         })),
         "the state does not hold the second of the two values: {controllers:#?}"
     );
@@ -1620,7 +1623,7 @@ fn an_unstated_controller_side_still_reports_the_interior_of_the_span() {
         said,
         "\
 controller  bar 1 beat 1 onwards  channel 0  CC11 (expression controller)
-  before    unstated, up to 100 at bar 3 beat 1, ends at 20
+  before    unstated, up to 100 at bar 3 beat 1, down to 20 at bar 4 beat 1, ends at 20
   after     40
 "
     );
@@ -1711,11 +1714,11 @@ fn a_controller_difference_with_no_interior_stays_on_one_row() {
 ///
 /// #45 changes a layout and nothing else. `ControllerSide` already carried
 /// `at_start`, `at_end`, `peak` and `peak_at` — everything the shared `Side`
-/// asks for — so no field was added, renamed or read differently, and #29's
-/// compatibility constraint has nothing to reach here. One excursion is also
-/// the *right* number for a Controller: it runs from nought upwards and has no
-/// meaningful low extreme, which is ADR-0007's own argument and the reason a
-/// tempo and a bend needed a second one.
+/// asked for then — so no field was added, renamed or read differently, and
+/// #29's compatibility constraint has nothing to reach here.
+///
+/// #58 then added `lowest` and `lowest_at` beside them, and only added them:
+/// the four fields above keep their names and their values.
 #[test]
 fn the_controller_payload_is_unchanged_by_the_new_rows() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -1749,8 +1752,201 @@ fn the_controller_payload_is_unchanged_by_the_new_rows() {
             "controller": 11,
             "from": 0,
             "until": null,
-            "before": { "at_start": null, "at_end": 100, "peak": 100, "peak_at": 2880 },
-            "after": { "at_start": 40, "at_end": 40, "peak": 40, "peak_at": 0 },
+            "before": {
+                "at_start": null, "at_end": 100, "peak": 100, "peak_at": 2880,
+                "lowest": 100, "lowest_at": 2880,
+            },
+            "after": {
+                "at_start": 40, "at_end": 40, "peak": 40, "peak_at": 0,
+                "lowest": 40, "lowest_at": 0,
+            },
         }])
     );
+}
+
+/// A Controller that eases off and comes back is reported as far down as it
+/// goes — #58.
+///
+/// The reproduction from the issue. Track 3 of `EXPRESSIVE` states no
+/// Controller, so both Takes are built on it: A holds CC11 at 80 on channel 2
+/// at every half-beat of Bars 1-5, and B is A with a dip written over five of
+/// those statements — 70, 60, 50, 60, 70 from Tick 2160. The span opens at 2160
+/// and closes at 3360, where B is back at 80. Before #58 the row read
+/// `80 -> 70`: every number on it true, and the row's form saying the after side
+/// held 70 throughout when it went down to 50. And `ends at 70` is said although
+/// it is where the side began, because without it the row would read as staying
+/// at 50.
+///
+/// `peak` and `peak_at` are asserted beside the new fields because they keep
+/// the meaning they shipped with: the highest, where the dip does not reach.
+#[test]
+fn a_controller_that_dips_and_returns_reports_how_low_it_goes() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (before, after) = dipped(&dir);
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path"),
+        ]),
+        "\
+controller  bar 2 beat 2+240 until bar 3 beat 2  channel 2  CC11 (expression controller)
+  before    80
+  after     70, down to 50 at bar 2 beat 3+240, ends at 70
+"
+    );
+
+    let payload: serde_json::Value = serde_json::from_str(&common::json_output(&[
+        "diff",
+        before.to_str().expect("a path"),
+        after.to_str().expect("a path"),
+        "--json",
+    ]))
+    .expect("the payload is JSON");
+    assert_eq!(
+        payload["controllers"],
+        serde_json::json!([{
+            "channel": 2,
+            "controller": 11,
+            "from": 2160,
+            "until": 3360,
+            "before": {
+                "at_start": 80, "at_end": 80, "peak": 80, "peak_at": 2160,
+                "lowest": 80, "lowest_at": 2160,
+            },
+            "after": {
+                "at_start": 70, "at_end": 70, "peak": 70, "peak_at": 2160,
+                "lowest": 50, "lowest_at": 2640,
+            },
+        }])
+    );
+}
+
+/// A side that rises and comes back says where it ends, although that is where
+/// it began — #58.
+///
+/// Take A holds CC11 at 50 on track 3, channel 2 of `EXPRESSIVE` from Tick 0;
+/// Take B holds 80 from Tick 0, 100 from 1440 and 80 again from 2160, so the two
+/// never agree and the span runs on. `80, up to 100 at bar 2 beat 1` alone reads
+/// as a side that stayed at 100. The side that never moves stays a bare number.
+#[test]
+fn a_side_that_rises_and_returns_says_where_it_ends() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let at = |name: &str, edits: &str| {
+        let edits = common::edit_set(dir.path(), name, edits);
+        let take = dir.path().join(format!("{name}.mid"));
+        common::mid()
+            .args(["apply", common::EXPRESSIVE])
+            .arg(&edits)
+            .arg("-o")
+            .arg(&take)
+            .assert()
+            .success();
+        take
+    };
+    let before = at(
+        "before",
+        r#"{ "kind": "set_controller", "track": 3, "channel": 2, "controller": 11, "tick": 0, "value": 50 }"#,
+    );
+    let after = at(
+        "after",
+        r#"{ "kind": "set_controller", "track": 3, "channel": 2, "controller": 11, "tick": 0, "value": 80 },
+           { "kind": "set_controller", "track": 3, "channel": 2, "controller": 11, "tick": 1440, "value": 100 },
+           { "kind": "set_controller", "track": 3, "channel": 2, "controller": 11, "tick": 2160, "value": 80 }"#,
+    );
+
+    assert_eq!(
+        common::human_output(&[
+            "diff",
+            before.to_str().expect("a path"),
+            after.to_str().expect("a path"),
+        ]),
+        "\
+controller  bar 1 beat 1 onwards  channel 2  CC11 (expression controller)
+  before    50
+  after     80, up to 100 at bar 2 beat 1, ends at 80
+"
+    );
+}
+
+/// `inspect`'s summary of a channel says how low the passage takes it, and
+/// where — #58.
+///
+/// The same Take B. Bars 2-3 open on the 80 held from Bar 1, and the lowest the
+/// passage holds is the 50 at Tick 2640. Before #58 the row read `80  peak 80 at
+/// bar 2 beat 1`, and the 50 was only in the event listing under it.
+#[test]
+fn inspect_reports_the_lowest_value_a_passage_holds_and_where() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let (_, after) = dipped(&dir);
+
+    let json = common::json_output(&[
+        "inspect",
+        after.to_str().expect("a path"),
+        "--bars",
+        "2:3",
+        "--json",
+    ]);
+    let (controllers, _) = common::controllers(&json);
+    assert!(
+        controllers.contains(&serde_json::json!({
+            "channel": 2,
+            "controller": 11,
+            "value": {"kind":"determinate", "value":80},
+            "peak": {"kind":"complete", "value":80, "at":1440},
+            "unranked": [],
+            "lowest": {"kind":"complete", "value":50, "at":2640},
+        })),
+        "{controllers:#?}"
+    );
+
+    let said = common::human_output(&["inspect", after.to_str().expect("a path"), "--bars", "2:3"]);
+    assert!(
+        said.lines().any(|line| line
+            == "channel 2  CC11 (expression controller)          80  peak 80 at bar 2 beat 1, \
+                lowest 50 at bar 2 beat 3+240"),
+        "{said}"
+    );
+}
+
+/// Take A and Take B of #58's reproduction, built from `EXPRESSIVE`.
+fn dipped(dir: &tempfile::TempDir) -> (std::path::PathBuf, std::path::PathBuf) {
+    let flat = (0..=24)
+        .map(|half_beat| {
+            format!(
+                r#"{{ "kind": "set_controller", "track": 3, "channel": 2, "controller": 11, "tick": {}, "value": 80 }}"#,
+                half_beat * 240
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",\n");
+    let flat = common::edit_set(dir.path(), "flat", &flat);
+    let dip = common::edit_set(
+        dir.path(),
+        "dip",
+        r#"{ "kind": "set_controller", "track": 3, "channel": 2, "controller": 11, "tick": 2160, "value": 70 },
+           { "kind": "set_controller", "track": 3, "channel": 2, "controller": 11, "tick": 2400, "value": 60 },
+           { "kind": "set_controller", "track": 3, "channel": 2, "controller": 11, "tick": 2640, "value": 50 },
+           { "kind": "set_controller", "track": 3, "channel": 2, "controller": 11, "tick": 2880, "value": 60 },
+           { "kind": "set_controller", "track": 3, "channel": 2, "controller": 11, "tick": 3120, "value": 70 }"#,
+    );
+    let before = dir.path().join("a.mid");
+    let after = dir.path().join("b.mid");
+    common::mid()
+        .args(["apply", common::EXPRESSIVE])
+        .arg(&flat)
+        .arg("-o")
+        .arg(&before)
+        .assert()
+        .success();
+    common::mid()
+        .arg("apply")
+        .arg(&before)
+        .arg(&dip)
+        .arg("-o")
+        .arg(&after)
+        .assert()
+        .success();
+    (before, after)
 }

@@ -302,6 +302,7 @@ fn state_readers_inherit_conflicts_and_resume_after_overwrite() {
             assert_eq!(later[&list][0]["unranked"], json!([]));
             if kind == "controller" {
                 assert_eq!(middle[&list][0]["peak"]["kind"], "incomplete");
+                assert_eq!(middle[&list][0]["lowest"]["kind"], "incomplete");
             }
         }
         let human = common::human_output(&["inspect", name, "--bars", "2:2"]);
@@ -376,6 +377,10 @@ fn state_differences_stop_at_conflicts_and_resume_without_false_extremes() {
             );
             assert_eq!(
                 inspect["controllers"][0]["peak"],
+                json!({"kind":"incomplete"})
+            );
+            assert_eq!(
+                inspect["controllers"][0]["lowest"],
                 json!({"kind":"incomplete"})
             );
         }

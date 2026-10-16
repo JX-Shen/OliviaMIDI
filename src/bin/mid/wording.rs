@@ -264,20 +264,32 @@ pub fn program_difference(difference: &ProgramDifference) -> String {
 ///
 /// `CC11` rather than `controller 11`: `CC` is MIDI's own shorthand, and it is
 /// where the attribution for any name printed beside it sits.
-/// Show a complete peak when the passage states another value; always disclose
-/// incomplete coverage — #42.
+/// Show both complete extremes when the passage states another value — #58,
+/// under ADR-0009; always disclose incomplete coverage — #42.
 pub fn controller(lines: Option<BarLines>, held: &Controller, inside: bool) -> Vec<String> {
     let mut row = vec![
         channel(held.channel),
         controller_number(held.controller),
         state_reading(&held.value, |value| value.to_string()),
     ];
-    match held.peak {
-        battuta::ControllerPeak::Complete { value, at: tick } if inside => {
-            row.push(format!("peak {value} at {}", at(lines, tick)))
-        }
-        battuta::ControllerPeak::Incomplete => {
-            row.push("peak not summarised across unranked intervals".to_string())
+    use battuta::ControllerExtreme::{Complete, Incomplete};
+    match (held.peak, held.lowest) {
+        (
+            Complete {
+                value: peak,
+                at: peak_at,
+            },
+            Complete {
+                value: lowest,
+                at: lowest_at,
+            },
+        ) if inside => row.push(format!(
+            "peak {peak} at {}, lowest {lowest} at {}",
+            at(lines, peak_at),
+            at(lines, lowest_at)
+        )),
+        (Incomplete, _) | (_, Incomplete) => {
+            row.push("peak and lowest not summarised across unranked intervals".to_string())
         }
         _ => {}
     }
@@ -368,9 +380,8 @@ pub fn unranked_comparison<T>(
 /// scanning the column meets the same kind of word the Controller rows put
 /// there.
 ///
-/// Two excursions where a Controller has one. A Controller runs from nought
-/// upwards; a bend is signed about a centre, so the two directions are two
-/// facts and either alone can hide the other. Each is printed only where it
+/// Two excursions: a bend is signed about a centre, so the two directions are
+/// two facts and either alone can hide the other. Each is printed only where it
 /// went somewhere `value` does not already say — a bend that only rose says
 /// only that it rose.
 ///
@@ -548,18 +559,16 @@ pub fn stated_controller(lines: Option<BarLines>, stated: &StatedController) -> 
 /// learnt to read all three — and it holds for the sides as well as for the
 /// span. Two readers' worth of habit for one kind of fact is what #45 is about.
 ///
-/// One excursion where a tempo and a bend have two, and that is the right
-/// number rather than a shortfall: a Controller runs from nought upwards and
-/// has no meaningful low extreme, which is ADR-0007's own argument and the
-/// reason the other two needed a second field. `ControllerSide` already carries
-/// everything `Side` asks for, so `--json` comes out byte for byte as it was.
+/// Both excursions, as a tempo and a bend have: #58, under ADR-0009. So the one
+/// row is printed only where both sides hold one value across the whole span,
+/// and a side that moves says where it ends — see `Side`.
 ///
 /// `unstated` on either side, in the same shape as the numbers, for the reason
 /// `program_difference` prints it: a blank would read as nothing having been
 /// said rather than as the Take saying nothing. It is not a reason to stop
-/// reading — an `unstated` side still says the peak it reaches inside the span
-/// and where the span leaves it. That silence is the fault #32 inherited from
-/// this row and fixed one state over.
+/// reading — an `unstated` side still says the extremes it reaches inside the
+/// span and where the span leaves it. That silence is the fault #32 inherited
+/// from this row and fixed one state over.
 pub fn controller_rows(
     before_lines: Option<BarLines>,
     after_lines: Option<BarLines>,
@@ -570,17 +579,21 @@ pub fn controller_rows(
             None => "unstated".to_string(),
             Some(at_start) => at_start.to_string(),
         },
-        excursions: extremes([
-            side.peak.zip(side.peak_at).and_then(|(peak, peak_at)| {
-                (Some(peak) != side.at_start)
-                    .then(|| (peak_at, format!("{peak} at {}", at(lines, peak_at))))
-            }),
-            None,
-        ]),
-        at_end: side
-            .at_end
-            .filter(|&at_end| Some(at_end) != side.at_start)
-            .map(|at_end| at_end.to_string()),
+        excursions: extremes(
+            [(side.peak, side.peak_at), (side.lowest, side.lowest_at)].map(
+                |(reached, reached_at)| {
+                    let (reached, reached_at) = (reached?, reached_at?);
+                    (Some(reached) != side.at_start).then(|| {
+                        (
+                            reached_at,
+                            format!("{reached} at {}", at(lines, reached_at)),
+                        )
+                    })
+                },
+            ),
+        ),
+        at_end: side.at_end.map(|at_end| at_end.to_string()),
+        ends_elsewhere: side.at_end != side.at_start,
     };
     span_rows(
         "controller",
@@ -617,27 +630,34 @@ pub fn span(lines: Option<BarLines>, from: u32, until: Option<u32>) -> String {
 /// are two facts rather than a shape. Saying which of them moved furthest, or
 /// calling the pair a rise or a fall, would be the inference ADR-0007 rejects;
 /// this states the extremes and leaves the gesture to whoever is reading.
+///
+/// `ends at` is said by every side that says anything beyond where the span
+/// begins, even where the end is the start: #58, under ADR-0009.
 struct Side {
     at_start: String,
     excursions: Vec<(u32, String)>,
+    /// What the side holds where the span ends, whether or not it moved.
     at_end: Option<String>,
+    /// Whether that is a different value from the one it began on.
+    ends_elsewhere: bool,
 }
 
 impl Side {
     /// Whether this side says anything beyond where the span begins. Where
     /// neither side of a difference does, the whole difference is one row.
     fn has_interior(&self) -> bool {
-        !self.excursions.is_empty() || self.at_end.is_some()
+        !self.excursions.is_empty() || self.ends_elsewhere
     }
 
     fn in_full(mut self) -> String {
+        let interior = self.has_interior();
         self.excursions.sort_by_key(|&(tick, _)| tick);
         let mut said = self.at_start;
         for (_, excursion) in self.excursions {
             said.push_str(", ");
             said.push_str(&excursion);
         }
-        if let Some(at_end) = self.at_end {
+        if let Some(at_end) = self.at_end.filter(|_| interior) {
             said.push_str(", ends at ");
             said.push_str(&at_end);
         }
@@ -752,10 +772,8 @@ pub fn tempo_rows(
                     })
                 }),
             ),
-            at_end: side
-                .at_end
-                .filter(|at_end| Some(at_end.micros_per_quarter) != start)
-                .map(|at_end| tempo_reading(at_end, micros)),
+            at_end: side.at_end.map(|at_end| tempo_reading(at_end, micros)),
+            ends_elsewhere: side.at_end.map(|at_end| at_end.micros_per_quarter) != start,
         }
     };
     span_rows(
@@ -857,10 +875,8 @@ pub fn bend_rows(
                 })
             }),
         ),
-        at_end: side
-            .at_end
-            .filter(|&at_end| Some(at_end) != side.at_start)
-            .map(|at_end| at_end.to_string()),
+        at_end: side.at_end.map(|at_end| at_end.to_string()),
+        ends_elsewhere: side.at_end != side.at_start,
     };
     span_rows(
         "bend",

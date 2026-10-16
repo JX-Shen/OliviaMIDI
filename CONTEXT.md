@@ -399,8 +399,9 @@ deliberately — see #13.
 Musically it is a curve — one crescendo is dozens of events — but the curve is
 not a thing the file holds, and so is not a thing this project names. Nothing
 here segments a stretch of events into a gesture: what a reader is told is which
-value is in force and where the highest one falls, both read straight out of the
-file. See #13.
+value is in force and where the highest and the lowest fall, all read straight
+out of the file. That is less than the curve, and is never laid out as if it
+were the whole of it (ADR-0009). See #13 and #58.
 
 Its **spec name** is what `mid` may print beside the number — `CC64 (damper
 pedal on/off (sustain))`. Quoted from MIDI's own table and never improved on:
@@ -443,12 +444,11 @@ and a channel never bent are two different Pieces, and `mid` reports the second
 as `unstated` — the distinction **Controller** already draws between holding 0
 and holding nothing.
 
-Reported as two extremes rather than one peak, unlike a **Controller**. A
-Controller runs from nought upwards, so the highest value reached says everything
-about where it went; a bend is signed about a centre, so a phrase that dips below
-the note and returns never rises above where it began, and one extreme would be
-blind to the whole of it. That is ADR-0007's argument about what a reading must
-not hide, applied to a state that needs two numbers to obey it.
+Reported as two extremes, as a **Controller** is. A bend is signed about a
+centre, so a phrase that dips below the note and returns never rises above where
+it began, and one extreme would be blind to the whole of it. ADR-0009 is the
+rule; #58 is where a Controller, once reported by its highest alone, was found
+needing it too.
 
 Read as one number, where a **Controller**'s coarse and fine halves are not. A
 bend's fourteen bits arrive in one event, so reading them as one value infers

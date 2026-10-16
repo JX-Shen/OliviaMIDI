@@ -12,7 +12,7 @@ it.
 Most of these settings belong to a channel. A tempo does not: it has no channel
 and governs the whole Take. It is here anyway, because every sentence of the
 argument below is about a *setting in force* and none of it is about a channel —
-see the amendment at the foot of this record.
+see the amendment by #32 at the foot of this record.
 
 The events are still listed, because an Edit has to name an address and a reader
 has to be able to copy one. What is never done is deriving an answer from their
@@ -43,11 +43,12 @@ faithful to the bytes and unreadable as music.
 into a rise or a fall, and then matching one Take's shape against the other's.
 This is the tempting middle, because a state comparison of a curve can still be
 several rows. Rejected because it is an inference in ADR-0004's sense and
-nothing here needs one: *which value is in force* and *where the highest one
-falls* are both read straight out of the file, and they are enough to say that
-the expression now reaches 100 by Bar 6 where it used to reach it by Bar 7.
-Asserting on top of that which events *were* one gesture adds a claim without
-adding an answer. The stress test that settled it is in #13.
+nothing here needs one: *which value is in force*, and *where the highest and
+the lowest fall*, are all read straight out of the file, and they are enough to
+say that the expression now reaches 100 by Bar 6 where it used to reach it by
+Bar 7, or that it now eases to 50 before it comes back. Asserting on top of
+that which events *were* one gesture adds a claim without adding an answer. The
+stress test that settled it is in #13; the lowest was added under #58, below.
 
 **Reporting state and dropping the event listing.** Rejected: an address that
 appears nowhere cannot be edited, and this project's legibility debts are owed
@@ -88,7 +89,7 @@ Consequences now say which.
 The judgements arguing from this are #12, which made the choice for Programs;
 #13, which made it for Controllers and found the second case that turned it into
 a principle; and #32, which made it for tempo and pitch bend and is what
-occasioned the amendment below.
+occasioned the first amendment below.
 
 ## Amended by #32
 
@@ -115,3 +116,23 @@ one difference happened to occupy one line of output. #32's human rows spend
 three lines on a difference whose reading does not fit one, and reading this
 record as a promise about line count would have made a typographic accident into
 a principle. *One difference* is what was meant and is now what it says.
+
+## Amended by #58
+
+One sentence was wrong, and it was not the rejection it sat in.
+
+**It said the highest value was enough, and it was not.** *Considered Options*
+said that *which value is in force* and *where the highest one falls* are enough
+to say what a curve did, and used that to show that segmenting events into a
+shape is not needed. The second half stands exactly as it was argued, and #13 is
+still where it was tested. The first half was a claim about what remains once a
+shape is refused, and it was false: a Controller held at 80 that eases to 50 and
+comes back has its lowest point at neither end of its span and nowhere near its
+highest. `mid diff` printed `80 -> 70` for a span that went down to 50 — every
+number true, and a row whose form said the side held 70 throughout. The lowest
+is read straight out of the file as the highest is, so naming it adds no
+inference and needs no parameter, and the sentence now names both. Amended
+2026-10-16.
+
+What a summary owes about its own incompleteness is not this record's subject:
+it reaches summaries that report no setting at all, and it is ADR-0009.

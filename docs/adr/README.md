@@ -24,6 +24,7 @@ why no file here supersedes another.
 | [0006](./0006-a-library-takes-no-process-global-resource-without-consent.md) | A library takes no process-global resource without consent | Signals, environment, working directory: nothing that belongs to the process is touched until the process asks by name |
 | [0007](./0007-a-setting-is-reported-as-what-is-in-force.md) | A setting is reported as what is in force, never as the events that set it | What a Take holds is the answer; the events that put it there are clerical history. Why a curve is not summarised into a shape, why a tempo belongs here although it has no channel, and why anything with nothing in force falls outside every command |
 | [0008](./0008-events-sharing-one-instant-are-heard-in-the-order-they-are-written.md) | Events sharing one instant are heard in the order they are written | A Tick is a sequence carrying one timestamp, not an instant. What decides an event's Rank among its neighbours, why notation never had to answer this, where the file cannot answer it at all — and, amended, which orders a comparison reports and a combination may refuse on: the same list, read by both |
+| [0009](./0009-a-summary-never-reads-as-more-complete-than-it-is.md) | A summary never reads as more complete than it is | A summary may leave things out, but everything it states is true and its form implies nothing it does not state. Why a span reports both extremes, and why a diff that could not compare something says so |
 
 ## How they hang together
 
@@ -56,6 +57,15 @@ ninth number: once under #33, when comparison was found reading the same list
 of ranked pairs the writer obeys, and once under #51, when combination was found
 refusing on it — the subject did not split, it acquired a second and a third
 reader.
+
+`0009` is derived from *Refuse rather than answer plausibly* in `CHARTER.md`,
+and covers the ground that clause leaves: between refusing and saying
+everything. It was named under #58, which found `0007` saying the highest value
+was enough to describe a curve. `0007` was amended in place for that sentence,
+as was the sentence `0004`'s amendment repeats it in, and `0007`'s refusal to
+summarise a curve into a shape stands; `0009` is a new number
+because what a summary owes about its own incompleteness reaches summaries that
+report no setting at all — a diff that could not compare something is one.
 
 *Refuse rather than answer plausibly* in `CHARTER.md` is argued from more often
 than any file here, and it is not here because it changes no code on its own:

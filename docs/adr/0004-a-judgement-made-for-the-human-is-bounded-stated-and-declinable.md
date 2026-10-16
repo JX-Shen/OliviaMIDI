@@ -77,10 +77,10 @@ inference about what a run of CC events *is*, and would have a parameter, a
 disclosure and an exact reading or would not ship. The prediction was wrong, and
 not because a parameter-free way of summarising a curve was found: it was wrong
 to assume that anything needed summarising. ADR-0007 is why: what a channel holds is
-reported as state, and which value is in force and where the highest one falls
-are both read straight out of the file. Segmenting events into a gesture, or
-asserting that two curves are one curve moved, would be inferences and would
-land back here — #13 is where that was tested and rejected. Nothing about the
+reported as state, and which value is in force and where the highest and the
+lowest fall are all read straight out of the file. Segmenting events into a
+gesture, or asserting that two curves are one curve moved, would be inferences
+and would land back here — #13 is where that was tested and rejected. Nothing about the
 three properties is weakened. What is corrected is the habit of deciding in
 advance which side of the line a feature falls on, before anyone has seen the
 data it has to survive.
@@ -93,3 +93,12 @@ Where the parameter is a note value rather than a Tick count, the Take turns it
 into Ticks, and two Takes that disagree about the conversion are refused before
 any inference is made. A default in Ticks would be meaningless across Takes: 120
 Ticks is a sixteenth at 480 PPQ and longer than a quarter note at 96.
+
+## Amended by #58
+
+One sentence of the amendment above named only where the highest value falls,
+as though that and the value in force were the whole of a Controller reading.
+#58 found the highest alone misreporting a Controller that dips and returns, and
+the lowest is now reported beside it; the sentence names both. The argument is
+unchanged: the lowest is read straight out of the file as the highest is, and
+needs no parameter. ADR-0007 carries the same correction. Amended 2026-10-16.
