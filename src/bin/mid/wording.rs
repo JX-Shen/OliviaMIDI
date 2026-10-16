@@ -63,11 +63,20 @@ pub fn pitch(pitch: u8) -> String {
 /// end the quotation or break the row. Only ever beside a track's number, never
 /// on a channel's row. See #61.
 pub fn track(number: usize, names: &[String]) -> String {
-    let mut said = format!("track {number}");
-    for name in names {
-        said.push_str(&format!(" {name:?}"));
+    match names {
+        [] => format!("track {number}"),
+        names => format!("track {number} {}", quoted(names)),
     }
-    said
+}
+
+/// Every name a track states, each quoted, in written order: `"Violin" "Vln I"`.
+/// The one place a track's names are quoted (#61).
+fn quoted(names: &[String]) -> String {
+    names
+        .iter()
+        .map(|name| format!("{name:?}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// The cells that *name* a note on a line that does not print its identity:
@@ -225,18 +234,14 @@ pub fn rank_difference(difference: &battuta::RankDisagreement) -> String {
             format!("{} -> {}", relation.before_note, relation.after_note)
         };
         // One track, named by each Take for itself; both names where they
-        // differ, for the reason the note is given twice.
+        // differ, and `unnamed` for a side naming nothing, here only (#61).
         let statement = &relation.statement;
         let named = if statement.before_track_names == statement.after_track_names {
             track(statement.track, &statement.before_track_names)
         } else {
             let names = |names: &[String]| match names {
                 [] => "unnamed".to_string(),
-                names => names
-                    .iter()
-                    .map(|name| format!("{name:?}"))
-                    .collect::<Vec<_>>()
-                    .join(" "),
+                names => quoted(names),
             };
             format!(
                 "track {} {} -> {}",

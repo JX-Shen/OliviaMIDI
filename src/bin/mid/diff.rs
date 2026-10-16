@@ -151,8 +151,10 @@ use std::path::PathBuf;
 /// Every name a track states is quoted beside the track's number, in written
 /// order, as the Take the row is about states them — the after Take for an
 /// added note or an `after` row, the before Take otherwise, and both where a
-/// rank row's statement is on a track the two Takes name differently. A row
-/// about a channel carries none. In JSON every object with a `track` carries
+/// rank row's statement is on a track the two Takes name differently:
+/// `track 1 "piano" -> "keys"`, with `unnamed` for a Take naming it nothing,
+/// which is the only place that word appears. A track that states no name
+/// prints nothing beside its number. A row about a channel carries none. In JSON every object with a `track` carries
 /// `track_names`, and `against_track` `against_track_names`. A ranked statement
 /// and an unranked state site, each one object for both Takes, carry
 /// `before_track_names` and `after_track_names` instead (and the site

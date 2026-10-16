@@ -515,6 +515,21 @@ fn a_rank_row_names_the_statements_track_as_each_take_names_it() {
         "{diff}"
     );
 
+    // A side naming nothing is the one word `diff --help` gives it, here and
+    // only here: a blank would not show that the name changed.
+    let unnamed = build(
+        &dir.path().join("unnamed.mid"),
+        &[(
+            None,
+            vec![struck(0, 60, 64), program(0, 40), released(480, 60)],
+        )],
+    );
+    let diff = common::human_output(&["diff", before, unnamed.to_str().unwrap()]);
+    assert!(
+        diff.contains(r#"; track 1 "piano" -> unnamed program 40"#),
+        "{diff}"
+    );
+
     let payload = payload(&["diff", before, renamed, "--json"]);
     let statement = &payload["rank_disagreements"][0]["relations"][0]["statement"];
     assert_eq!(
