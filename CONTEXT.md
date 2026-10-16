@@ -395,8 +395,9 @@ messages — All Notes Off and its neighbours — which ride on the same event t
 and are instructions rather than settings: they happen and are over, and leave
 no value in force to be reported, and reporting what is in force is the whole of
 what this tool does with channel state (ADR-0007). A Take's own are preserved
-untouched and named by nothing this tool prints, which is a hole left
-deliberately — see #13.
+untouched and read as nothing, which is a hole left deliberately — see #13.
+The hole is not hidden: where two Takes differ in them, `diff` says they were
+not compared (#62).
 
 Musically it is a curve — one crescendo is dozens of events — but the curve is
 not a thing the file holds, and so is not a thing this project names. Nothing

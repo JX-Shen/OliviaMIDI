@@ -356,7 +356,8 @@ fn holds_the_last_of_two_values_written_at_one_address() {
     );
 }
 
-/// A channel mode message is not a Controller, and no command mentions one.
+/// A channel mode message is not a Controller, and `inspect` never mentions one.
+/// `diff` names one only to say it was not compared (#62).
 ///
 /// `EXPRESSIVE` states CC123 — All Notes Off — inside Bar 4, so this passage
 /// contains it and the silence is the rule at work rather than a Bar range

@@ -6,6 +6,17 @@ use std::path::PathBuf;
 /// Only the Piece is compared. Two Takes heard through different Rigs are not
 /// different Takes, and no Rig difference is ever reported here.
 ///
+/// Not all of the Piece is compared: some of what a Take holds is not looked at
+/// yet. Where the two Takes differ in a kind of content that is not compared,
+/// the diff says so after everything else, naming each such kind and how much
+/// of it each Take holds, and does not say `no differences`:
+///
+///     no determinate differences; not compared: key signature (before 0, after 1)
+///
+/// That line says only that the Takes differ in that kind, never how. In
+/// `--json` the same is `not_compared`, one entry per kind with its `kind` and
+/// the `before` and `after` counts.
+///
 /// Notes are matched in two passes. First by identity — same track, channel,
 /// pitch and start Tick — and then, among whatever is left over, by nearest
 /// neighbour within the same track and channel, as long as the two starts are
@@ -144,9 +155,16 @@ pub fn run(args: Args) -> battuta::Result<()> {
     let before_lines = before.bar_lines();
     let after_lines = after.bar_lines();
 
+    // The kinds this diff did not compare and the two Takes differ in, which
+    // follow whatever else is printed: #62.
+    let not_compared =
+        (!diff.not_compared.is_empty()).then(|| crate::wording::not_compared(&diff.not_compared));
+
     if diff.is_empty() {
         if diff.has_unranked() {
             println!("no determinate differences; some content was not compared");
+        } else if let Some(not_compared) = &not_compared {
+            println!("no determinate differences; {not_compared}");
         } else {
             println!("no differences");
         }
@@ -158,6 +176,11 @@ pub fn run(args: Args) -> battuta::Result<()> {
         // prints and the least examined.
         crate::wording::table(&unranked_rows(before_lines, &diff.unranked_sites));
         crate::wording::table(&unranked_state_rows(before_lines, after_lines, &diff));
+        if diff.has_unranked() {
+            if let Some(not_compared) = &not_compared {
+                println!("{not_compared}");
+            }
+        }
         return Ok(());
     }
 
@@ -249,6 +272,9 @@ pub fn run(args: Args) -> battuta::Result<()> {
     rows.extend(unranked_rows(before_lines, &diff.unranked_sites));
     rows.extend(unranked_state_rows(before_lines, after_lines, &diff));
     crate::wording::table(&rows);
+    if let Some(not_compared) = &not_compared {
+        println!("{not_compared}");
+    }
     Ok(())
 }
 

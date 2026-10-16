@@ -996,6 +996,42 @@ pub fn unranked(lines: Option<BarLines>, row: &battuta::Unranked) -> String {
     }
 }
 
+/// The kinds a diff did not compare and the two Takes differ in, each with how
+/// much of it each Take holds — #62.
+pub fn not_compared(kinds: &[battuta::NotCompared]) -> String {
+    let named = kinds
+        .iter()
+        .map(|entry| {
+            format!(
+                "{} (before {}, after {})",
+                uncompared(entry.kind),
+                entry.before,
+                entry.after
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("not compared: {named}")
+}
+
+fn uncompared(kind: battuta::Uncompared) -> &'static str {
+    use battuta::Uncompared;
+    match kind {
+        Uncompared::TimeSignature => "time signature",
+        Uncompared::KeySignature => "key signature",
+        Uncompared::ChannelPressure => "channel pressure",
+        Uncompared::PolyphonicKeyPressure => "polyphonic key pressure",
+        Uncompared::ChannelMode => "channel mode message",
+        Uncompared::ReleaseVelocity => "release velocity",
+        Uncompared::SysEx => "SysEx",
+        Uncompared::Lyric => "lyric",
+        Uncompared::Text => "text",
+        Uncompared::TrackName => "track name",
+        Uncompared::EndOfTrack => "end of track",
+        Uncompared::Other => "other event",
+    }
+}
+
 /// That a side of a combination replayed to exactly the Take supplied for it.
 ///
 /// Counted from 0, as `--json` counts them, so that a line here and an entry

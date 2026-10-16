@@ -24,6 +24,7 @@ pub mod rig;
 pub mod take;
 mod temporary;
 mod track;
+pub mod uncompared;
 pub mod unranked;
 
 pub use bars::{BarLines, BarRange, Position, TickSpan};
@@ -49,4 +50,5 @@ pub use reading::{Candidate, Reading, UnrankedComparison, UnrankedSpan};
 pub use rig::{Audition, Rig};
 pub use take::{Info, StatedTempo, Take, Tempo, TimeSignature};
 pub use temporary::remove_temporary_takes_on_signals;
+pub use uncompared::{NotCompared, Uncompared};
 pub use unranked::{Against, State, Unranked};

@@ -384,6 +384,8 @@ fn the_two_new_payload_fields_are_additive() {
             "bends",
             "changed",
             "controllers",
+            // #62's, which says what was not compared rather than what differs.
+            "not_compared",
             "programs",
             "rank_disagreements",
             "removed",

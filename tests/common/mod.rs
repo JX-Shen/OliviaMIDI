@@ -53,8 +53,9 @@ pub const ORCHESTRATED: &str = "fixtures/orchestrated.mid";
 ///   looks like under a reading built for a curve
 /// - track 2, channel 1 — CC123 All Notes Off at Tick 5040, inside Bar 4 and
 ///   past this channel's last note-off. A channel mode message is not a
-///   Controller (ADR-0007) and no command may mention it; the hole is
-///   deliberate, and this is what stops it being closed by accident
+///   Controller (ADR-0007) and no command may read it as one; the hole is
+///   deliberate, and this is what stops it being closed by accident. Only
+///   `diff` names one, as not compared, where two Takes differ in it (#62)
 /// - track 3, channel 2 — notes and not one Controller, so that "this channel
 ///   says nothing" is reachable, as `orchestrated.mid` leaves channel 2 without
 ///   a Program

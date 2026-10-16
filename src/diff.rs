@@ -65,6 +65,11 @@ pub struct Diff {
     pub unranked_controllers: Vec<UnrankedController>,
     /// Channel-state/strike relations, distinct from continuing value conflicts — #42.
     pub unranked_state_sites: Vec<UnrankedStateSite>,
+
+    /// The kinds of content this comparison does not look at in which the two
+    /// Takes differ — #62. Not differences, and `is_empty` does not consult it:
+    /// it says what a diff that found nothing did not look for.
+    pub not_compared: Vec<crate::NotCompared>,
 }
 
 /// An uncomparable Bend interval. An empty side has no value conflict.
@@ -454,6 +459,8 @@ pub fn diff(before: &Take, after: &Take, tolerance: Option<u32>) -> Result<Diff>
     let (programs, unranked_programs) = program_differences(before, after)?;
     let (controllers, unranked_controllers) = controller_differences(before, after)?;
     let (tempos, unranked_tempos) = tempo_differences(before, after)?;
+    let not_compared =
+        crate::uncompared::not_compared(before, after, &before_notes, &after_notes, &matched_to)?;
     Ok(Diff {
         tolerance_ticks,
         added,
@@ -470,6 +477,7 @@ pub fn diff(before: &Take, after: &Take, tolerance: Option<u32>) -> Result<Diff>
         bends,
         unranked_bends,
         unranked_state_sites: state_sites(before, after, &before_notes, &after_notes)?,
+        not_compared,
     })
 }
 
