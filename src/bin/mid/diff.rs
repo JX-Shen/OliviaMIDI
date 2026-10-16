@@ -26,6 +26,29 @@ use std::path::PathBuf;
 /// bank. Which Program is selected is in the file and so is the Piece; what it
 /// sounds like is the Rig, and is not compared.
 ///
+/// Controllers are compared per channel and Controller number, as what is in
+/// force over a span rather than event by event, so a crescendo written as forty
+/// control changes is one difference and not forty. A row names the stretch the
+/// two Takes disagree over, then says for each Take what it holds where the
+/// stretch begins, or `unstated` where it holds nothing, never 0; `up to` and
+/// `down to` the highest and the lowest value it reaches inside the stretch,
+/// each where it is first reached, unless that is the value it began on; and
+/// `ends at` the value it holds at the end, whenever it has moved at all, even
+/// where it ends on the value it began on. A side that never moves is just its
+/// one value. A side that began `unstated` and holds one value inside says
+/// `reaching` it. For example:
+///
+///     controller  bar 2 beat 2+240 until bar 3 beat 2  channel 2  CC11 (expression controller)
+///       before    80
+///       after     70, down to 50 at bar 2 beat 3+240, ends at 70
+///
+/// Where neither Take moves off the value it begins the stretch on, the
+/// difference is one line ending in the two values, before `->` after. In
+/// `--json` each side carries `at_start`, `at_end`, `peak`, `peak_at`, `lowest`
+/// and `lowest_at`. What a row does not state is the shape: how many times a
+/// Take rose or fell between those values. For that, run `mid inspect --bars`
+/// over the span on both Takes, which lists every statement.
+///
 /// Tempo and pitch bend are compared the same way, as what is in force rather
 /// than as the events that set it. A tempo row covers the stretch the two Takes
 /// are at different tempos and says the extreme each reaches inside it, so an
