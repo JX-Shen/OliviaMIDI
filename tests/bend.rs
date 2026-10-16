@@ -385,6 +385,99 @@ fn a_bend_that_only_rises_does_not_report_a_dive_it_did_not_take() {
     );
 }
 
+/// The Bend row of `mid inspect` over the whole Take: the one line naming the
+/// channel's bend state, not the event rows under it.
+fn bend_row(take: &std::path::Path) -> String {
+    let said = common::human_output(&["inspect", take.to_str().expect("a path")]);
+    said.lines()
+        .find(|line| line.starts_with("channel 0  bend  "))
+        .unwrap_or_else(|| panic!("no Bend row in:\n{said}"))
+        .to_string()
+}
+
+/// One statement on a channel that stated nothing before it is one fact.
+///
+/// #68's first reproduction. The channel opens `unstated` and is bent once, to
+/// 4000 at Bar 2: both extremes are that one statement, and there is no point it
+/// went down or up *from*. The row says it reached 4000, once.
+#[test]
+fn one_bend_on_an_unstated_channel_is_stated_once() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = bent(dir.path(), "once.mid", &[(960, 4000)]);
+
+    assert_eq!(
+        bend_row(&take),
+        "channel 0  bend  unstated (reaching 4000 at bar 2 beat 1)"
+    );
+}
+
+/// A rise and then a dive read as a rise and then a dive.
+///
+/// #68's second reproduction. The channel rises to 4000 at Bar 2 and dives to
+/// -2000 at Bar 3; the clauses follow the passage forwards, as `diff`'s do
+/// under #32, rather than a fixed down-then-up.
+#[test]
+fn a_rise_then_a_dive_is_stated_in_the_order_it_happened() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let take = bent(dir.path(), "rise-dive.mid", &[(960, 4000), (1920, -2000)]);
+
+    assert_eq!(
+        bend_row(&take),
+        "channel 0  bend  unstated (up to 4000 at bar 2 beat 1, down to -2000 at bar 3 beat 1)"
+    );
+}
+
+/// `inspect` and `diff` word a Bend's extremes by one rule.
+///
+/// The same Take read by both: `inspect` over the whole of it, and `diff`
+/// against a Take holding the channel at nought from the start, so the span
+/// opens at Tick 0 with this Take `unstated` and every statement inside it.
+/// Each case is a literal both commands must print: one statement is said
+/// once, and two are said in the order they happened, whichever way round.
+/// Either command drifting from the rule on either point fails here.
+#[test]
+fn inspect_and_diff_state_a_bends_extremes_alike() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let centred = bent(dir.path(), "centred.mid", &[(0, 0)]);
+    for (name, statements, extremes, end) in [
+        (
+            "once.mid",
+            vec![(960, 4000)],
+            "reaching 4000 at bar 2 beat 1",
+            4000,
+        ),
+        (
+            "rise-dive.mid",
+            vec![(960, 4000), (1920, -2000)],
+            "up to 4000 at bar 2 beat 1, down to -2000 at bar 3 beat 1",
+            -2000,
+        ),
+        (
+            "dive-rise.mid",
+            vec![(960, -2000), (1920, 4000)],
+            "down to -2000 at bar 2 beat 1, up to 4000 at bar 3 beat 1",
+            4000,
+        ),
+    ] {
+        let take = bent(dir.path(), name, &statements);
+
+        assert_eq!(
+            bend_row(&take),
+            format!("channel 0  bend  unstated ({extremes})"),
+            "inspect, {name}"
+        );
+        let compared = common::human_output(&[
+            "diff",
+            centred.to_str().expect("a path"),
+            take.to_str().expect("a path"),
+        ]);
+        assert!(
+            compared.contains(&format!("  after   unstated, {extremes}, ends at {end}\n")),
+            "diff, {name}:\n{compared}"
+        );
+    }
+}
+
 /// The payload gains two lists and moves nothing.
 ///
 /// #29's compatibility constraint. A consumer reading `controllers` or `notes`

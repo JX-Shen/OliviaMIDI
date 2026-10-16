@@ -383,7 +383,8 @@ pub fn unranked_comparison<T>(
 /// Two excursions: a bend is signed about a centre, so the two directions are
 /// two facts and either alone can hide the other. Each is printed only where it
 /// went somewhere `value` does not already say — a bend that only rose says
-/// only that it rose.
+/// only that it rose. Worded by `extremes`, the rule `diff`'s sides follow: one
+/// clause per distinct extreme, in time order (#68).
 ///
 /// The signed value, never converted to semitones. Any range stated through
 /// RPN 0 stays in the Controller reading. See #44.
@@ -409,21 +410,23 @@ pub fn bend(lines: Option<BarLines>, held: &battuta::Bend, inside: bool) -> Vec<
             furthest_up,
             furthest_up_at,
         } if inside => {
-            let mut went = Vec::new();
-            if Some(furthest_down) != starting {
-                went.push(format!(
-                    "down to {} at {}",
-                    furthest_down,
-                    at(lines, furthest_down_at)
-                ));
-            }
-            if Some(furthest_up) != starting {
-                went.push(format!(
-                    "up to {} at {}",
-                    furthest_up,
-                    at(lines, furthest_up_at)
-                ));
-            }
+            let went: Vec<String> = extremes(
+                [
+                    (furthest_up, furthest_up_at),
+                    (furthest_down, furthest_down_at),
+                ]
+                .map(|(reached, reached_at)| {
+                    (Some(reached) != starting).then(|| {
+                        (
+                            reached_at,
+                            format!("{reached} at {}", at(lines, reached_at)),
+                        )
+                    })
+                }),
+            )
+            .into_iter()
+            .map(|(_, clause)| clause)
+            .collect();
             if !went.is_empty() {
                 cell = format!("{cell} ({})", went.join(", "));
             }
@@ -649,9 +652,8 @@ impl Side {
         !self.excursions.is_empty() || self.ends_elsewhere
     }
 
-    fn in_full(mut self) -> String {
+    fn in_full(self) -> String {
         let interior = self.has_interior();
-        self.excursions.sort_by_key(|&(tick, _)| tick);
         let mut said = self.at_start;
         for (_, excursion) in self.excursions {
             said.push_str(", ");
@@ -679,16 +681,22 @@ impl Side {
 /// One extreme alone is a different thing and keeps its verb: the other was
 /// dropped for equalling where the span began, so there is a point to have moved
 /// from and the direction is read off it.
+///
+/// In time order, for the reason `Side` gives. The order is decided here rather
+/// than by each caller so that `inspect`'s Bend row and `diff`'s sides cannot
+/// come to disagree about it (#68).
 fn extremes(reached: [Option<(u32, String)>; 2]) -> Vec<(u32, String)> {
     let [up, down] = reached;
-    match (up, down) {
+    let mut clauses: Vec<(u32, String)> = match (up, down) {
         (Some(up), Some(down)) if up == down => vec![(up.0, format!("reaching {}", up.1))],
         (up, down) => up
             .map(|(tick, said)| (tick, format!("up to {said}")))
             .into_iter()
             .chain(down.map(|(tick, said)| (tick, format!("down to {said}"))))
             .collect(),
-    }
+    };
+    clauses.sort_by_key(|&(tick, _)| tick);
+    clauses
 }
 
 /// The rows one span difference occupies.
