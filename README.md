@@ -127,10 +127,14 @@ This project's music is MIDI files, worked on with `mid` (crate `battuta`).
   complete format. Do not guess the schema from memory or from examples.
 - Prefer `--json` on `info`, `inspect` and `diff` when reading results.
 - `mid apply` always writes a new file; keep the original for comparison.
-- After a change, show me the `mid diff` and play the passage. I decide
-  whether it sounds better.
+- After a change, show me the `mid diff` and play the passage. If I listen
+  somewhere other than `mid play`, still show me the diff; I will tell you
+  what I heard. Either way, I decide whether it sounds better.
 - If `mid play` fails because no soundfont is configured, tell me. Do not
   pick one yourself.
+- Which Controller my instruments read for dynamics or expression depends on
+  my sample library or soundfont. Ask me before writing Controller data; do
+  not assume.
 ```
 
 Then start with something like *"I don't like bars 5–8 of this, the left hand
