@@ -57,6 +57,15 @@ Consequences, held as hard rules:
 - Every audition is attributable: `mid play` always states which Rig it used, on
   stderr for humans and in the payload for `--json`. There is no flag whose
   purpose is to hide it.
+- A rendered file carries its own attribution. `play` discloses the Rig at the
+  moment it runs; a `.wav` outlives that moment and the terminal it ran in, so
+  `mid render` writes into the file what it was made from — which Take, which
+  passage, which Rig — named by digest and version rather than by a path on one
+  machine. That record is a claim, not evidence: any tool may strip it, and the
+  check is to render again from it and compare. A file without it is
+  unattributed, and is never to be read as attributed to the Rig in use now.
+- A rendered file is not an audition. Nobody has heard it until somebody does,
+  and `mid render` says so rather than letting a file stand in for a listen.
 - The Rig is never chosen implicitly. No fallback to a system soundfont. An
   unnamed Rig cannot be referred to, and a Rig that cannot be referred to cannot
   serve as a control in a comparison.
@@ -342,9 +351,6 @@ of this, and none of them is V0.
 - **More than one degree of freedom in the Rig, for V0.** One soundfont for the
   whole Piece. Per-channel sound assignment is a property of the Rig and belongs
   to V1's named Rigs (`--rig concert-grand`), not to V0.
-- **Rendering to audio (`mid render`).** V1. It also raises a real question this
-  charter does not yet answer: a `.wav` outlives the terminal, so its Rig
-  attribution has to be persisted with it.
 - **Swift, CoreMIDI, AVAudioEngine, any GUI.** Deferred until there is a real
   demand for a native Mac product. `battuta` is a library from day one precisely
   so that day does not require a rewrite.
