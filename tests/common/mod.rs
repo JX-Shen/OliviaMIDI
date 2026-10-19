@@ -305,7 +305,14 @@ pub struct FakeFluidsynth {
     pub log: PathBuf,
     /// A copy of the Take the fake was given, taken while it still existed.
     pub handed: PathBuf,
+    /// What the fake writes when it is asked to render to a file with `-F`.
+    /// Absent until a test writes it, and then the fake writes nothing.
+    pub renders: PathBuf,
 }
+
+/// The version every fake states, so that a test can see it in an attribution
+/// without it being a version any real FluidSynth has.
+pub const FAKE_FLUIDSYNTH_VERSION: &str = "0.0.0-fake";
 
 pub fn fake_fluidsynth(dir: &Path) -> FakeFluidsynth {
     fake(dir, "exit 0")
@@ -317,6 +324,11 @@ pub fn lingering_fake_fluidsynth(dir: &Path) -> FakeFluidsynth {
     fake(dir, "/bin/sleep 30")
 }
 
+/// A fake that does everything the ordinary one does and then fails.
+pub fn failing_fake_fluidsynth(dir: &Path) -> FakeFluidsynth {
+    fake(dir, "exit 1")
+}
+
 /// Absolute paths for `/bin/cp` and `/bin/sleep`: the child's PATH is the
 /// fake's own directory alone, so that `fluidsynth` can only be the fake and
 /// nothing else is reachable on it.
@@ -325,13 +337,21 @@ fn fake(dir: &Path, last_act: &str) -> FakeFluidsynth {
     std::fs::create_dir_all(&bin_dir).expect("scratch dir is writable");
     let log = dir.join("fluidsynth-argv");
     let handed = dir.join("handed.mid");
+    let renders = dir.join("fake-render.wav");
+    // `--version` is answered and nothing else done, so that the argv logged
+    // is always the call that sounds or renders the Take.
     let script = format!(
         "#!/bin/sh\n\
-         for arg in \"$@\"; do last=\"$arg\"; done\n\
+         if [ \"$1\" = --version ]; then echo 'FluidSynth runtime version {FAKE_FLUIDSYNTH_VERSION}'; exit 0; fi\n\
+         wav=\n\
+         for arg in \"$@\"; do [ \"$previous\" = -F ] && wav=\"$arg\"; previous=\"$arg\"; last=\"$arg\"; done\n\
          /bin/cp \"$last\" \"{}\"\n\
+         [ -n \"$wav\" ] && [ -f \"{}\" ] && /bin/cp \"{}\" \"$wav\"\n\
          printf '%s\\n' \"$@\" > \"{}\"\n\
          {last_act}\n",
         handed.display(),
+        renders.display(),
+        renders.display(),
         log.display()
     );
     let path = bin_dir.join("fluidsynth");
@@ -341,6 +361,7 @@ fn fake(dir: &Path, last_act: &str) -> FakeFluidsynth {
         dir: bin_dir,
         log,
         handed,
+        renders,
     }
 }
 

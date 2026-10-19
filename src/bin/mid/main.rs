@@ -14,6 +14,7 @@ mod diff;
 mod info;
 mod inspect;
 mod play;
+mod render;
 mod wording;
 
 use clap::{Parser, Subcommand};
@@ -42,6 +43,7 @@ enum Command {
     Combine(combine::Args),
     Diff(diff::Args),
     Play(play::Args),
+    Render(render::Args),
 }
 
 fn main() {
@@ -59,6 +61,7 @@ fn main() {
         Command::Combine(args) => combine::run(args),
         Command::Diff(args) => diff::run(args),
         Command::Play(args) => play::run(args),
+        Command::Render(args) => render::run(args),
     };
 
     if let Err(error) = result {

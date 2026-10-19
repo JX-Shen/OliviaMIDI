@@ -102,6 +102,18 @@ _Avoid_: patch, timbre, realization, sound, voice; 音色、音色库、音源
 Note that `patch` is reserved for its synthesiser meaning — a sound preset —
 and so belongs on this side, never to an Edit Set.
 
+**Render**:
+To turn a Take, or a passage of it, into an audio file through a Rig, with
+what it was made from written into the file. What `mid render` does. A render
+is not heard by being made: it is what the Rig would play, written down.
+_中文_: 渲染
+_Avoid_: bounce, export, mixdown, audition; 导出、缩混、混音、试听
+
+*Audition* is avoided because a render is precisely not one, and the two must
+never be filed as each other — see `CHARTER.md`. `bounce` and 缩混 are a DAW's
+words for mixing tracks down, and nothing here is mixed; `export` and 导出
+name only that a file leaves, not that it was made by a Rig. See #70.
+
 ## Musical position
 
 **Bar**:

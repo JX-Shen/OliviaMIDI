@@ -61,7 +61,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
         args.bars,
         args.rig,
         &mut |rig: &battuta::Rig| {
-            eprintln!("rig: {}", rig.soundfont.display());
+            eprintln!("{}", crate::wording::rig(rig));
         },
     )?;
 

@@ -2,7 +2,7 @@
 //!
 //! A Take is one `.mid` file. This crate reads one, names every note in it,
 //! applies mechanical Edits to produce a new Take, says what differs between
-//! two, and hands one to a Rig to be heard. It holds no musical intent: naming
+//! two, and hands one to a Rig to be heard or rendered. It holds no musical intent: naming
 //! what a change *means* is the agent's job, and this crate's job is to never
 //! encode it.
 //!
@@ -20,6 +20,7 @@ pub mod passage;
 pub mod program;
 pub mod rank;
 pub mod reading;
+pub mod render;
 pub mod rig;
 pub mod take;
 mod temporary;
@@ -47,6 +48,7 @@ pub use note::{pitch_name, Note, NoteId, PitchName};
 pub use program::{gm_name, Program, Programs, StatedProgram, GM_PERCUSSION_CHANNEL};
 pub use rank::{RankDisagreement, RankedPairKind, UnrankedSite};
 pub use reading::{Candidate, Reading, UnrankedComparison, UnrankedSpan};
+pub use render::{Attribution, Rendering};
 pub use rig::{Audition, Rig};
 pub use take::{Info, NoBars, StatedTempo, Take, Tempo, TimeSignature};
 pub use temporary::remove_temporary_takes_on_signals;

@@ -13,10 +13,8 @@
 //! describing a change stops at `names`, because the fields it goes on to talk
 //! about are the ones `note` would have printed.
 //!
-//! Not `render`: `CHARTER.md` reserves `mid render` for turning a Take into
-//! audio, and a module in this directory taking that name would be sitting in
-//! the seat its implementation will want. `wording` is ADR-0005's own word for
-//! what this does.
+//! Not `render`: that is `mid render`'s module, which turns a Take into audio.
+//! `wording` is ADR-0005's own word for what this does.
 
 use battuta::{
     BarLines, BendDifference, BendSide, Controller, ControllerDifference, ControllerSide, Note,
@@ -1260,5 +1258,19 @@ pub fn order_contradiction(contradiction: &battuta::OrderContradiction) -> Strin
         contradiction.tick,
         channel(contradiction.channel),
         contradiction.pair.named()
+    )
+}
+
+/// Which Rig a Take was heard or rendered through, as `play` and `render` both
+/// state it.
+pub fn rig(rig: &battuta::Rig) -> String {
+    format!("rig: {}", rig.soundfont.display())
+}
+
+/// That a file was rendered, and that rendering it was not hearing it.
+pub fn rendered(rendering: &battuta::Rendering) -> String {
+    format!(
+        "rendered: {} — not heard; nobody has listened to it yet",
+        rendering.output.display()
     )
 }

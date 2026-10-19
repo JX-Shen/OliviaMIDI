@@ -47,6 +47,27 @@ impl Rig {
             take.to_path_buf(),
         ]
     }
+
+    /// What `mid render` hands FluidSynth: exactly what `play` hands it, and
+    /// the two things writing a file instead of sounding one needs. Nothing
+    /// else is pinned, so a rendered file and a played Take go through one
+    /// apparatus — see #70.
+    pub fn fluidsynth_render_args(&self, take: &Path, wav: &Path) -> Vec<PathBuf> {
+        let mut args = self.fluidsynth_args(take);
+        // Options before the soundfont, which is where `fluidsynth_args` puts
+        // its own.
+        let at = args.len() - 2;
+        args.splice(
+            at..at,
+            [
+                PathBuf::from("-F"), // write to this file, as fast as it renders
+                wav.to_path_buf(),
+                PathBuf::from("-T"), // as a WAV, whatever its name ends in
+                PathBuf::from("wav"),
+            ],
+        );
+        args
+    }
 }
 
 /// One audition: which Take was heard, how much of it, and through which Rig.

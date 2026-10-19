@@ -532,6 +532,25 @@ pub enum Error {
 
     #[error("fluidsynth failed: {0}")]
     FluidsynthFailed(std::process::ExitStatus),
+
+    #[error(
+        "render never writes over what it reads: -o {output} names {input}. One file has as many \
+         names as something has given it, and a symlink or a second hard link to it is still it. \
+         Choose an output that does not already name it."
+    )]
+    RenderOverInput { output: PathBuf, input: PathBuf },
+
+    #[error(
+        "`fluidsynth --version` did not say which version it is, so a rendered file could not \
+         say what made it. It answered: {0:?}"
+    )]
+    FluidsynthVersionUnreadable(String),
+
+    #[error(
+        "fluidsynth reported success but did not write a WAV file, so there is nothing to \
+         attribute and nothing has been written to {0}."
+    )]
+    RenderNotWav(PathBuf),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

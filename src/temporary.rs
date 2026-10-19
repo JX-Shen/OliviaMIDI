@@ -1,11 +1,12 @@
-//! A Take written where nothing will find it afterwards.
+//! Files written where nothing will find them afterwards.
 //!
-//! `mid play --bars` hands FluidSynth a passage cut out of the user's Take.
-//! That file is an implementation detail of playback: it is never presented as
-//! a Take, and it must not exist once the command is over. Not after success,
-//! not after a failure, and not after the Ctrl-C that — because `play` blocks
-//! for as long as the audio lasts — is the ordinary way to stop it part way
-//! through, rather than an edge case.
+//! `mid play --bars` hands FluidSynth a passage cut out of the user's Take, and
+//! `mid render` has FluidSynth write a WAV that is not yet the one asked for.
+//! Each file is an implementation detail of its command: it is never presented
+//! as anybody's file, and it must not exist once the command is over. Not after
+//! success, not after a failure, and not after the Ctrl-C that — because `play`
+//! blocks for as long as the audio lasts — is the ordinary way to stop it part
+//! way through, rather than an edge case.
 //!
 //! Drop covers the first two. The third needs a signal handler; a signal
 //! handler may only reach a global; so this module owns both, and they are here
@@ -23,12 +24,67 @@ use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::Once;
 
-/// A Take on disk that removes itself: when this value drops, and when the
+/// A file on disk that removes itself: when this value drops, and when the
 /// process is killed by a signal it is allowed to catch.
-pub(crate) struct TemporaryTake {
+pub(crate) struct TemporaryFile {
     path: PathBuf,
     /// Where this path sits in `TO_REMOVE`, when it found room there.
     slot: Option<usize>,
+}
+
+impl TemporaryFile {
+    /// Take responsibility for the going of a file that `tempfile` created.
+    ///
+    /// Registered before anything is written to it: the file exists from the
+    /// moment it is created, so that is the moment it becomes something to
+    /// clean up. Removal becomes this type's own job rather than
+    /// `NamedTempFile`'s, so that one owner decides when it happens and in what
+    /// order.
+    fn owning(file: tempfile::NamedTempFile) -> std::io::Result<TemporaryFile> {
+        let (_, path) = file.keep().map_err(|failed| failed.error)?;
+        Ok(TemporaryFile {
+            slot: remember(&path),
+            path,
+        })
+    }
+
+    /// An empty file beside `destination`, for something to be written into
+    /// and then renamed onto it.
+    ///
+    /// Beside it, because a rename across two filesystems is not a rename and
+    /// not atomic. Named so that one left behind by a process that could not
+    /// catch its death does not read as somebody's file.
+    pub(crate) fn beside(destination: &Path, suffix: &str) -> std::io::Result<TemporaryFile> {
+        install();
+        let directory = destination
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        let file = tempfile::Builder::new()
+            .prefix(".battuta-writing-")
+            .suffix(suffix)
+            .tempfile_in(directory)?;
+        TemporaryFile::owning(file)
+    }
+
+    pub(crate) fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Rename this file onto `destination`, which then holds either what it
+    /// held before or the whole of this.
+    ///
+    /// The registration outlives the rename by the length of `Drop`. A signal
+    /// landing in between unlinks a name that no longer exists, which is
+    /// harmless; deregistering first would leave a window where it is neither.
+    pub(crate) fn persist(self, destination: &Path) -> std::io::Result<()> {
+        std::fs::rename(&self.path, destination)
+    }
+}
+
+/// A Take written where nothing will find it afterwards.
+pub(crate) struct TemporaryTake {
+    file: TemporaryFile,
 }
 
 impl TemporaryTake {
@@ -40,18 +96,8 @@ impl TemporaryTake {
             .suffix(".mid")
             .tempfile()
             .map_err(Error::PassageUnwritable)?;
-        // Removal becomes this type's own job rather than `NamedTempFile`'s, so
-        // that one owner decides when it happens and in what order.
-        let (_, path) = file
-            .keep()
-            .map_err(|failed| Error::PassageUnwritable(failed.error))?;
-
-        // Registered before anything is written to it: the file exists from the
-        // moment it is created, so that is the moment it becomes something to
-        // clean up.
         let temporary = TemporaryTake {
-            slot: remember(&path),
-            path,
+            file: TemporaryFile::owning(file).map_err(Error::PassageUnwritable)?,
         };
         // Written *into* the registered file, which is the one place in this
         // crate that must not use `Take::write`. That writes a new file beside
@@ -63,16 +109,16 @@ impl TemporaryTake {
         // Creating the file and filling it are one condition with one remedy,
         // and the user is never told this file's name: it is not a file they
         // have, so it is not a file they can go and fix.
-        std::fs::write(&temporary.path, take.bytes()).map_err(Error::PassageUnwritable)?;
+        std::fs::write(temporary.path(), take.bytes()).map_err(Error::PassageUnwritable)?;
         Ok(temporary)
     }
 
     pub(crate) fn path(&self) -> &Path {
-        &self.path
+        self.file.path()
     }
 }
 
-impl Drop for TemporaryTake {
+impl Drop for TemporaryFile {
     fn drop(&mut self) {
         // The file goes first and the registration second, never the other way
         // round. A signal landing between the two must find the path either
@@ -91,9 +137,9 @@ impl Drop for TemporaryTake {
     }
 }
 
-/// How many temporary Takes may be outstanding at once.
+/// How many temporary files may be outstanding at once.
 ///
-/// `mid play` holds exactly one. The room for eight is for a library consumer
+/// `mid play` holds one at most, and `mid render` two. The room for eight is for a library consumer
 /// auditioning passages on several threads; one that wanted more would still
 /// get its files removed on the way out, just not by a signal. The number is
 /// part of what #4 promises rather than a detail behind it, which is why
