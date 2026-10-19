@@ -27,6 +27,7 @@ mid inspect take.mid                         # every note, in musical terms
 mid apply   take.mid edits.json -o take2.mid # apply an Edit Set → a new file
 mid diff    take.mid take2.mid               # what changed, note by note
 mid play    take2.mid                        # hear it
+mid render  take2.mid -o take2.wav           # a WAV that says what made it
 ```
 
 `inspect` reads like music, not like a hex dump — each note is placed where a
@@ -75,7 +76,8 @@ MIDI and audio to compare:
 cargo install battuta
 ```
 
-That installs `mid`. Everything except `play` works with the binary alone.
+That installs `mid`. Everything except `play` and `render` works with the binary
+alone.
 
 To build from a clone:
 
@@ -86,7 +88,7 @@ cargo test
 
 ## Setting up playback
 
-`mid play` needs two things, and it will not guess either of them.
+`mid play` and `mid render` need two things, and will not guess either of them.
 
 1. **FluidSynth** on your `PATH`, which `mid` runs as a subprocess:
 
@@ -109,7 +111,8 @@ has all 128 General MIDI instruments and a real grand piano at program 0.
 vintage-synth demo bank with no piano in it; a plain piano file will play back
 as bells. It still makes sound, which is exactly why it is easy to miss — and
 why `mid` refuses to fall back to any soundfont you did not choose. Every
-`mid play` reports which Rig it used, so a comparison stays readable later.
+`mid play` reports which Rig it used, and every `mid render` writes it into the
+file, so a comparison stays readable later.
 
 ## Using it with your agent
 
