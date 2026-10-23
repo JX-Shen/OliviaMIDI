@@ -7,11 +7,13 @@ Tell your agent *"the melody sounds flat"* or *"the bass drops out under the
 tune"*. It reads the `.mid` file note by note, makes a precise change, shows you
 a note-by-note diff, and plays the result back to you. You listen and decide. If
 you like parts of two different attempts, it combines them into one file and
-tells you exactly what came from where.
+tells you exactly what came from where. Your original file is never changed:
+every change is written to a new file.
 
 You don't need to know any theory. *"It's too crowded here"* is a fine place to
 start: turning a reaction like that into a change you can check is the agent's
-job. Here is one real session, told [below](#what-it-looks-like):
+job. Here is one real session; the story behind the picture is
+[below](#what-it-looks-like).
 
 <a href="https://github.com/JX-Shen/OliviaMIDI/issues/51">
   <picture>
@@ -20,17 +22,23 @@ job. Here is one real session, told [below](#what-it-looks-like):
   </picture>
 </a>
 
+To hear a similar experiment rather than read about it, open
+[*Keeping changes from two musical experiments*](https://jxshen.me/essays/keeping-changes-from-two-experiments):
+four versions of one passage, switchable while it plays.
+
 **What you need:** an AI agent that can run commands in a terminal, such as
-Claude Code or Codex, on macOS or Linux; [Rust](https://rustup.rs), to install
-`mid` with `cargo install battuta`; and, to hear results,
+Claude Code or Codex, on macOS or Linux; and [Rust](https://rustup.rs), to
+install the tool. The command you and your agent type is `mid`; it installs
+with `cargo install battuta`, `battuta` being the name of its Rust crate. To hear
+results you also need
 [FluidSynth and a soundfont](#setting-up-playback). Jump to:
 [Install](#install) · [Using it with your agent](#using-it-with-your-agent).
 
 This is not an AI music generator, and nothing here composes for you. It works
 on the ordinary MIDI files already on your disk, and it is the layer underneath
 a conversation about a piece: the part that lets an agent check what is
-actually in the file, try one change, and say exactly what it did. `mid` is
-MIT-licensed; `battuta` is the Rust crate it comes from.
+actually in the file, try one change, and say exactly what it did. It is
+MIT-licensed.
 
 ## What it looks like
 
@@ -65,12 +73,10 @@ changed  bar 4 beat 4+125  track 1  channel 0  A5   velocity 80 -> 96
 `bar 2 beat 3+187` means bar 2, beat 3, then 187 ticks later; a beat is 384
 ticks in this file. Nine notes, ten changes, nothing else. I, Jianxin Shen, who
 wrote `mid`, listened to the original, both versions and the combination, and
-kept the combination: *听的出来，而且我确实感觉D的质感好了一些，两个语句感觉平衡了很多* ("I can hear it. The combined one has a better texture, and the two phrases
+kept the combination: *听的出来，而且我确实感觉D的质感好了一些，两个语句感觉平衡了很多*
+("I can hear it. D, the combined one, has a better texture, and the two phrases
 feel much more balanced.")
 
-- **Hear a similar experiment:**
-  [*Keeping changes from two musical experiments*](https://jxshen.me/essays/keeping-changes-from-two-experiments)
-  has four versions of a passage you can switch between while it plays.
 - **The bar positions are a grid, not the music's bars.** They sit on a
   120 bpm 4/4 grid that the file states but the pianist never played to. The
   dataset writes every performance this way, and `mid` reports what the file
@@ -127,8 +133,9 @@ no effect: side 0 asks t1:c0:p69:s0:n0 for the velocity it already has in the co
 both.mid
 ```
 
-The third line is worth a look. One change the melody version asked for was
-already true, because that note already had that loudness. `combine` reports it
+The third line is worth a look. `t1:c0:p69:s0:n0` is how `mid` names one note:
+track 1, channel 0, pitch 69 (A4), starting at tick 0, the first such note
+there. One change the melody version asked for was already true, because that note already had that loudness. `combine` reports it
 rather than counting it as a change. If the two versions had disagreed about
 any note, `combine` would have listed every disagreement and written nothing.
 
@@ -140,7 +147,7 @@ $ mid diff olivia.mid both.mid
 changed  bar 2 beat 1  track 1  channel 0  B4   velocity 50 -> 58
 changed  bar 2 beat 3  track 1  channel 0  G4   velocity 50 -> 47
 changed  bar 3 beat 1  track 1  channel 0  A4   velocity 50 -> 56
-…
+… 14 more rows …
 changed  bar 7 beat 1  track 2  channel 1  D2   duration 475 -> 955
 changed  bar 8 beat 1  track 2  channel 1  D2   duration 475 -> 1435
 ```
