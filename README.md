@@ -3,6 +3,13 @@
 **Change a MIDI file together with your AI agent (Claude Code, Codex), see
 exactly what changed, and hear the result.**
 
+<a href="https://github.com/JX-Shen/OliviaMIDI/issues/51">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/JX-Shen/OliviaMIDI/main/docs/images/session-bwv802-dark.png">
+    <img src="https://raw.githubusercontent.com/JX-Shen/OliviaMIDI/main/docs/images/session-bwv802-light.png" width="720" alt="One session on a recorded performance of Bach's Duet BWV 802: nine notes changed. Six left-hand notes held about three times longer, for example E2 from 47 to 147 ticks, and four notes struck harder or softer. Two versions were combined by mid combine, verified with no conflict, listened to and kept: 'The two phrases feel much more balanced.'">
+  </picture>
+</a>
+
 Tell your agent *"the melody sounds flat"* or *"the bass drops out under the
 tune"*. It reads the `.mid` file note by note, makes a precise change, shows you
 a note-by-note diff, and plays the result back to you. You listen and decide. If
@@ -24,34 +31,20 @@ the Rust crate `battuta` and is MIT-licensed. Jump to: [Install](#install) ·
 
 ## What it looks like
 
-One real session, from 22 October 2026. The file is a pianist's performance of
-Bach's Duet in E minor, BWV 802, captured on a Disklavier at the International
-Piano-e-Competition. Listening to the opening, the two hands felt out of
-balance. The left hand's first entry was played so short that it sounded like
-an echo of the right hand rather than an answer to it.
+The picture above is one real session, from 22 October 2026. The file is a
+pianist's recorded performance of Bach's
+[Duet in E minor, BWV 802](https://imslp.org/wiki/Duets_BWV_802-805_(Bach,_Johann_Sebastian)).
+In the opening, the left hand's first entry was played so short that it
+sounded like an echo of the right hand, not an answer to it.
 
-The agent proposed two versions, each as an *Edit Set*, a small JSON file of
-mechanical changes to named notes:
-
-- One lengthens six notes of that left-hand entry, from clipped to merely
-  detached.
-- The other lifts the melody's two high points, softens the start of its second
-  climb, and brings the left hand's first note forward.
-
-I liked something in both. `combine` put both into one file, after checking
-that each version really was what its Edit Set makes of the original:
-
-```
-$ mid combine original.mid --side longer.mid longer.edits.json --side shaped.mid shaped.edits.json -o both.mid
-verified: side 0 longer.mid is what longer.edits.json makes of the common Take
-verified: side 1 shaped.mid is what shaped.edits.json makes of the common Take
-both.mid
-```
-
-Both versions touched one note, the low E2: one changed how long it lasts, the
-other how loud it is. That is not a conflict, because they changed different
-things. Had they asked for different values of the same thing, `combine` would
-have listed every such disagreement and written nothing.
+The agent made two versions. One held six left-hand notes longer. The other
+changed how hard four notes are struck. Each version was an *Edit Set*, a small
+JSON file of mechanical changes to named notes. `combine` checked that each
+version was exactly what its Edit Set makes of the original, then put both
+into one file. The low E2 was changed by both versions, but in different ways:
+one changed its length and the other its velocity, so they did not conflict.
+If they had both set the same thing to different values, `combine` would have
+listed every such disagreement and written nothing.
 
 ```
 $ mid diff original.mid both.mid
@@ -66,28 +59,26 @@ changed  bar 4 beat 3+173  track 1  channel 0  A4   velocity 52 -> 44
 changed  bar 4 beat 4+125  track 1  channel 0  A5   velocity 80 -> 96
 ```
 
-That is nine notes, ten changes, and nothing else. I listened to the original,
-each version and the combination, and kept the combination:
+Nine notes, ten changes, nothing else. I listened to the original, both
+versions and the combination, and kept the combination: *听的出来，而且我确实感觉D的质感好了一些，两个语句感觉平衡了很多* ("I can hear it. The combined one has a better texture, and the two phrases
+feel much more balanced.")
 
-> 听的出来，而且我确实感觉D的质感好了一些，两个语句感觉平衡了很多。
->
-> I can hear it. The combined one has a better texture, and the two phrases
-> feel much more balanced.
-
-Two notes on reading that diff:
-
-- **The bar positions are a grid, not the music's bars.** They sit on a 120 bpm
-  4/4 grid that the file states and the pianist never played to. The dataset
-  writes every performance that way, and `mid` reports what the file says.
+- **Hear a similar experiment:**
+  [*Keeping changes from two musical experiments*](https://jxshen.me/essays/keeping-changes-from-two-experiments)
+  has four versions of a passage you can switch between while it plays.
+- **The bar positions are a grid, not the music's bars.** They sit on a
+  120 bpm 4/4 grid that the file states but the pianist never played to. The
+  dataset writes every performance this way, and `mid` reports what the file
+  says.
 - **The performance is not in this repository.** It comes from the
   [MAESTRO dataset](https://magenta.tensorflow.org/datasets/maestro) (v3.0.0,
-  Hawthorne et al., 2019), made available by Google LLC under
+  Hawthorne et al., 2019), which Google LLC makes available under
   [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). This
-  project does not take material under that licence, so this README quotes only
-  what `mid` reported about the file. The file's name and digest, both Edit
-  Sets and the listening record are in
-  [#51](https://github.com/JX-Shen/OliviaMIDI/issues/51). Anyone who downloads
-  the dataset can replay the session.
+  project does not take material under that licence, so this README and its
+  picture show only what `mid` reported about the file.
+- **To replay the session,** download the dataset. The file's name and digest,
+  both Edit Sets and the listening record are in
+  [#51](https://github.com/JX-Shen/OliviaMIDI/issues/51).
 
 ### Try it yourself
 
