@@ -47,6 +47,14 @@ enum Command {
 }
 
 fn main() {
+    // A reader that goes away early — `| head` — ends `mid` by SIGPIPE, quietly,
+    // as it ends any Unix filter. Restored before anything can write a
+    // temporary Take, so that `battuta` finds SIGPIPE at its default and
+    // catches it too. See #74.
+    //
+    // SAFETY: setting a disposition before any thread exists or handler runs.
+    unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
+
     // `mid` owns its process, so it consents to `battuta` catching the signals
     // that mean stop — which is what keeps a temporary passage from outliving a
     // Ctrl-C. Nothing is installed until there is a passage to clean up, and a

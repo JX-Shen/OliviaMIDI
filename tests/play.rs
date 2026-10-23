@@ -754,11 +754,12 @@ fn wait_for_argv(log: &std::path::Path) -> Vec<String> {
 /// to stop a passage part way through rather than an edge case — and it is the
 /// one way the temporary Take could outlive the command.
 ///
-/// `battuta` catches three, and #4 promises all three. Only the interrupt
-/// was exercised: removing `SIGTERM` and `SIGHUP` from the installer left every
-/// playback test green, and either of them would then have left a file behind
-/// under a name nobody was ever told. One test each rather than a loop, so that
-/// a signal which stops being caught names itself in the failure.
+/// Every signal `battuta` catches gets a test here: #4's, and `SIGPIPE` from
+/// #74. When #4's were first tested only the interrupt was exercised: removing
+/// `SIGTERM` and `SIGHUP` from the installer left every playback test green,
+/// and either of them would then have left a file behind under a name nobody
+/// was ever told. One test each rather than a loop, so that a signal which
+/// stops being caught names itself in the failure.
 #[test]
 fn an_interrupt_takes_the_temporary_take_with_it() {
     a_caught_signal_takes_the_temporary_take_with_it(libc::SIGINT);
@@ -775,6 +776,52 @@ fn a_termination_takes_the_temporary_take_with_it() {
 #[test]
 fn a_hangup_takes_the_temporary_take_with_it() {
     a_caught_signal_takes_the_temporary_take_with_it(libc::SIGHUP);
+}
+
+/// A reader of stderr that has gone away. `play` states its Rig there while the
+/// passage is still written, so the `SIGPIPE` arrives then, raised by `mid`'s
+/// own print rather than sent from outside — #74.
+#[test]
+fn a_broken_pipe_takes_the_temporary_take_with_it() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let fake = common::lingering_fake_fluidsynth(dir.path());
+    let soundfont = common::fake_soundfont(&dir.path().join("chosen.sf2"));
+
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("mid"))
+        .args(["play", FIXTURE, "--bars", "5:8", "--rig"])
+        .arg(&soundfont)
+        .env("PATH", &fake.dir)
+        .env_remove(battuta::rig::SOUNDFONT_ENV)
+        .stdout(std::process::Stdio::null())
+        .stderr(a_pipe_nobody_reads())
+        .spawn()
+        .expect("mid runs");
+
+    let argv = wait_for_argv(&fake.log);
+    let passage = std::path::PathBuf::from(argv.last().expect("a file was handed over"));
+    let status = child.wait().expect("mid exits");
+
+    assert!(!passage.exists(), "a broken pipe left {passage:?} behind");
+    use std::os::unix::process::ExitStatusExt;
+    assert_eq!(
+        status.signal(),
+        Some(libc::SIGPIPE),
+        "mid died of something other than SIGPIPE: {status:?}"
+    );
+}
+
+/// The writing end of a pipe whose reading end is already closed, so that the
+/// first write to it raises `SIGPIPE` whenever it comes.
+fn a_pipe_nobody_reads() -> std::process::Stdio {
+    use std::os::fd::FromRawFd;
+    let mut ends = [0; 2];
+    // SAFETY: `pipe` fills both descriptors; the reading one is closed at once
+    // and the writing one is owned from here on and handed to the child.
+    unsafe {
+        assert_eq!(libc::pipe(ends.as_mut_ptr()), 0, "a pipe");
+        libc::close(ends[0]);
+        std::process::Stdio::from(std::os::fd::OwnedFd::from_raw_fd(ends[1]))
+    }
 }
 
 fn a_caught_signal_takes_the_temporary_take_with_it(signal: libc::c_int) {

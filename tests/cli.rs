@@ -1,6 +1,7 @@
 mod common;
 
 use common::mid;
+use std::os::unix::process::ExitStatusExt;
 
 /// `mid help` and per-command help *are* the command reference — there is no
 /// separate document that could drift from the binary. So the suite checks that
@@ -89,4 +90,44 @@ fn inspect_help_states_the_bar_semantics() {
         .stdout(predicates::str::contains("changes time signature"))
         // That a partial final Bar is a Bar.
         .stdout(predicates::str::contains("final Bar"));
+}
+
+/// A reader that stops early — `| head`, which agents reach for constantly —
+/// ends `mid` the way it ends any Unix filter: killed by `SIGPIPE`, with nothing
+/// on stderr. It used to panic with exit status 101, which reads as a crash in
+/// `mid` when nothing is wrong with the Take or the command. #74.
+///
+/// The Take is built large enough that `inspect` cannot fit its output in a
+/// pipe buffer, so `mid` is still writing after the reader has gone whatever
+/// the timing.
+#[test]
+fn a_reader_that_goes_away_ends_mid_quietly() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let notes: Vec<common::NoteSpec> = (0..4000u32)
+        .map(|i| (i * 120, 110, 36 + (i % 60) as u8))
+        .collect();
+    let take = common::build_take(&dir.path().join("long.mid"), 480, &[(0, 4, 4)], &notes);
+
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("mid"))
+        .arg("inspect")
+        .arg(&take)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("mid runs");
+    // The reader goes away before reading a byte.
+    drop(child.stdout.take());
+    let output = child.wait_with_output().expect("mid exits");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.is_empty(),
+        "mid said something on its way out: {stderr}"
+    );
+    assert_eq!(
+        output.status.signal(),
+        Some(libc::SIGPIPE),
+        "mid did not end by SIGPIPE: {:?}",
+        output.status
+    );
 }

@@ -202,12 +202,12 @@ static CONSENTED: AtomicBool = AtomicBool::new(false);
 ///
 /// A temporary Take is removed on every route out of a command that runs a
 /// destructor. A signal is the one route that does not, and covering it means
-/// installing handlers for `SIGINT`, `SIGTERM` and `SIGHUP`. Those are a
-/// *process-global* resource, and a library has no business taking one without
-/// being asked: a host application holding its own `SIGTERM` handler for its own
-/// shutdown would lose it — permanently, because nothing here restores it — the
-/// first time it auditioned a single passage, and would then die where it used
-/// to shut down cleanly.
+/// installing handlers for the signals that mean *stop*. Those are a
+/// *process-global* resource, and a library has no business taking one
+/// without being asked: a host application holding its own `SIGTERM` handler
+/// for its own shutdown would lose it — permanently, because nothing here
+/// restores it — the first time it auditioned a single passage, and would then
+/// die where it used to shut down cleanly.
 ///
 /// So it is asked for. `mid` consents in `main`, because `mid` owns its process.
 /// A consumer that does not consent keeps its own handlers and still has every
@@ -223,14 +223,15 @@ pub fn remove_temporary_takes_on_signals() {
     CONSENTED.store(true, Ordering::Release);
 }
 
-/// Catch the three signals that mean *stop*, the first time there is anything
-/// to clean up in a process that has agreed to it.
+/// Catch the signals that mean *stop*, the first time there is anything to
+/// clean up in a process that has agreed to it.
 ///
 /// Lazily, so that a consumer of this library which never writes a temporary
 /// Take never has its signals touched. A signal that is already being ignored
 /// is left alone: that is a decision the process made before `battuta` was
 /// called — usually because a shell put it in the background — and taking it
-/// back would kill a job that asked not to be killed.
+/// back would kill a job that asked not to be killed. So `SIGPIPE` is caught
+/// only in a process that restored its default first (#74).
 ///
 /// `SIGQUIT` is deliberately not caught. Its whole purpose is an abrupt abort
 /// with a core dump, and a file left in the temporary directory is a smaller
@@ -242,7 +243,7 @@ fn install() {
         return;
     }
     INSTALLED.call_once(|| {
-        for signal in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP] {
+        for signal in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP, libc::SIGPIPE] {
             // SAFETY: `remove_and_die` calls only async-signal-safe functions.
             unsafe {
                 let mut current: libc::sigaction = std::mem::zeroed();

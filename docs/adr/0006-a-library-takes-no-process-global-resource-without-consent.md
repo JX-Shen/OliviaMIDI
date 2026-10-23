@@ -69,9 +69,9 @@ is the consumer that is safe.
 
 Opt-in usually trades safety for fragility — the one caller who needs the
 behaviour can forget to ask for it, and the failure is silent. That trade is not
-being made here, because the three tests in `tests/play.rs` that send `SIGINT`,
-`SIGTERM` and `SIGHUP` to a live `mid` all go red the moment the call in `main`
-is removed. It was checked, by removing it.
+being made here, because the tests in `tests/play.rs` that bring each caught
+signal to a live `mid` all go red the moment the call in `main` is removed. It
+was checked, by removing it.
 
 `tests/signals.rs` holds one test and has to keep holding one. Both the consent
 flag and the signal dispositions are process-global and consent is one-way, so a
@@ -87,3 +87,12 @@ harmless.
 The consent function is the one place in the public API that admits to a
 side effect on the process, and its name says what it will do. A second
 process-global need gets a second such function, not a flag on this one.
+
+## Amended by #74
+
+The consented handlers now catch `SIGPIPE` as well, since a pipe can close
+while a passage exists like any other stop. That is the same consent covering
+the same purpose, not a second process-global need, so it is not a second
+function. An ignored signal is still left alone, so a consumer whose `SIGPIPE`
+is ignored, as Rust leaves it, sees no change. The sentence above that counted
+the tests in `tests/play.rs` now describes them instead. Amended 2026-10-23.

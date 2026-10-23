@@ -18,7 +18,7 @@ extern "C" fn a_consumers_own_handler(_signal: libc::c_int) {}
 /// A library consumer keeps the signal handlers it installed.
 ///
 /// Auditioning a passage writes a temporary Take, and removing that on a signal
-/// means `SIGINT`, `SIGTERM` and `SIGHUP` handlers — a process-global resource
+/// means handlers for the signals that mean *stop* — a process-global resource
 /// this library used to take on first use, permanently, without being asked. A
 /// host application holding its own `SIGTERM` handler for its own shutdown lost
 /// it the first time it played four Bars, and afterwards died where it used to
@@ -28,7 +28,7 @@ extern "C" fn a_consumers_own_handler(_signal: libc::c_int) {}
 /// synthesiser — by a consumer that never consented. ADR-0006.
 #[test]
 fn a_consumer_that_does_not_consent_keeps_its_own_signal_handlers() {
-    let caught = [libc::SIGINT, libc::SIGTERM, libc::SIGHUP];
+    let caught = [libc::SIGINT, libc::SIGTERM, libc::SIGHUP, libc::SIGPIPE];
     let ours = a_consumers_own_handler as *const () as libc::sighandler_t;
 
     for signal in caught {
