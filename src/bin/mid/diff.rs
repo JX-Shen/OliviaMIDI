@@ -138,11 +138,18 @@ use std::path::PathBuf;
 ///
 /// Every position printed, on both sides, is read against the before Take's Bar
 /// lines, so that one position is one Tick throughout; where the before Take
-/// has no Bar lines, every position is a Tick. Where the two Takes' time
+/// has no Bar lines, every position is a Tick, with the Elapsed time the before
+/// Take's tempos give it beside it where they give one. Where the two Takes' time
 /// signatures differ, so that the after Take's own Bar lines would place its
 /// Ticks elsewhere, the diff says so before its rows:
 ///
 ///     time signatures differ; every position is in the before Take's Bar lines
+///
+/// Elapsed times are the before Take's in the same way, and where the two
+/// Takes' tempos would put some Tick at a different Elapsed time, the diff says
+/// that once too, before its rows:
+///
+///     tempos differ; every elapsed time is the before Take's
 ///
 /// It does not say how they differ. In `--json`, whose Ticks are never read as
 /// positions, the same is `bar_lines_differ`, true where the two Takes' Bar
@@ -205,8 +212,23 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // Every position on both sides is read against the before Take's Bar
     // lines, and where the after Take's differ that is said once, before any
     // row it frames: #64.
-    let lines = before.bar_lines();
-    let frame = diff.bar_lines_differ.then(|| crate::wording::frame(lines));
+    let readings = crate::wording::Readings::of(&before);
+    let readings = &readings;
+    let mut frame: Vec<String> = Vec::new();
+    if diff.bar_lines_differ {
+        frame.push(crate::wording::frame(readings.bars));
+    }
+    // An Elapsed time is printed only where the before Take has no Bar lines
+    // and states the tempo its Ticks start at; only then can the after Take's
+    // tempos make one misleading, and only then is that said — #73.
+    let elapsed_printed = readings.bars.is_none()
+        && readings
+            .elapsed
+            .as_ref()
+            .is_some_and(|times| times.elapsed_at(0).is_some());
+    if diff.elapsed_times_differ && elapsed_printed {
+        frame.push(crate::wording::elapsed_frame().to_string());
+    }
 
     // The kinds this diff did not compare and the two Takes differ in, which
     // follow whatever else is printed: #62.
@@ -214,10 +236,12 @@ pub fn run(args: Args) -> battuta::Result<()> {
         (!diff.not_compared.is_empty()).then(|| crate::wording::not_compared(&diff.not_compared));
 
     if diff.is_empty() {
-        let sites = unranked_rows(lines, &diff.unranked_sites);
-        let states = unranked_state_rows(lines, &diff);
-        if let Some(frame) = frame.filter(|_| !sites.is_empty() || !states.is_empty()) {
-            println!("{frame}");
+        let sites = unranked_rows(readings, &diff.unranked_sites);
+        let states = unranked_state_rows(readings, &diff);
+        if !sites.is_empty() || !states.is_empty() {
+            for line in &frame {
+                println!("{line}");
+            }
         }
         if diff.has_unranked() {
             println!("no determinate differences; some content was not compared");
@@ -247,7 +271,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // Take rather than a channel or a note. A Take that got faster reframes every
     // row beneath it, orchestration included.
     for difference in &diff.tempos {
-        rows.extend(crate::wording::tempo_rows(lines, difference));
+        rows.extend(crate::wording::tempo_rows(readings, difference));
     }
     // Orchestration first. A channel that changed instrument reframes every note
     // row under it — the same notes on a horn are a different passage — so it is
@@ -256,8 +280,8 @@ pub fn run(args: Args) -> battuta::Result<()> {
         rows.push(vec![
             "program".to_string(),
             match difference.until {
-                Some(_) => crate::wording::span(lines, difference.at, difference.until),
-                None => crate::wording::at(lines, difference.at),
+                Some(_) => crate::wording::span(readings, difference.at, difference.until),
+                None => crate::wording::at(readings, difference.at),
             },
             crate::wording::channel(difference.channel),
             crate::wording::program_difference(difference),
@@ -268,13 +292,13 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // per stretch the two Takes disagree over, never one per event — the whole
     // of #13's difficulty, settled by comparing what is in force (ADR-0007).
     for difference in &diff.controllers {
-        rows.extend(crate::wording::controller_rows(lines, difference));
+        rows.extend(crate::wording::controller_rows(readings, difference));
     }
     // Bends beside the Controller rows, because they are the same kind of fact
     // about the same channel — what the expression is doing — and a reader
     // looking for it should not have to find it in two places.
     for difference in &diff.bends {
-        rows.extend(crate::wording::bend_rows(lines, difference));
+        rows.extend(crate::wording::bend_rows(readings, difference));
     }
     // Then the ordering, which is the layer under both of those: the same
     // Program at the same Tick, met on the other side of the notes it governs.
@@ -283,17 +307,17 @@ pub fn run(args: Args) -> battuta::Result<()> {
     for difference in &diff.rank_disagreements {
         rows.push(vec![
             "rank".to_string(),
-            crate::wording::at(lines, difference.tick),
+            crate::wording::at(readings, difference.tick),
             crate::wording::channel(difference.channel),
             difference.pair.named().to_string(),
             crate::wording::rank_difference(difference),
         ]);
     }
     for note in &diff.added {
-        rows.push(described("added", lines, note));
+        rows.push(described("added", readings, note));
     }
     for note in &diff.removed {
-        rows.push(described("removed", lines, note));
+        rows.push(described("removed", readings, note));
     }
     // How many notes share each address, so that a row describing one of a
     // collision can say which. Read from the before Take, because that is the
@@ -304,19 +328,19 @@ pub fn run(args: Args) -> battuta::Result<()> {
         // The note as it was, not as it became: the reader knows the before
         // Take, and each clause says where its field went.
         row.extend(crate::wording::names(
-            lines,
+            readings,
             &change.before,
             crowding_at(&crowding, &change.before),
         ));
-        row.push(stated(change, lines));
+        row.push(stated(change, readings));
         rows.push(row);
     }
     // Last, and after the differences rather than among them, because they are
     // not differences.
-    rows.extend(unranked_rows(lines, &diff.unranked_sites));
-    rows.extend(unranked_state_rows(lines, &diff));
-    if let Some(frame) = &frame {
-        println!("{frame}");
+    rows.extend(unranked_rows(readings, &diff.unranked_sites));
+    rows.extend(unranked_state_rows(readings, &diff));
+    for line in &frame {
+        println!("{line}");
     }
     crate::wording::table(&rows);
     if let Some(not_compared) = &not_compared {
@@ -325,11 +349,14 @@ pub fn run(args: Args) -> battuta::Result<()> {
     Ok(())
 }
 
-fn unranked_state_rows(lines: Option<battuta::BarLines>, diff: &battuta::Diff) -> Vec<Vec<String>> {
+fn unranked_state_rows(
+    readings: &crate::wording::Readings,
+    diff: &battuta::Diff,
+) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
     for interval in &diff.unranked_tempos {
         rows.extend(crate::wording::unranked_comparison(
-            lines,
+            readings,
             "tempo".to_string(),
             interval,
             crate::wording::tempo_value,
@@ -337,7 +364,7 @@ fn unranked_state_rows(lines: Option<battuta::BarLines>, diff: &battuta::Diff) -
     }
     for item in &diff.unranked_programs {
         rows.extend(crate::wording::unranked_comparison(
-            lines,
+            readings,
             format!("program channel {}", item.channel),
             &item.interval,
             |value| value.to_string(),
@@ -345,7 +372,7 @@ fn unranked_state_rows(lines: Option<battuta::BarLines>, diff: &battuta::Diff) -
     }
     for item in &diff.unranked_controllers {
         rows.extend(crate::wording::unranked_comparison(
-            lines,
+            readings,
             format!("controller channel {} CC{}", item.channel, item.controller),
             &item.interval,
             crate::wording::controller_value,
@@ -357,7 +384,7 @@ fn unranked_state_rows(lines: Option<battuta::BarLines>, diff: &battuta::Diff) -
                 continue;
             }
             let mut row = crate::wording::unranked_bend(
-                lines,
+                readings,
                 interval.channel,
                 interval.from,
                 interval.until,
@@ -376,7 +403,7 @@ fn unranked_state_rows(lines: Option<battuta::BarLines>, diff: &battuta::Diff) -
             if present {
                 rows.push(vec![
                     name.to_string(),
-                    crate::wording::unranked(lines, &read),
+                    crate::wording::unranked(readings, &read),
                 ]);
             }
         }
@@ -390,7 +417,7 @@ fn unranked_state_rows(lines: Option<battuta::BarLines>, diff: &battuta::Diff) -
 /// differences", and at the foot of a table that has some. The reader meets the
 /// same row either way.
 fn unranked_rows(
-    lines: Option<battuta::BarLines>,
+    readings: &crate::wording::Readings,
     sites: &[battuta::UnrankedSite],
 ) -> Vec<Vec<String>> {
     sites
@@ -398,7 +425,7 @@ fn unranked_rows(
         .map(|site| {
             vec![
                 "unranked".to_string(),
-                crate::wording::at(lines, site.tick),
+                crate::wording::at(readings, site.tick),
                 crate::wording::channel(site.channel),
                 site.pair.named().to_string(),
                 crate::wording::unranked_site(site),
@@ -432,9 +459,9 @@ fn crowding_at(counted: &HashMap<(usize, u8, u8, u32), usize>, note: &battuta::N
 
 /// A note that arrived or left, described the way `inspect` lists one — the
 /// same cells in the same order, behind what became of it.
-fn described(verb: &str, lines: Option<battuta::BarLines>, note: &battuta::Note) -> Vec<String> {
+fn described(verb: &str, readings: &crate::wording::Readings, note: &battuta::Note) -> Vec<String> {
     let mut row = vec![verb.to_string()];
-    row.extend(crate::wording::note(lines, note));
+    row.extend(crate::wording::note(readings, note));
     row
 }
 
@@ -447,7 +474,7 @@ fn described(verb: &str, lines: Option<battuta::BarLines>, note: &battuta::Note)
 /// classification the V0.1 spec names in the human's own words — "a moved note
 /// reported as moved" — so it is the one that must not come out as `changed`
 /// alone.
-fn stated(change: &battuta::diff::NoteChange, lines: Option<battuta::BarLines>) -> String {
+fn stated(change: &battuta::diff::NoteChange, readings: &crate::wording::Readings) -> String {
     use battuta::diff::Change;
     change
         .changes
@@ -460,7 +487,10 @@ fn stated(change: &battuta::diff::NoteChange, lines: Option<battuta::BarLines>) 
                 "transposed to {}",
                 crate::wording::pitch(change.after.pitch)
             ),
-            Change::Start => format!("moved to {}", crate::wording::at(lines, change.after.start)),
+            Change::Start => format!(
+                "moved to {}",
+                crate::wording::at(readings, change.after.start)
+            ),
             Change::Duration => format!(
                 "duration {} -> {}",
                 change.before.duration, change.after.duration

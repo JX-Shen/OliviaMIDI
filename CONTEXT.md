@@ -152,7 +152,7 @@ contradiction — 小节 is the Bar, 拍 is what it is counted in.
 Where a Tick falls once the Bars are derived: which Bar, which Beat of it, and
 how far past that Beat. What `mid inspect` prints in place of a raw Tick, and
 what a Take with no derivable Bars has none of — there the Tick is printed as
-itself.
+itself, with its **Elapsed time** beside it where it has one.
 _中文_: 位置
 _Avoid_: location, place, spot; 位点、坐标
 
@@ -161,6 +161,22 @@ that; why it does not is argued there, next to the list it narrows. The short of
 it is that a Tick is the truth and a Position is one reading of it, and the
 section they both sit in has been called Musical position since before either
 term existed.
+
+**Elapsed time**:
+How long after Tick 0 a Tick is heard, in seconds, by the tempos the Take
+states. The other reading of a Tick beside **Position**: a Position comes from
+the time signature, an Elapsed time from the **Tempo**, and it lines up with the
+time axis of a render. A Take that states no tempo has none — the 120 bpm a
+reader would otherwise assume is not something the file says — and neither does
+any Tick at or after one where the stated tempos contradict each other. See #73.
+_中文_: 已过时间
+_Avoid_: clock time, timestamp, timecode, real time, seconds; 时间戳、时码、实时
+
+What a player's counter shows while a render plays, which is the word the reader
+already has. `clock` would be read as MIDI Clock, `timecode` names SMPTE, which
+`battuta` refuses to read, and `real time` is MIDI's name for its system
+real-time messages. `seconds` is the unit, not the reading. **Tick** avoids
+`time` as a name *for a Tick*; this term is a reading of one, as Position is.
 
 **Passage**:
 The stretch of a Take a Bar range names — what `--bars 5:8` selects, for

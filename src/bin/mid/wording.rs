@@ -17,28 +17,73 @@
 //! `wording` is ADR-0005's own word for what this does.
 
 use battuta::{
-    BarLines, BendDifference, BendSide, Controller, ControllerDifference, ControllerSide, Note,
-    Program, ProgramDifference, StatedController, StatedProgram, TempoDifference, TempoSide,
+    BarLines, BendDifference, BendSide, Controller, ControllerDifference, ControllerSide,
+    ElapsedTimes, Note, Program, ProgramDifference, StatedController, StatedProgram,
+    TempoDifference, TempoSide,
 };
 
+/// What a Take's Ticks are read against: its Bar lines where it derives them,
+/// and its Elapsed time where it states the tempos for one.
+///
+/// Both derived once per Take and then asked for every row, as `BarLines` was
+/// before Elapsed time joined it — #73.
+pub struct Readings {
+    pub bars: Option<BarLines>,
+    pub elapsed: Option<ElapsedTimes>,
+}
+
+impl Readings {
+    pub fn of(take: &battuta::Take) -> Readings {
+        Readings {
+            bars: take.bar_lines(),
+            // The only failure is a Take with no PPQ to count in, which every
+            // command reading one has already refused.
+            elapsed: take.elapsed_times().ok(),
+        }
+    }
+}
+
 /// Where a Tick is: musically if the Take says enough to tell, and in Ticks
-/// otherwise.
+/// otherwise, with the Elapsed time beside the Tick where the Take states the
+/// tempos for one — #73.
 ///
 /// The fallback is not a lesser answer. Ticks are the truth and a Bar is the
 /// derived view, so a Take that states no time signature is reported in the
 /// units it actually has. What it must not do is refuse — see `Take::bar_lines`.
+/// A row whose Tick has no Elapsed time says nothing about it; `mid info` says
+/// why, once.
 ///
 /// Not `position`, although a Position is what it usually returns. `CONTEXT.md`
 /// admits **Position** past **Tick**'s avoid list on the grounds that a Position
 /// is a reading of a Tick and never a Tick under another word — and this is the
 /// one function that would have made that false, by answering `tick 8640` to a
 /// question spelled `position`. `at` is true of both answers and claims neither.
-pub fn at(lines: Option<BarLines>, tick: u32) -> String {
-    match lines.map(|lines| lines.position_of(tick)) {
+pub fn at(readings: &Readings, tick: u32) -> String {
+    match readings.bars.map(|bars| bars.position_of(tick)) {
         Some(at) if at.ticks_into_beat == 0 => format!("bar {} beat {}", at.bar, at.beat),
         Some(at) => format!("bar {} beat {}+{}", at.bar, at.beat, at.ticks_into_beat),
-        None => format!("tick {tick}"),
+        None => match readings
+            .elapsed
+            .as_ref()
+            .and_then(|times| times.elapsed_at(tick))
+        {
+            Some(elapsed) => format!("tick {tick} ({})", elapsed_time(elapsed)),
+            None => format!("tick {tick}"),
+        },
     }
+}
+
+/// An Elapsed time as a player's counter shows it: `0:05.67`, `75:03.20`.
+/// Hundredths, truncated rather than rounded, so that it never names a moment
+/// the counter has not reached yet — #73.
+pub fn elapsed_time(elapsed: std::time::Duration) -> String {
+    let hundredths = elapsed.as_millis() / 10;
+    format!(
+        "{}:{:02}.{:02}",
+        hundredths / 6000,
+        hundredths / 100 % 60,
+        hundredths % 100
+    )
 }
 
 /// A pitch by name: `F#4`, `A2`, `C-1`.
@@ -92,13 +137,13 @@ fn quoted(names: &[String]) -> String {
 /// all that separates them. It has no musical name, so it is spelled the way
 /// the identity spells it: `E4 n1` is the note `inspect` lists as
 /// `t1:c0:p64:s960:n1`.
-pub fn names(lines: Option<BarLines>, note: &Note, among: usize) -> Vec<String> {
+pub fn names(readings: &Readings, note: &Note, among: usize) -> Vec<String> {
     let mut called = pitch(note.pitch);
     if among > 1 {
         called.push_str(&format!(" n{}", note.occurrence));
     }
     vec![
-        at(lines, note.start),
+        at(readings, note.start),
         track(note.track, &note.track_names),
         channel(note.channel),
         called,
@@ -111,8 +156,8 @@ pub fn names(lines: Option<BarLines>, note: &Note, among: usize) -> Vec<String> 
 /// It never needs the disambiguator `names` can add: the row says how loud and
 /// how long the note is, which is what tells two notes at one address apart
 /// when they differ at all.
-pub fn note(lines: Option<BarLines>, note: &Note) -> Vec<String> {
-    let mut row = names(lines, note, 1);
+pub fn note(readings: &Readings, note: &Note) -> Vec<String> {
+    let mut row = names(readings, note, 1);
     row.extend(struck(note));
     row
 }
@@ -120,9 +165,9 @@ pub fn note(lines: Option<BarLines>, note: &Note) -> Vec<String> {
 /// One note as `inspect` lists it: `note` without the channel, because the
 /// listing ends every line with the identity, which carries it and points at
 /// the note on its own.
-pub fn listed(lines: Option<BarLines>, note: &Note) -> Vec<String> {
+pub fn listed(readings: &Readings, note: &Note) -> Vec<String> {
     let mut row = vec![
-        at(lines, note.start),
+        at(readings, note.start),
         track(note.track, &note.track_names),
         pitch(note.pitch),
     ];
@@ -327,12 +372,12 @@ pub fn program_difference(difference: &ProgramDifference) -> String {
 ///
 /// Every reset inside the passage is said beside the extremes, which are values
 /// and cannot say it themselves — #63 — and in time order among them (#69).
-pub fn controller(lines: Option<BarLines>, held: &Controller, inside: bool) -> Vec<String> {
+pub fn controller(readings: &Readings, held: &Controller, inside: bool) -> Vec<String> {
     let mut row = vec![
         channel(held.channel),
         controller_number(held.controller),
         state_reading(
-            lines,
+            readings,
             &held.value,
             |value| value.to_string(),
             controller_value,
@@ -352,10 +397,10 @@ pub fn controller(lines: Option<BarLines>, held: &Controller, inside: bool) -> V
                 at: lowest_at,
             },
         ) if inside => clauses.extend([
-            (peak_at, format!("peak {peak} at {}", at(lines, peak_at))),
+            (peak_at, format!("peak {peak} at {}", at(readings, peak_at))),
             (
                 lowest_at,
-                format!("lowest {lowest} at {}", at(lines, lowest_at)),
+                format!("lowest {lowest} at {}", at(readings, lowest_at)),
             ),
         ]),
         (Incomplete, _) | (_, Incomplete) => {
@@ -364,7 +409,11 @@ pub fn controller(lines: Option<BarLines>, held: &Controller, inside: bool) -> V
         _ => {}
     }
     // Every clause, extreme or reset, in time order — #69.
-    clauses.extend(held.resets.iter().map(|&tick| (tick, reset(lines, tick))));
+    clauses.extend(
+        held.resets
+            .iter()
+            .map(|&tick| (tick, reset(readings, tick))),
+    );
     said.extend(in_time_order(clauses));
     if !said.is_empty() {
         row.push(said.join(", "));
@@ -374,8 +423,8 @@ pub fn controller(lines: Option<BarLines>, held: &Controller, inside: bool) -> V
 
 /// A reading a Reset All Controllers left: where the reset is, by the message's
 /// own name, and no value — #63.
-pub fn reset(lines: Option<BarLines>, tick: u32) -> String {
-    format!("reset at {} (Reset All Controllers)", at(lines, tick))
+pub fn reset(readings: &Readings, tick: u32) -> String {
+    format!("reset at {} (Reset All Controllers)", at(readings, tick))
 }
 
 /// What a Controller candidate holds: a value, or `reset` where the track's
@@ -391,7 +440,7 @@ pub fn controller_value(value: &Option<u8>) -> String {
 /// reset that left it. `candidate` words what a candidate holds, which for a
 /// Controller is not the value's own type.
 pub fn state_reading<T, C>(
-    lines: Option<BarLines>,
+    readings: &Readings,
     reading: &battuta::Reading<T, C>,
     value: impl Fn(&T) -> String,
     candidate: impl Fn(&C) -> String,
@@ -405,7 +454,7 @@ pub fn state_reading<T, C>(
                 state_candidates(candidates, candidate)
             )
         }
-        battuta::Reading::Reset { at } => reset(lines, *at),
+        battuta::Reading::Reset { at } => reset(readings, *at),
     }
 }
 
@@ -435,14 +484,14 @@ pub fn tempo_value(tempo: &battuta::Tempo) -> String {
 }
 
 pub fn indeterminate_span<T>(
-    lines: Option<BarLines>,
+    readings: &Readings,
     address: String,
     interval: &battuta::UnrankedSpan<T>,
     format: impl Fn(&T) -> String,
 ) -> Vec<String> {
     vec![
         address,
-        span(lines, interval.from, interval.until),
+        span(readings, interval.from, interval.until),
         format!(
             "indeterminate: {}",
             state_candidates(&interval.candidates, format)
@@ -451,7 +500,7 @@ pub fn indeterminate_span<T>(
 }
 
 pub fn unranked_comparison<T>(
-    lines: Option<BarLines>,
+    readings: &Readings,
     address: String,
     interval: &battuta::UnrankedComparison<T>,
     format: impl Fn(&T) -> String,
@@ -463,7 +512,7 @@ pub fn unranked_comparison<T>(
             vec![
                 format!("unranked {address}"),
                 side.to_string(),
-                span(lines, interval.from, interval.until),
+                span(readings, interval.from, interval.until),
                 format!("not compared: {}", state_candidates(candidates, &format)),
             ]
         })
@@ -487,13 +536,13 @@ pub fn unranked_comparison<T>(
 ///
 /// The signed value, never converted to semitones. Any range stated through
 /// RPN 0 stays in the Controller reading. See #44.
-pub fn bend(lines: Option<BarLines>, held: &battuta::Bend, inside: bool) -> Vec<String> {
+pub fn bend(readings: &Readings, held: &battuta::Bend, inside: bool) -> Vec<String> {
     let starting = match &held.value {
         battuta::Reading::Determinate { value } => Some(*value),
         _ => None,
     };
     let mut cell = state_reading(
-        lines,
+        readings,
         &held.value,
         |value| value.to_string(),
         |value| value.to_string(),
@@ -517,7 +566,7 @@ pub fn bend(lines: Option<BarLines>, held: &battuta::Bend, inside: bool) -> Vec<
                     (Some(reached) != starting).then(|| {
                         (
                             reached_at,
-                            format!("{reached} at {}", at(lines, reached_at)),
+                            format!("{reached} at {}", at(readings, reached_at)),
                         )
                     })
                 }),
@@ -537,7 +586,7 @@ pub fn bend_candidates(candidates: &[battuta::Candidate<i16>]) -> String {
 }
 
 pub fn unranked_bend(
-    lines: Option<BarLines>,
+    readings: &Readings,
     channel_number: u8,
     from: u32,
     until: Option<u32>,
@@ -545,7 +594,7 @@ pub fn unranked_bend(
 ) -> Vec<String> {
     vec![
         "unranked bend".to_string(),
-        span(lines, from, until),
+        span(readings, from, until),
         channel(channel_number),
         format!("not compared: {}", bend_candidates(candidates)),
     ]
@@ -557,9 +606,9 @@ pub fn unranked_bend(
 /// `stated_controller`'s row, and the track is here for its reason: this
 /// describes an event somebody can go and look at, where the state above
 /// describes what the channel is.
-pub fn stated_bend(lines: Option<BarLines>, stated: &battuta::StatedBend) -> Vec<String> {
+pub fn stated_bend(readings: &Readings, stated: &battuta::StatedBend) -> Vec<String> {
     vec![
-        at(lines, stated.tick),
+        at(readings, stated.tick),
         track(stated.track, &stated.track_names),
         channel(stated.channel),
         "bend".to_string(),
@@ -639,9 +688,9 @@ fn trimmed(name: &str) -> String {
     name
 }
 
-pub fn stated_controller(lines: Option<BarLines>, stated: &StatedController) -> Vec<String> {
+pub fn stated_controller(readings: &Readings, stated: &StatedController) -> Vec<String> {
     vec![
-        at(lines, stated.tick),
+        at(readings, stated.tick),
         track(stated.track, &stated.track_names),
         channel(stated.channel),
         controller_number(stated.controller),
@@ -673,10 +722,7 @@ pub fn stated_controller(lines: Option<BarLines>, stated: &StatedController) -> 
 /// place of a value where the span begins on one. A side ending reset says no
 /// `ends at`; its last clause is the reset — #63. An extreme after a reset has
 /// no direction — see `extremes` (#69).
-pub fn controller_rows(
-    lines: Option<BarLines>,
-    difference: &ControllerDifference,
-) -> Vec<Vec<String>> {
+pub fn controller_rows(readings: &Readings, difference: &ControllerDifference) -> Vec<Vec<String>> {
     let side = |side: &ControllerSide| {
         let mut excursions = extremes(
             [(side.peak, side.peak_at), (side.lowest, side.lowest_at)].map(
@@ -685,17 +731,21 @@ pub fn controller_rows(
                     (Some(reached) != side.at_start).then(|| {
                         (
                             reached_at,
-                            format!("{reached} at {}", at(lines, reached_at)),
+                            format!("{reached} at {}", at(readings, reached_at)),
                         )
                     })
                 },
             ),
             &side.resets,
         );
-        excursions.extend(side.resets.iter().map(|&tick| (tick, reset(lines, tick))));
+        excursions.extend(
+            side.resets
+                .iter()
+                .map(|&tick| (tick, reset(readings, tick))),
+        );
         Side {
             at_start: match (side.reset_at_start, side.at_start) {
-                (Some(tick), _) => reset(lines, tick),
+                (Some(tick), _) => reset(readings, tick),
                 (None, None) => "unstated".to_string(),
                 (None, Some(at_start)) => at_start.to_string(),
             },
@@ -706,7 +756,7 @@ pub fn controller_rows(
     };
     span_rows(
         "controller",
-        span(lines, difference.from, difference.until),
+        span(readings, difference.from, difference.until),
         vec![
             channel(difference.channel),
             controller_number(difference.controller),
@@ -723,10 +773,10 @@ pub fn controller_rows(
 /// all three, and three spellings of *until* would be three things to learn for
 /// nothing. `until` is exclusive, so a stretch that never closes reads
 /// *onwards* rather than naming a Tick it does not reach.
-pub fn span(lines: Option<BarLines>, from: u32, until: Option<u32>) -> String {
+pub fn span(readings: &Readings, from: u32, until: Option<u32>) -> String {
     match until {
-        None => format!("{} onwards", at(lines, from)),
-        Some(until) => format!("{} until {}", at(lines, from), at(lines, until)),
+        None => format!("{} onwards", at(readings, from)),
+        Some(until) => format!("{} until {}", at(readings, from), at(readings, until)),
     }
 }
 
@@ -870,7 +920,7 @@ fn span_rows(
 /// no tempo is not a Take at 120. It is not a reason to stop reading, either —
 /// an `unstated` side still says every extreme reached inside the span, since a
 /// span the other Take opens is a span this one may still move about in.
-pub fn tempo_rows(lines: Option<BarLines>, difference: &TempoDifference) -> Vec<Vec<String>> {
+pub fn tempo_rows(readings: &Readings, difference: &TempoDifference) -> Vec<Vec<String>> {
     let micros = beats_alone_collide(difference);
     let side = |side: &TempoSide| {
         let start = side.at_start.map(|start| start.micros_per_quarter);
@@ -892,7 +942,7 @@ pub fn tempo_rows(lines: Option<BarLines>, difference: &TempoDifference) -> Vec<
                             format!(
                                 "{} at {}",
                                 tempo_reading(reached, micros),
-                                at(lines, reached_at)
+                                at(readings, reached_at)
                             ),
                         )
                     })
@@ -905,7 +955,7 @@ pub fn tempo_rows(lines: Option<BarLines>, difference: &TempoDifference) -> Vec<
     };
     span_rows(
         "tempo",
-        span(lines, difference.from, difference.until),
+        span(readings, difference.from, difference.until),
         Vec::new(),
         side(&difference.before),
         side(&difference.after),
@@ -977,7 +1027,7 @@ fn bpm(bpm: f64) -> String {
 /// carries two extremes: a bend is signed about a centre MIDI fixes, so a dive
 /// below the note and a rise above it are two facts and neither stands in for
 /// the other.
-pub fn bend_rows(lines: Option<BarLines>, difference: &BendDifference) -> Vec<Vec<String>> {
+pub fn bend_rows(readings: &Readings, difference: &BendDifference) -> Vec<Vec<String>> {
     let side = |side: &BendSide| Side {
         at_start: match side.at_start {
             None => "unstated".to_string(),
@@ -993,7 +1043,7 @@ pub fn bend_rows(lines: Option<BarLines>, difference: &BendDifference) -> Vec<Ve
                 (Some(reached) != side.at_start).then(|| {
                     (
                         reached_at,
-                        format!("{reached} at {}", at(lines, reached_at)),
+                        format!("{reached} at {}", at(readings, reached_at)),
                     )
                 })
             }),
@@ -1004,7 +1054,7 @@ pub fn bend_rows(lines: Option<BarLines>, difference: &BendDifference) -> Vec<Ve
     };
     span_rows(
         "bend",
-        span(lines, difference.from, difference.until),
+        span(readings, difference.from, difference.until),
         vec![channel(difference.channel)],
         side(&difference.before),
         side(&difference.after),
@@ -1012,11 +1062,11 @@ pub fn bend_rows(lines: Option<BarLines>, difference: &BendDifference) -> Vec<Ve
 }
 
 /// What one channel is on: the state a passage begins in.
-pub fn programs(lines: Option<BarLines>, state: &Program) -> Vec<String> {
+pub fn programs(readings: &Readings, state: &Program) -> Vec<String> {
     let named = |value: &u8| program(state.channel, Some(*value));
     vec![
         channel(state.channel),
-        state_reading(lines, &state.program, named, named),
+        state_reading(readings, &state.program, named, named),
     ]
 }
 
@@ -1027,9 +1077,9 @@ pub fn programs(lines: Option<BarLines>, state: &Program) -> Vec<String> {
 /// the state has no use for it: this row describes an event somebody can go and
 /// change, and `set_program` names the track it lands in. The row is what a
 /// reader copies that argument out of.
-pub fn stated_program(lines: Option<BarLines>, stated: &StatedProgram) -> Vec<String> {
+pub fn stated_program(readings: &Readings, stated: &StatedProgram) -> Vec<String> {
     vec![
-        at(lines, stated.tick),
+        at(readings, stated.tick),
         track(stated.track, &stated.track_names),
         channel(stated.channel),
         program(stated.channel, Some(stated.program)),
@@ -1048,7 +1098,7 @@ pub fn stated_program(lines: Option<BarLines>, stated: &StatedProgram) -> Vec<St
 /// which way to move anything, and it spells the site the way
 /// `--allow-unranked` takes it, so that a reader who decides to answer for it
 /// can copy the argument out of the line.
-pub fn unranked(lines: Option<BarLines>, row: &battuta::Unranked) -> String {
+pub fn unranked(readings: &Readings, row: &battuta::Unranked) -> String {
     let state = match (row.state, row.controller) {
         (battuta::State::Controller, Some(number)) => {
             format!("the control change for CC {number}")
@@ -1068,7 +1118,7 @@ pub fn unranked(lines: Option<BarLines>, row: &battuta::Unranked) -> String {
         Some(channel) => format!(
             "{}  {} for channel {} on {} has no order the file states against {}  \
              (t{}:c{}:s{})",
-            at(lines, row.tick),
+            at(readings, row.tick),
             state,
             channel,
             on,
@@ -1084,7 +1134,7 @@ pub fn unranked(lines: Option<BarLines>, row: &battuta::Unranked) -> String {
         // grammar that does not exist. See #42.
         None => format!(
             "{}  {} on {} has no order the file states against {}",
-            at(lines, row.tick),
+            at(readings, row.tick),
             state,
             on,
             against,
@@ -1096,6 +1146,13 @@ pub fn unranked(lines: Option<BarLines>, row: &battuta::Unranked) -> String {
 /// position it prints is read against: the before Take's, or Ticks where it has
 /// none — #64. Only that the time signatures differ, never how: #62 names them
 /// as not compared.
+/// That the two Takes of a diff read their Ticks at different Elapsed times, so
+/// that every Elapsed time printed is the before Take's and an after-side
+/// Tick may be heard elsewhere in the after Take's render — #73.
+pub fn elapsed_frame() -> &'static str {
+    "tempos differ; every elapsed time is the before Take's"
+}
+
 pub fn frame(before_lines: Option<BarLines>) -> String {
     match before_lines {
         Some(_) => "time signatures differ; every position is in the before Take's Bar lines",
@@ -1183,24 +1240,24 @@ pub fn no_effect(entry: &battuta::NoEffect) -> String {
 ///
 /// It says what the convention was, because a judgement made for the human is
 /// stated with its answer (ADR-0004), and how to decline it.
-pub fn disclosed_site(lines: Option<BarLines>, site: &battuta::DisclosedSite) -> String {
+pub fn disclosed_site(readings: &Readings, site: &battuta::DisclosedSite) -> String {
     format!(
         "disclosed: {}  track {}  {}  the two sides wrote events here in opposite orders the \
          file gives no meaning to; ordered by where their notes begin in the common Take. Narrow \
          an Edit Set to choose the other",
-        at(lines, site.tick),
+        at(readings, site.tick),
         site.track,
         channel(site.channel)
     )
 }
 
 /// An End-of-Track the combination moved.
-pub fn track_end(lines: Option<BarLines>, end: &battuta::TrackEnd) -> String {
+pub fn track_end(readings: &Readings, end: &battuta::TrackEnd) -> String {
     format!(
         "track end: track {} moved from {} to {}",
         end.track,
-        at(lines, end.before),
-        at(lines, end.after)
+        at(readings, end.before),
+        at(readings, end.after)
     )
 }
 

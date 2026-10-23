@@ -77,6 +77,14 @@ pub struct Diff {
     /// lines and one with some differ. Not a difference either, and `is_empty`
     /// does not consult it.
     pub bar_lines_differ: bool,
+
+    /// Whether the two Takes read some Tick at different Elapsed times, so
+    /// that an after-side Tick read against the before Take's tempos, as every
+    /// Elapsed time printed is, may be heard elsewhere in the after Take — #73.
+    /// Not in `--json`, whose Ticks are never read as Elapsed times. Not a
+    /// difference, and `is_empty` does not consult it.
+    #[serde(skip)]
+    pub elapsed_times_differ: bool,
 }
 
 /// An uncomparable Bend interval. An empty side has no value conflict.
@@ -549,6 +557,7 @@ pub fn diff(before: &Take, after: &Take, tolerance: Option<u32>) -> Result<Diff>
         unranked_state_sites: state_sites(before, after, &before_notes, &after_notes)?,
         not_compared,
         bar_lines_differ: before.bar_lines() != after.bar_lines(),
+        elapsed_times_differ: before.elapsed_times()? != after.elapsed_times()?,
     })
 }
 

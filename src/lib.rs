@@ -14,6 +14,7 @@ pub mod combine;
 pub mod controller;
 pub mod diff;
 pub mod edit;
+pub mod elapsed;
 mod error;
 pub mod note;
 pub mod passage;
@@ -43,6 +44,7 @@ pub use diff::{
     UnrankedController, UnrankedProgram, UnrankedStateSite,
 };
 pub use edit::{apply, apply_allowing, Edit, EditSet, Site};
+pub use elapsed::{ElapsedTimes, NoElapsedTime};
 pub use error::{Error, Result};
 pub use note::{pitch_name, Note, NoteId, PitchName};
 pub use program::{gm_name, Program, Programs, StatedProgram, GM_PERCUSSION_CHANNEL};

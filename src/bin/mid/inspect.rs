@@ -84,6 +84,13 @@ use std::path::PathBuf;
 /// assumed to be in 4/4, and so is one that states none until part way in, or
 /// changes time signature part way through. The final Bar counts as a Bar even
 /// when the Take stops part way inside it.
+///
+/// A Take with no Bar lines places everything by its Tick, with the Elapsed time
+/// beside it — `tick 42400 (0:05.30)`, minutes, seconds and hundredths, as a
+/// player's counter would show it. That is read from the tempos the Take
+/// states and nothing else, so a Take that states none, or none until part way
+/// in, prints Ticks alone, and so does every Tick from one where two tracks
+/// state contradicting tempos. `mid info` says which. `--json` carries Ticks only.
 #[derive(clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
@@ -167,11 +174,12 @@ pub fn run(args: Args) -> battuta::Result<()> {
 
     // Read once for the whole listing rather than per row: every Tick of a Take
     // is placed against the same Bar lines.
-    let lines = take.bar_lines();
+    let readings = crate::wording::Readings::of(&take);
+    let readings = &readings;
 
     for interval in &unranked_tempos {
         crate::wording::table(&[crate::wording::indeterminate_span(
-            lines,
+            readings,
             "tempo".to_string(),
             interval,
             crate::wording::tempo_value,
@@ -214,14 +222,14 @@ pub fn run(args: Args) -> battuta::Result<()> {
             let rows: Vec<Vec<String>> = programs
                 .programs
                 .iter()
-                .map(|state| crate::wording::programs(lines, state))
+                .map(|state| crate::wording::programs(readings, state))
                 .collect();
             crate::wording::table(&rows);
         }
         for held in &programs.programs {
             for interval in &held.unranked {
                 crate::wording::table(&[crate::wording::indeterminate_span(
-                    lines,
+                    readings,
                     format!("program channel {}", held.channel),
                     interval,
                     |value| value.to_string(),
@@ -233,7 +241,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
             let rows: Vec<Vec<String>> = programs
                 .stated
                 .iter()
-                .map(|stated| crate::wording::stated_program(lines, stated))
+                .map(|stated| crate::wording::stated_program(readings, stated))
                 .collect();
             crate::wording::table(&rows);
         }
@@ -267,7 +275,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
                     let stated = controllers.stated.iter().any(|stated| {
                         stated.channel == held.channel && stated.controller == held.controller
                     });
-                    crate::wording::controller(lines, held, stated)
+                    crate::wording::controller(readings, held, stated)
                 })
                 .collect();
             crate::wording::table(&rows);
@@ -275,7 +283,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
         for held in &controllers.controllers {
             for interval in &held.unranked {
                 crate::wording::table(&[crate::wording::indeterminate_span(
-                    lines,
+                    readings,
                     format!("controller channel {} CC{}", held.channel, held.controller),
                     interval,
                     crate::wording::controller_value,
@@ -287,7 +295,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
             let rows: Vec<Vec<String>> = controllers
                 .stated
                 .iter()
-                .map(|stated| crate::wording::stated_controller(lines, stated))
+                .map(|stated| crate::wording::stated_controller(readings, stated))
                 .collect();
             crate::wording::table(&rows);
         }
@@ -320,14 +328,14 @@ pub fn run(args: Args) -> battuta::Result<()> {
                     .stated
                     .iter()
                     .any(|stated| stated.channel == held.channel);
-                crate::wording::bend(lines, held, inside)
+                crate::wording::bend(readings, held, inside)
             })
             .collect();
         crate::wording::table(&rows);
         for held in &bends.bends {
             for span in &held.unranked {
                 let mut row = crate::wording::unranked_bend(
-                    lines,
+                    readings,
                     held.channel,
                     span.from,
                     span.until,
@@ -345,7 +353,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
             let rows: Vec<Vec<String>> = bends
                 .stated
                 .iter()
-                .map(|stated| crate::wording::stated_bend(lines, stated))
+                .map(|stated| crate::wording::stated_bend(readings, stated))
                 .collect();
             crate::wording::table(&rows);
         }
@@ -358,7 +366,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // every time is one a reader learns to skip.
     if !unranked.is_empty() {
         for row in &unranked {
-            println!("{}", crate::wording::unranked(lines, row));
+            println!("{}", crate::wording::unranked(readings, row));
         }
         println!();
     }
@@ -386,7 +394,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
     let rows: Vec<Vec<String>> = notes
         .iter()
         .map(|note| {
-            let mut row = crate::wording::listed(lines, note);
+            let mut row = crate::wording::listed(readings, note);
             // Last, and so never padded: it is the one thing on the line meant
             // to be copied rather than read.
             row.push(note.id.to_string());

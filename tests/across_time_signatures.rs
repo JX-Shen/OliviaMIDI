@@ -272,7 +272,8 @@ fn json_says_whether_bar_lines_differ_and_keeps_its_ticks() {
 
 /// A before Take that states no time signature has no Bar lines, so the frame
 /// is Ticks: the after Take's 3/4 does not place the moved note, and the line
-/// says why every position is a Tick.
+/// says why every position is a Tick. Each carries the Elapsed time the before
+/// Take's 120 bpm gives it — #73.
 #[test]
 fn a_before_take_with_no_bar_lines_puts_every_position_in_ticks() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -287,7 +288,7 @@ fn a_before_take_with_no_bar_lines_puts_every_position_in_ticks() {
         out,
         "\
 time signatures differ; every position is a Tick, as the before Take has no Bar lines
-changed  tick 1440  track 1  channel 0  B4  moved to tick 1920
+changed  tick 1440 (0:01.50)  track 1  channel 0  B4  moved to tick 1920 (0:02.00)
 not compared: time signature (before 0, after 1)
 "
     );

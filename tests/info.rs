@@ -190,7 +190,7 @@ fn reports_no_bar_count_when_the_bars_cannot_be_derived() {
         .assert()
         .success()
         .stdout(predicates::str::contains(
-            "(bars need one stated time signature)",
+            "; bars need one stated time signature)",
         ));
 }
 
@@ -369,7 +369,7 @@ tracks          2
 ppq             480
 tempo           120 bpm (500000 us per quarter)
 time signature  3/4, then 1 change
-length          5760 ticks (bars need one time signature throughout)
+length          5760 ticks (0:06.00; bars need one time signature throughout)
 "
     );
 
@@ -402,7 +402,7 @@ tracks          2
 ppq             480
 tempo           120 bpm (500000 us per quarter)
 time signature  unstated until tick 2880, then 3/4
-length          5760 ticks (bars need a time signature stated at tick 0)
+length          5760 ticks (0:06.00; bars need a time signature stated at tick 0)
 "
     );
 
@@ -461,7 +461,7 @@ fn a_time_signature_bars_cannot_be_derived_from_is_not_called_missing() {
     let human = common::human_output(&["info", take.to_str().unwrap()]);
     assert!(
         human.contains("time signature  0/4\n")
-            && human.contains("(bars cannot be derived; mid inspect --bars says why)"),
+            && human.contains("; bars cannot be derived; mid inspect --bars says why)"),
         "{human}"
     );
 }

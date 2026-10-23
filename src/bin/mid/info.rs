@@ -5,7 +5,11 @@ use std::path::PathBuf;
 /// Length is in Ticks, and so is everything else; the Bar count beside it is the
 /// derived view. Bars need one time signature governing the whole Take, so a Take
 /// that states none — or states one only part way in, or changes it — is reported
-/// without a Bar count, and the length line says which.
+/// without a Bar count, and the length line says which. That line then gives the
+/// length as an Elapsed time instead, read from the tempos the Take states, or
+/// says why it cannot: no tempo stated, none until part way in, or tempos that
+/// contradict each other from some Tick on. That reason is the one for every
+/// row `inspect` and `diff` print without an Elapsed time.
 ///
 /// Tempo and time signature are each read at their earliest stated Tick. Where
 /// that is not Tick 0 the row says the Take states none until it, and where the
@@ -31,7 +35,8 @@ pub struct Args {
 }
 
 pub fn run(args: Args) -> battuta::Result<()> {
-    let info = battuta::Take::read(&args.take)?.info()?;
+    let take = battuta::Take::read(&args.take)?;
+    let info = take.info()?;
 
     if args.json {
         println!("{}", crate::json(&info));
@@ -49,7 +54,11 @@ pub fn run(args: Args) -> battuta::Result<()> {
             "tempo".to_string(),
             stated_course(
                 crate::wording::state_reading(
-                    None,
+                    // In Ticks, as every other row of `info` is.
+                    &crate::wording::Readings {
+                        bars: None,
+                        elapsed: None,
+                    },
                     &info.tempo,
                     crate::wording::tempo_value,
                     crate::wording::tempo_value,
@@ -73,11 +82,34 @@ pub fn run(args: Args) -> battuta::Result<()> {
             "length".to_string(),
             match info.length_bars {
                 Some(bars) => format!("{} ticks ({bars} bars)", info.length_ticks),
-                None => format!("{} ticks ({})", info.length_ticks, no_bars(info.no_bars)),
+                None => format!(
+                    "{} ticks ({}; {})",
+                    info.length_ticks,
+                    elapsed(&take.elapsed_times()?, info.length_ticks),
+                    no_bars(info.no_bars)
+                ),
             },
         ],
     ]);
     Ok(())
+}
+
+/// How long a Take with no Bars lasts, or why that cannot be said. Said here
+/// once, so that the rows of `inspect` and `diff` that have no Elapsed time
+/// need say nothing — #73.
+fn elapsed(times: &battuta::ElapsedTimes, length_ticks: u32) -> String {
+    use battuta::NoElapsedTime;
+    match (times.elapsed_at(length_ticks), times.unknown()) {
+        (Some(elapsed), _) => crate::wording::elapsed_time(elapsed),
+        (None, Some(NoElapsedTime::NoTempo)) => "no elapsed time: no tempo stated".to_string(),
+        (None, Some(NoElapsedTime::TempoStartsLate { at })) => {
+            format!("no elapsed time: no tempo stated until tick {at}")
+        }
+        (None, Some(NoElapsedTime::TempoIndeterminate { from })) => {
+            format!("elapsed time stops at tick {from}: the tempo there is indeterminate")
+        }
+        (None, None) => "no elapsed time".to_string(),
+    }
 }
 
 /// Why a Take has no Bar count, in terms of the time signature row above it.

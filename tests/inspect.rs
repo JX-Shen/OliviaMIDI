@@ -370,7 +370,8 @@ bar 6 beat 2  track 2  C#4  velocity 38  duration 955   t2:c1:p61:s7680:n0
 /// A Take with no Bars to be positioned in is still listed, in the Ticks that
 /// are the truth underneath them. `info` reports the missing Bar count and
 /// `inspect --bars` refuses the range; listing every note refuses nothing,
-/// because the Take is exactly the one you most need to look at.
+/// because the Take is exactly the one you most need to look at. Each Tick
+/// carries the Elapsed time the Take's 120 bpm gives it — #73.
 #[test]
 fn falls_back_to_ticks_when_the_bars_cannot_be_derived() {
     let dir = tempfile::tempdir().expect("temp dir");
@@ -387,8 +388,8 @@ no programs stated
 
 no controllers stated
 
-tick 0    track 1  C4  velocity 64  duration 240  t1:c0:p60:s0:n0
-tick 960  track 1  D4  velocity 64  duration 240  t1:c0:p62:s960:n0
+tick 0 (0:00.00)    track 1  C4  velocity 64  duration 240  t1:c0:p60:s0:n0
+tick 960 (0:01.00)  track 1  D4  velocity 64  duration 240  t1:c0:p62:s960:n0
 "
     );
 }

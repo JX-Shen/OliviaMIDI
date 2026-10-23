@@ -149,7 +149,8 @@ pub fn run(args: Args) -> battuta::Result<()> {
         println!("{}", crate::json(&document));
     }
 
-    let lines = combined.take.bar_lines();
+    let readings = crate::wording::Readings::of(&combined.take);
+    let readings = &readings;
     for (side, (take, edits)) in sides.iter().enumerate() {
         eprintln!("{}", crate::wording::verified_side(side, take, edits));
     }
@@ -157,10 +158,10 @@ pub fn run(args: Args) -> battuta::Result<()> {
         eprintln!("{}", crate::wording::no_effect(entry));
     }
     for site in &combined.disclosed_sites {
-        eprintln!("{}", crate::wording::disclosed_site(lines, site));
+        eprintln!("{}", crate::wording::disclosed_site(readings, site));
     }
     for end in &combined.track_ends {
-        eprintln!("{}", crate::wording::track_end(lines, end));
+        eprintln!("{}", crate::wording::track_end(readings, end));
     }
     if combined.unchanged {
         eprintln!("{}", crate::wording::unchanged());
