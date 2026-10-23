@@ -42,20 +42,80 @@ MIT-licensed.
 
 ## What it looks like
 
-The picture above is a session from 22 October 2026. The file is a
-pianist's recorded performance of Bach's
+The picture above is a session from 22 October 2026, and this is how it went,
+step by step. The file is a pianist's recorded performance of Bach's
 [Duet in E minor, BWV 802](https://imslp.org/wiki/Duets_BWV_802-805_(Bach,_Johann_Sebastian)).
-In the opening, the left hand's first entry was played so short that it
-sounded like an echo of the right hand, not an answer to it.
 
-The agent made two versions. One held six left-hand notes longer. The other
-changed how hard four notes are struck. Each version was an *Edit Set*, a small
-JSON file of mechanical changes to named notes. `combine` checked that each
-version was exactly what its Edit Set makes of the original, then put both
-into one file. The low E2 was changed by both versions, but in different ways:
-one changed its length and the other its velocity, so they did not conflict.
-If they had both set the same thing to different values, `combine` would have
-listed every such disagreement and written nothing.
+**1. The agent reads the passage.** `mid inspect` lists every note where a
+musician would point at it, with how hard it was struck (velocity) and how long
+it was held (duration, in ticks; a beat is 384 ticks in this file). Around the
+left hand's first entry, the right-hand A4s last 120 to 250 ticks. The left
+hand's notes last 32 to 78. They are struck and let go almost at once:
+
+```
+$ mid inspect original.mid --bars 2:4
+…
+bar 2 beat 1+265  track 1  A4   velocity 62  duration 188  t1:c0:p69:s1801:n0
+bar 2 beat 3+187  track 1  E2   velocity 46  duration 47   t1:c0:p40:s2491:n0
+bar 2 beat 4+302  track 1  E3   velocity 50  duration 32   t1:c0:p52:s2990:n0
+bar 3 beat 2+13   track 1  D#3  velocity 36  duration 32   t1:c0:p51:s3469:n0
+bar 3 beat 3+128  track 1  D2   velocity 39  duration 78   t1:c0:p38:s3968:n0
+bar 3 beat 4+219  track 1  A4   velocity 61  duration 243  t1:c0:p69:s4443:n0
+bar 3 beat 4+225  track 1  D3   velocity 46  duration 36   t1:c0:p50:s4449:n0
+bar 4 beat 1+309  track 1  C#3  velocity 39  duration 41   t1:c0:p49:s4917:n0
+…
+```
+
+The output is trimmed here to the notes around that entry. The full listing also
+shows the pedals and every other note. `bar 2 beat 3+187` means bar 2, beat 3,
+then 187 ticks later. The last column is the note's name, which an edit uses to
+point at it.
+
+**2. It proposes two versions.** Against the right hand, that entry sounds like
+an echo, not an answer. Version 1 holds six of those notes longer, so they
+sound detached rather than clipped. Version 2 strikes the melody's two high
+points harder, softens the start of its second climb, and strikes the left
+hand's first note harder. Each version is an *Edit Set*, a small file of
+mechanical changes to named notes. This is version 1 in full:
+
+```json
+{ "edits": [
+  { "kind": "resize_note", "id": "t1:c0:p40:s2491:n0", "delta_ticks": 100 },
+  { "kind": "resize_note", "id": "t1:c0:p52:s2990:n0", "delta_ticks": 100 },
+  { "kind": "resize_note", "id": "t1:c0:p51:s3469:n0", "delta_ticks": 100 },
+  { "kind": "resize_note", "id": "t1:c0:p38:s3968:n0", "delta_ticks": 60 },
+  { "kind": "resize_note", "id": "t1:c0:p50:s4449:n0", "delta_ticks": 100 },
+  { "kind": "resize_note", "id": "t1:c0:p49:s4917:n0", "delta_ticks": 100 }
+] }
+```
+
+Version 2 is four `set_velocity` edits of the same shape. Neither version
+touches the original file. Each becomes a new file:
+
+```sh
+mid apply original.mid longer.edits.json -o longer.mid
+mid apply original.mid shaped.edits.json -o shaped.mid
+```
+
+**3. Both versions go into one file.** `combine` first checks that each
+version is exactly what its Edit Set makes of the original, then writes one
+file carrying both:
+
+```
+$ mid combine original.mid --side longer.mid longer.edits.json --side shaped.mid shaped.edits.json -o both.mid
+verified: side 0 longer.mid is what longer.edits.json makes of the common Take
+verified: side 1 shaped.mid is what shaped.edits.json makes of the common Take
+both.mid
+```
+
+Both versions changed the low E2, but they changed different things: one
+changed how long it lasts, the other how hard it is struck. That is not a
+conflict. If both had asked for different values of the same thing,
+`combine` would have listed every such disagreement and written nothing. (A
+*Take* is what `mid` calls one MIDI file. The *common Take* is the original
+that both versions were made from.)
+
+**4. Exactly what changed.**
 
 ```
 $ mid diff original.mid both.mid
@@ -70,12 +130,16 @@ changed  bar 4 beat 3+173  track 1  channel 0  A4   velocity 52 -> 44
 changed  bar 4 beat 4+125  track 1  channel 0  A5   velocity 80 -> 96
 ```
 
-`bar 2 beat 3+187` means bar 2, beat 3, then 187 ticks later; a beat is 384
-ticks in this file. Nine notes, ten changes, nothing else. I, Jianxin Shen, who
-wrote `mid`, listened to the original, both versions and the combination, and
-kept the combination: *听的出来，而且我确实感觉D的质感好了一些，两个语句感觉平衡了很多*
-("I can hear it. D, the combined one, has a better texture, and the two phrases
-feel much more balanced.")
+Nine notes and ten changes. Nothing else in the file moved.
+
+**5. A person listens and decides.** The agent cannot hear, and it does not
+claim to. I, Jianxin Shen, who wrote `mid`, listened to the original, both
+versions and the combination, which was D, and kept D:
+*听的出来，而且我确实感觉D的质感好了一些，两个语句感觉平衡了很多*
+("I can hear it. D has a better texture, and the two phrases feel much more
+balanced.")
+
+Three things to know about this example:
 
 - **The bar positions are a grid, not the music's bars.** They sit on a
   120 bpm 4/4 grid that the file states but the pianist never played to. The
