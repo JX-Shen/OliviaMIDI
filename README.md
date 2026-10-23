@@ -12,7 +12,7 @@ every change is written to a new file.
 
 You don't need to know any theory. *"It's too crowded here"* is a fine place to
 start: turning a reaction like that into a change you can check is the agent's
-job. Here is one real session; the story behind the picture is
+job. Here is one session; the story behind the picture is
 [below](#what-it-looks-like).
 
 <a href="https://github.com/JX-Shen/OliviaMIDI/issues/51">
@@ -42,11 +42,15 @@ MIT-licensed.
 
 ## What it looks like
 
-The picture above is a session from 22 October 2026, and this is how it went,
-step by step. The file is a pianist's recorded performance of Bach's
+Here is the session in the picture, told the way you would run one. The file is
+a pianist's recorded performance of Bach's
 [Duet in E minor, BWV 802](https://imslp.org/wiki/Duets_BWV_802-805_(Bach,_Johann_Sebastian)).
 
-**1. The agent reads the passage.** `mid inspect` lists every note where a
+**1. You listen, and say what bothers you.** You play the opening and tell your
+agent: *"The left hand sounds like it's only echoing the right. It never
+answers."*
+
+**2. The agent checks that against the file.** `mid inspect` lists every note where a
 musician would point at it, with how hard it was struck (velocity) and how long
 it was held (duration, in ticks; a beat is 384 ticks in this file). The recording
 keeps both hands in one track; the left hand here is the low notes. Around its
@@ -72,7 +76,7 @@ shows the pedals and every other note. `bar 2 beat 3+187` means bar 2, beat 3,
 then 187 ticks later. The last column is the note's name, which an edit uses to
 point at it.
 
-**2. It proposes two versions.** Its reason is in that listing: the entry is
+**3. It proposes two versions.** The listing bears you out: the entry is
 played very short. Version 1 holds six of those notes longer: still short
 and separate, but no longer cut off. Version 2 strikes the melody's two high
 points harder, softens the start of its second climb, and strikes the left
@@ -98,7 +102,7 @@ mid apply original.mid longer.edits.json -o longer.mid
 mid apply original.mid shaped.edits.json -o shaped.mid
 ```
 
-**3. Both versions go into one file.** `combine` first checks that each
+**4. Both versions go into one file.** `combine` first checks that each
 version is exactly what its Edit Set makes of the original, then writes one
 file carrying both:
 
@@ -116,7 +120,7 @@ conflict. If both had asked for different values of the same thing,
 *Take* is what `mid` calls one MIDI file. The *common Take* is the original
 that both versions were made from.)
 
-**4. Exactly what changed.**
+**5. Exactly what changed.**
 
 ```
 $ mid diff original.mid both.mid
@@ -133,15 +137,20 @@ changed  bar 4 beat 4+125  track 1  channel 0  A5   velocity 80 -> 96
 
 Nine notes and ten changes. Nothing else in the file moved.
 
-**5. A person listens and decides.** The agent cannot hear, and it does not
-claim to. I, Jianxin Shen, who wrote `mid`, listened to the original, both
-versions and the combination, and kept the combination:
+**6. You listen and decide.** The agent cannot hear, and it does not claim to.
+When this session was run, I, Jianxin Shen, who wrote `mid`, listened to the
+original, both versions and the combination, and kept the combination:
 *听的出来，而且我确实感觉D的质感好了一些，两个语句感觉平衡了很多*
 ("I can hear it. D, which is what I called the combination, has a better
 texture, and the two phrases feel much more balanced.")
 
-Three things to know about this example:
+Four things to know about this example:
 
+- **Step 1 is illustrative; everything else is real.** The outputs above come
+  from a session run on 22 October 2026. In that session the agent proposed
+  the two versions before anyone had listened, so the sentence in step 1 is
+  how you might start one, not something that was said. The verdict in step 6
+  is quoted as it was said.
 - **The bar positions are a grid, not the music's bars.** They sit on a
   120 bpm 4/4 grid that the file states but the pianist never played to. The
   dataset writes every performance this way, and `mid` reports what the file
