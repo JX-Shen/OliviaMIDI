@@ -55,10 +55,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
             stated_course(
                 crate::wording::state_reading(
                     // In Ticks, as every other row of `info` is.
-                    &crate::wording::Readings {
-                        bars: None,
-                        elapsed: None,
-                    },
+                    &crate::wording::Readings::none(),
                     &info.tempo,
                     crate::wording::tempo_value,
                     crate::wording::tempo_value,
@@ -94,9 +91,8 @@ pub fn run(args: Args) -> battuta::Result<()> {
     Ok(())
 }
 
-/// How long a Take with no Bars lasts, or why that cannot be said. Said here
-/// once, so that the rows of `inspect` and `diff` that have no Elapsed time
-/// need say nothing — #73.
+/// How long a Take with no Bars lasts, or why that cannot be said, which is
+/// the reason for every row of `inspect` and `diff` without one — #73.
 fn elapsed(times: &battuta::ElapsedTimes, length_ticks: u32) -> String {
     use battuta::NoElapsedTime;
     match (times.elapsed_at(length_ticks), times.unknown()) {

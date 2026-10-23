@@ -5,19 +5,12 @@
 
 mod common;
 
-use common::mid;
-use midly::num::{u15, u24, u28, u4, u7};
+use common::{mid, tempo};
+use midly::num::{u15, u28, u4, u7};
 use midly::{Format, Header, MetaMessage, MidiMessage, Smf, Timing, TrackEvent, TrackEventKind};
 use std::path::{Path, PathBuf};
 
 const PPQ: u16 = 480;
-
-fn tempo(tick: u32, micros_per_quarter: u32) -> (u32, TrackEventKind<'static>) {
-    (
-        tick,
-        TrackEventKind::Meta(MetaMessage::Tempo(u24::new(micros_per_quarter))),
-    )
-}
 
 fn note(start: u32, key: u8) -> Vec<(u32, TrackEventKind<'static>)> {
     let message = |message| TrackEventKind::Midi {
@@ -45,6 +38,10 @@ fn note(start: u32, key: u8) -> Vec<(u32, TrackEventKind<'static>)> {
 /// A Take of exactly these tracks, stating no time signature, so that it has
 /// no Bars and every position is a Tick.
 fn take(path: &Path, tracks: Vec<Vec<(u32, TrackEventKind<'static>)>>) -> PathBuf {
+    take_at(path, PPQ, tracks)
+}
+
+fn take_at(path: &Path, ppq: u16, tracks: Vec<Vec<(u32, TrackEventKind<'static>)>>) -> PathBuf {
     let tracks = tracks
         .into_iter()
         .map(|mut events| {
@@ -69,7 +66,7 @@ fn take(path: &Path, tracks: Vec<Vec<(u32, TrackEventKind<'static>)>>) -> PathBu
         })
         .collect();
     let smf = Smf {
-        header: Header::new(Format::Parallel, Timing::Metrical(u15::new(PPQ))),
+        header: Header::new(Format::Parallel, Timing::Metrical(u15::new(ppq))),
         tracks,
     };
     smf.save(path).expect("built Take is writable");
@@ -283,4 +280,55 @@ fn a_restated_tempo_is_not_a_tempo_that_differs() {
     let out = diff(&before, &after);
     assert!(!out.contains("tempos differ"), "{out}");
     assert!(out.contains("tick 960 (0:01.00)"), "{out}");
+}
+
+/// 2,000,000,000 Ticks at one to the quarter note and the slowest tempo MIDI
+/// can state, 16,777,215 us per quarter, is 33,554,430,000 s: longer than a
+/// count of nanoseconds fits in 64 bits, and still a reading the file states.
+/// The tempo is restated along the way only because no delta reaches that far.
+#[test]
+fn a_reading_too_long_for_nanoseconds_is_still_given() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let mut conductor: Vec<_> = (0..10u32)
+        .map(|step| tempo(step * 200_000_000, 16_777_215))
+        .collect();
+    conductor.extend(note(2_000_000_000, 60));
+    let path = take_at(&dir.path().join("aeons.mid"), 1, vec![conductor]);
+
+    let listing = inspect(&path);
+    assert!(
+        listing.contains("tick 2000000000 (559240500:00.00)"),
+        "{listing}"
+    );
+}
+
+/// The frame line's fact is in `--json` as well, beside `bar_lines_differ`.
+#[test]
+fn diff_json_says_whether_elapsed_times_differ() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let before = take(
+        &dir.path().join("before.mid"),
+        vec![vec![tempo(0, 500_000)], note(480, 60)],
+    );
+    let slower = take(
+        &dir.path().join("slower.mid"),
+        vec![vec![tempo(0, 1_000_000)], note(480, 60)],
+    );
+    let restated = take(
+        &dir.path().join("restated.mid"),
+        vec![vec![tempo(0, 500_000), tempo(720, 500_000)], note(480, 60)],
+    );
+
+    let json = |after: &Path| -> serde_json::Value {
+        let output = mid()
+            .arg("diff")
+            .arg(&before)
+            .arg(after)
+            .arg("--json")
+            .output()
+            .expect("mid runs");
+        serde_json::from_slice(&output.stdout).expect("diff --json is JSON")
+    };
+    assert_eq!(json(&slower)["elapsed_times_differ"], true);
+    assert_eq!(json(&restated)["elapsed_times_differ"], false);
 }

@@ -79,11 +79,9 @@ pub struct Diff {
     pub bar_lines_differ: bool,
 
     /// Whether the two Takes read some Tick at different Elapsed times, so
-    /// that an after-side Tick read against the before Take's tempos, as every
-    /// Elapsed time printed is, may be heard elsewhere in the after Take — #73.
-    /// Not in `--json`, whose Ticks are never read as Elapsed times. Not a
-    /// difference, and `is_empty` does not consult it.
-    #[serde(skip)]
+    /// that a Tick of the after Take read against the before Take's tempos, as
+    /// every Elapsed time is, may be heard elsewhere in the after Take — #73.
+    /// Not a difference, and `is_empty` does not consult it.
     pub elapsed_times_differ: bool,
 }
 
@@ -557,7 +555,7 @@ pub fn diff(before: &Take, after: &Take, tolerance: Option<u32>) -> Result<Diff>
         unranked_state_sites: state_sites(before, after, &before_notes, &after_notes)?,
         not_compared,
         bar_lines_differ: before.bar_lines() != after.bar_lines(),
-        elapsed_times_differ: before.elapsed_times()? != after.elapsed_times()?,
+        elapsed_times_differ: !before.elapsed_times()?.reads_alike(&after.elapsed_times()?),
     })
 }
 

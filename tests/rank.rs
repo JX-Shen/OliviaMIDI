@@ -387,6 +387,9 @@ fn the_two_new_payload_fields_are_additive() {
             "bends",
             "changed",
             "controllers",
+            // #73's, which says whether the two Takes' tempos read some Tick at
+            // a different Elapsed time.
+            "elapsed_times_differ",
             // #62's, which says what was not compared rather than what differs.
             "not_compared",
             "programs",

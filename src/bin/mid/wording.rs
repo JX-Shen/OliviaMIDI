@@ -23,10 +23,7 @@ use battuta::{
 };
 
 /// What a Take's Ticks are read against: its Bar lines where it derives them,
-/// and its Elapsed time where it states the tempos for one.
-///
-/// Both derived once per Take and then asked for every row, as `BarLines` was
-/// before Elapsed time joined it — #73.
+/// and its Elapsed time where it states the tempos for one — #73.
 pub struct Readings {
     pub bars: Option<BarLines>,
     pub elapsed: Option<ElapsedTimes>,
@@ -40,6 +37,20 @@ impl Readings {
             // command reading one has already refused.
             elapsed: take.elapsed_times().ok(),
         }
+    }
+
+    /// Nothing to read a Tick against, so that every Tick is printed as itself.
+    pub fn none() -> Readings {
+        Readings {
+            bars: None,
+            elapsed: None,
+        }
+    }
+
+    /// Whether `at` gives any Tick an Elapsed time: only where there are no
+    /// Bar lines to place it by instead.
+    pub fn prints_elapsed(&self) -> bool {
+        self.bars.is_none() && self.elapsed.as_ref().is_some_and(ElapsedTimes::reads_any)
     }
 }
 
@@ -74,8 +85,7 @@ pub fn at(readings: &Readings, tick: u32) -> String {
 }
 
 /// An Elapsed time as a player's counter shows it: `0:05.67`, `75:03.20`.
-/// Hundredths, truncated rather than rounded, so that it never names a moment
-/// the counter has not reached yet — #73.
+/// Hundredths, truncated rather than rounded — #73.
 pub fn elapsed_time(elapsed: std::time::Duration) -> String {
     let hundredths = elapsed.as_millis() / 10;
     format!(
@@ -1146,13 +1156,6 @@ pub fn unranked(readings: &Readings, row: &battuta::Unranked) -> String {
 /// position it prints is read against: the before Take's, or Ticks where it has
 /// none — #64. Only that the time signatures differ, never how: #62 names them
 /// as not compared.
-/// That the two Takes of a diff read their Ticks at different Elapsed times, so
-/// that every Elapsed time printed is the before Take's and an after-side
-/// Tick may be heard elsewhere in the after Take's render — #73.
-pub fn elapsed_frame() -> &'static str {
-    "tempos differ; every elapsed time is the before Take's"
-}
-
 pub fn frame(before_lines: Option<BarLines>) -> String {
     match before_lines {
         Some(_) => "time signatures differ; every position is in the before Take's Bar lines",
@@ -1161,6 +1164,12 @@ pub fn frame(before_lines: Option<BarLines>) -> String {
         }
     }
     .to_string()
+}
+
+/// That the two Takes of a diff read some Tick at different Elapsed times, and
+/// that every Elapsed time it prints is the before Take's — #73.
+pub fn elapsed_frame() -> &'static str {
+    "tempos differ; every elapsed time is the before Take's"
 }
 
 /// The kinds a diff did not compare and the two Takes differ in, each with its

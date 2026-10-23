@@ -166,9 +166,9 @@ term existed.
 How long after Tick 0 a Tick is heard, in seconds, by the tempos the Take
 states. The other reading of a Tick beside **Position**: a Position comes from
 the time signature, an Elapsed time from the **Tempo**, and it lines up with the
-time axis of a render. A Take that states no tempo has none — the 120 bpm a
-reader would otherwise assume is not something the file says — and neither does
-any Tick at or after one where the stated tempos contradict each other. See #73.
+time axis of a render. A Take that states no tempo, or none until part way in,
+has none, and neither does any Tick at or after one where the stated tempos
+contradict each other. See #73.
 _中文_: 已过时间
 _Avoid_: clock time, timestamp, timecode, real time, seconds; 时间戳、时码、实时
 

@@ -154,7 +154,8 @@ use std::path::PathBuf;
 /// It does not say how they differ. In `--json`, whose Ticks are never read as
 /// positions, the same is `bar_lines_differ`, true where the two Takes' Bar
 /// lines differ; a position read from those Ticks is read, as here, against the
-/// before Take's.
+/// before Take's. `elapsed_times_differ` is true where the two Takes' tempos
+/// read some Tick at a different Elapsed time.
 ///
 /// Every name a track states is quoted beside the track's number, in written
 /// order, as the Take the row is about states them — the after Take for an
@@ -218,15 +219,8 @@ pub fn run(args: Args) -> battuta::Result<()> {
     if diff.bar_lines_differ {
         frame.push(crate::wording::frame(readings.bars));
     }
-    // An Elapsed time is printed only where the before Take has no Bar lines
-    // and states the tempo its Ticks start at; only then can the after Take's
-    // tempos make one misleading, and only then is that said — #73.
-    let elapsed_printed = readings.bars.is_none()
-        && readings
-            .elapsed
-            .as_ref()
-            .is_some_and(|times| times.elapsed_at(0).is_some());
-    if diff.elapsed_times_differ && elapsed_printed {
+    // Said only where this diff prints an Elapsed time at all — #73.
+    if diff.elapsed_times_differ && readings.prints_elapsed() {
         frame.push(crate::wording::elapsed_frame().to_string());
     }
 
