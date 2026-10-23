@@ -48,8 +48,9 @@ step by step. The file is a pianist's recorded performance of Bach's
 
 **1. The agent reads the passage.** `mid inspect` lists every note where a
 musician would point at it, with how hard it was struck (velocity) and how long
-it was held (duration, in ticks; a beat is 384 ticks in this file). Around the
-left hand's first entry, the right-hand A4s last 120 to 250 ticks. The left
+it was held (duration, in ticks; a beat is 384 ticks in this file). The recording
+keeps both hands in one track; the left hand here is the low notes. Around its
+first entry, the right-hand A4s shown last 188 and 243 ticks, and the left
 hand's notes last 32 to 78. They are struck and let go almost at once:
 
 ```
@@ -72,8 +73,8 @@ then 187 ticks later. The last column is the note's name, which an edit uses to
 point at it.
 
 **2. It proposes two versions.** Against the right hand, that entry sounds like
-an echo, not an answer. Version 1 holds six of those notes longer, so they
-sound detached rather than clipped. Version 2 strikes the melody's two high
+an echo, not an answer. Version 1 holds six of those notes longer: still short
+and separate, but no longer cut off. Version 2 strikes the melody's two high
 points harder, softens the start of its second climb, and strikes the left
 hand's first note harder. Each version is an *Edit Set*, a small file of
 mechanical changes to named notes. This is version 1 in full:
@@ -134,10 +135,10 @@ Nine notes and ten changes. Nothing else in the file moved.
 
 **5. A person listens and decides.** The agent cannot hear, and it does not
 claim to. I, Jianxin Shen, who wrote `mid`, listened to the original, both
-versions and the combination, which was D, and kept D:
+versions and the combination, and kept the combination:
 *听的出来，而且我确实感觉D的质感好了一些，两个语句感觉平衡了很多*
-("I can hear it. D has a better texture, and the two phrases feel much more
-balanced.")
+("I can hear it. D, which is what I called the combination, has a better
+texture, and the two phrases feel much more balanced.")
 
 Three things to know about this example:
 
@@ -318,7 +319,7 @@ cargo test
 
    `--rig <path>` overrides it for a single run.
 
-The recommended bank is **GeneralUser GS** (2.0.3) by S. Christian Collins: it
+The recommended bank is [**GeneralUser GS**](https://github.com/mrbumpy409/GeneralUser-GS) (2.0.3) by S. Christian Collins: it
 has all 128 General MIDI instruments and a real grand piano at program 0.
 
 **Don't use the soundfont Homebrew installs with `fluid-synth`.** It is a
