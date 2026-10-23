@@ -11,7 +11,7 @@ description = "The core of OliviaMIDI: read, change, compare and audition a Take
 license = "MIT"
 repository = "https://github.com/JX-Shen/OliviaMIDI"
 readme = "README.md"
-keywords = ["midi", "music", "cli", "agent", "composition"]
+keywords = ["midi", "music", "diff", "agent", "cli"]
 categories = ["command-line-utilities", "multimedia::audio", "parser-implementations"]
 
 # The crate is exactly this list and nothing else (#55). A file the crate should

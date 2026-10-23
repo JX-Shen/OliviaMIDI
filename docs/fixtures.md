@@ -121,5 +121,43 @@ electronic kit, captured live. 367.46 seconds; the dataset's `train` split.
 ticks. `mid inspect`: one channel with no Program stated; 1964 Controller
 events, all CC4, the hi-hat pedal; 3835 notes; no bend, no SysEx.
 
-The only format 0 file this repository has. Every other Take here, sourced or
-made, is format 1.
+One of the two format 0 files this repository has; the other is
+`vienna4x22-schubert-d783-15.mid`. Every other Take here, sourced or made, is
+format 1.
+
+---
+
+## vienna4x22-schubert-d783-15.mid
+
+`midi/Schubert_D783_no15_p01.mid` from the Vienna 4x22 Piano Corpus: Franz
+Schubert, *Deutscher Tanz* in F minor, D. 783 No. 15, complete, played by the
+corpus's pianist p01 on a Bösendorfer SE290, whose own sensors recorded the
+performance, then converted to standard MIDI. The corpus has 22 Vienna
+pianists, anonymised as p01–p22, each playing the same four excerpts.
+
+- Source: <https://repo.mdw.ac.at/projects/IWK/the_vienna_4x22_piano_corpus/data/midi.zip>,
+  member `midi/Schubert_D783_no15_p01.mid`. The digest below is the member's,
+  not the archive's: unzip first, then take it. The archive read on 2026-10-23
+  had SHA-256 `104adc24bc5bccc133fa174ff0055d88cd7a237005d233df52787bdc15d8e6af`.
+- SHA-256: `b463212966e36734ad6be104efe97054ee9e09d688994e9954a9e1df1558d0c3`
+- Licence: CC BY 4.0. Read 2026-10-23 in the DataCite record for DOI
+  10.21939/4X22 (`rightsList`: "Creative Commons Attribution 4.0 International
+  (CC BY 4.0)"), and stated the same way on the repository record and the
+  project page, <https://repo.mdw.ac.at/projects/IWK/the_vienna_4x22_piano_corpus/index.html>.
+  The archive itself holds no licence file. The repository's site-wide terms of
+  use, linked from that page, returned 404 on the same day and were not read.
+- Attribution, as the licence requires: The Vienna 4x22 Piano Corpus, Werner
+  Goebl, University of Music and Performing Arts Vienna (mdw),
+  <https://doi.org/10.21939/4X22>, CC BY 4.0. The file is carried here
+  unmodified.
+- Production path: live performance capture on a computer-monitored grand
+  piano. The composition is in the public domain.
+
+`mid info`: **format 0**, 1 track, ppq 4000, 120 bpm, no time signature,
+350320 ticks, so no Bars. `mid inspect`: one channel with no Program stated;
+1531 Controller events, 1514 of them CC64 (damper) and 17 CC67 (soft pedal);
+316 notes; no bend.
+
+The only captured piano performance here, and the only Take here that states
+no time signature, so it is where a Take without Bars is met in the ordinary
+course rather than built for a test.

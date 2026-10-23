@@ -1,37 +1,136 @@
 # OliviaMIDI
 
-**A command-line tool for working on a MIDI file together with an AI agent:
-read it precisely, change it mechanically, see exactly what changed, and hear
-the result.**
+**Change a MIDI file together with your AI agent (Claude Code, Codex), see
+exactly what changed, and hear the result.**
 
-The human listens and decides. The agent inspects, edits and explains. The
-music stays as ordinary `.mid` files on disk, so nothing is locked inside the
-tool.
+Tell your agent *"the melody sounds flat"* or *"the bass drops out under the
+tune"*. It reads the `.mid` file note by note, makes a precise change, shows you
+a note-by-note diff, and plays the result back to you. You listen and decide. If
+you like parts of two different attempts, it combines them into one file and
+tells you exactly what came from where.
 
-This is not an AI music generator. Nothing here composes for you. It is the
-layer underneath a conversation like *"the left hand feels too busy in bars
-5–8"* — the part that lets an agent check what is actually there, try one
-change, and say exactly what it did.
+You don't need to know any theory. *"It's too crowded here"* is a fine place to
+start: turning a reaction like that into a change you can check is the agent's
+job.
 
-> Do not optimise for *how much music the AI can produce*. Optimise for *how
-> smoothly a human and an agent can make, understand, and compare individual
-> creative decisions about the same musical object*.
+This is not an AI music generator, and nothing here composes for you. It works
+on the ordinary MIDI files already on your disk, and it is the layer underneath
+a conversation about a piece: the part that lets an agent check what is
+actually in the file, try one change, and say exactly what it did.
 
-`battuta` is the Rust crate; `mid` is the binary it installs.
+`mid` is a command-line tool built to be driven by an agent. It installs from
+the Rust crate `battuta` and is MIT-licensed. Jump to: [Install](#install) ·
+[Using it with your agent](#using-it-with-your-agent).
 
-## A quick look
+## What it looks like
+
+[`olivia.mid`](https://github.com/JX-Shen/OliviaMIDI/blob/main/fixtures/olivia.mid)
+is eight bars of a slow waltz in D major. Two things about it bother you:
+
+- *"The melody is flat. Every note is equally loud, so it sounds read out
+  rather than sung."*
+- *"The bass only lasts one beat, so under the melody the floor drops out."*
+
+Your agent tries each one as a separate version:
+
+- One version shapes the melody's loudness, rising towards the high points of
+  each phrase and letting each phrase end softly.
+- The other holds each bass note for two beats instead of one.
+
+Each version is an *Edit Set*, a small JSON file of mechanical changes:
+[`melody.edits.json`](https://github.com/JX-Shen/OliviaMIDI/blob/main/docs/examples/olivia/melody.edits.json)
+and
+[`bass.edits.json`](https://github.com/JX-Shen/OliviaMIDI/blob/main/docs/examples/olivia/bass.edits.json).
 
 ```sh
-mid info    take.mid                         # format, tracks, tempo, metre, length
+mid apply olivia.mid melody.edits.json -o melody.mid
+mid apply olivia.mid bass.edits.json   -o bass.mid
+```
+
+You like both. Merging them by hand would mean trusting that nothing got lost,
+so `combine` does it instead. It first checks that each version really is what
+its Edit Set makes of the original, then puts both sets of changes into one
+file:
+
+```
+$ mid combine olivia.mid --side melody.mid melody.edits.json --side bass.mid bass.edits.json -o both.mid
+verified: side 0 melody.mid is what melody.edits.json makes of the common Take
+verified: side 1 bass.mid is what bass.edits.json makes of the common Take
+no effect: side 0 asks t1:c0:p69:s0:n0 for the velocity it already has in the common Take
+both.mid
+```
+
+The third line is worth a look. One change the melody version asked for was
+already true, because that note already had that loudness. `combine` reports it
+rather than counting it as a change. If the two versions had disagreed about
+any note, `combine` would have listed every disagreement and written nothing.
+
+Then compare the result with the original. `diff` reports the differences in
+musical terms:
+
+```
+$ mid diff olivia.mid both.mid
+changed  bar 2 beat 1  track 1  channel 0  B4   velocity 50 -> 58
+changed  bar 2 beat 3  track 1  channel 0  G4   velocity 50 -> 47
+changed  bar 3 beat 1  track 1  channel 0  A4   velocity 50 -> 56
+…
+changed  bar 7 beat 1  track 2  channel 1  D2   duration 475 -> 955
+changed  bar 8 beat 1  track 2  channel 1  D2   duration 475 -> 1435
+```
+
+There are nineteen rows in all: eleven melody notes and eight bass notes, and
+nothing else. Then you listen:
+
+```sh
+mid play both.mid              # through the soundfont you chose
+mid render both.mid -o both.wav
+```
+
+Every file in this example is in the repository. Run the commands from a clone
+and you get the same `both.mid`.
+
+### A real performance, too
+
+The same steps work on a performance a pianist actually played: Schubert's
+*Deutscher Tanz*, D. 783 No. 15, recorded on a Bösendorfer grand for the
+[Vienna 4x22 Piano Corpus](https://doi.org/10.21939/4X22) (CC BY 4.0; source and
+credit in [`docs/fixtures.md`](./docs/fixtures.md)).
+
+There are two versions again. One plays the left hand more softly, with every
+note below G3 at 80% of its velocity, 79 notes in all. The other brings
+the top voice forward, adding 8 to the velocity of every note from C5 up, 72
+notes in all. `combine` keeps both, and `diff` lists 151 changes, which is
+exactly 79 plus 72:
+
+```
+$ mid diff vienna4x22-schubert-d783-15.mid both.mid
+changed  tick 27430   track 0  channel 0  C5   velocity 112 -> 120
+changed  tick 31610   track 0  channel 0  C3   velocity 103 -> 82
+changed  tick 37390   track 0  channel 0  C#5  velocity 109 -> 117
+…
+```
+
+Here the positions are Ticks rather than bars. The recording states no time
+signature, which captured performances usually don't, and `mid` will not invent
+a 4/4 grid the pianist never played to. [#73](https://github.com/JX-Shen/OliviaMIDI/issues/73)
+is about giving such a file a more readable position. The Edit Sets are in
+[`docs/examples/schubert/`](https://github.com/JX-Shen/OliviaMIDI/tree/main/docs/examples/schubert).
+
+## The commands
+
+```sh
+mid info    take.mid                         # format, tracks, tempo, time signature, length
 mid inspect take.mid                         # every note, in musical terms
 mid apply   take.mid edits.json -o take2.mid # apply an Edit Set → a new file
+mid combine take.mid --side a.mid a.edits.json --side b.mid b.edits.json -o both.mid
+                                             # keep the changes of two versions
 mid diff    take.mid take2.mid               # what changed, note by note
 mid play    take2.mid                        # hear it
 mid render  take2.mid -o take2.wav           # a WAV that says what made it
 ```
 
-`inspect` reads like music, not like a hex dump — each note is placed where a
-musician would point at it, named, and given a stable identity an Edit can
+`inspect` reads like music, not like a hex dump. Each note is placed where a
+musician would point at it, named, and given a stable identity that an Edit can
 target:
 
 ```
@@ -41,13 +140,14 @@ bar 1 beat 2  track 2  F#3  velocity 38  duration 955   t2:c1:p54:s480:n0
 ```
 
 `--json` on `info`, `inspect` and `diff` gives the same facts in structured form
-for programs and agents.
+for programs and agents. `mid help` and `mid <command> --help` are the full
+reference.
 
 The loop the tool exists to close is **inspect → change → listen → react**.
-Listening is the arbiter: a change that is theoretically better and sounds worse
+Listening is the arbiter: a change that is better in theory but sounds worse
 loses.
 
-## See it
+## More examples
 
 <a href="https://jxshen.me/essays/making-midi-diffs-readable">
   <picture>
@@ -77,7 +177,11 @@ cargo install battuta
 ```
 
 That installs `mid`. Everything except `play` and `render` works with the binary
-alone.
+alone. To try what is on `main` before it is released:
+
+```sh
+cargo install --git https://github.com/JX-Shen/OliviaMIDI
+```
 
 To build from a clone:
 
@@ -130,6 +234,9 @@ This project's music is MIDI files, worked on with `mid` (crate `battuta`).
   complete format. Do not guess the schema from memory or from examples.
 - Prefer `--json` on `info`, `inspect` and `diff` when reading results.
 - `mid apply` always writes a new file; keep the original for comparison.
+- When I like parts of two versions, use `mid combine` to keep both. Do not
+  merge the Edit Sets by hand. If `mid` says a command does not exist, check
+  `mid --version` before concluding the tool cannot do it.
 - After a change, show me the `mid diff` and play the passage. If I listen
   somewhere other than `mid play`, still show me the diff; I will tell you
   what I heard. Either way, I decide whether it sounds better.

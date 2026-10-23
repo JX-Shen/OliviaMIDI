@@ -1,0 +1,14 @@
+{"edits":[
+ {"kind": "set_velocity", "id": "t1:c0:p69:s0:n0", "velocity": 50},
+ {"kind": "set_velocity", "id": "t1:c0:p71:s1440:n0", "velocity": 58},
+ {"kind": "set_velocity", "id": "t1:c0:p67:s2400:n0", "velocity": 47},
+ {"kind": "set_velocity", "id": "t1:c0:p69:s2880:n0", "velocity": 56},
+ {"kind": "set_velocity", "id": "t1:c0:p64:s4320:n0", "velocity": 46},
+ {"kind": "set_velocity", "id": "t1:c0:p62:s5280:n0", "velocity": 40},
+ {"kind": "set_velocity", "id": "t1:c0:p66:s5760:n0", "velocity": 55},
+ {"kind": "set_velocity", "id": "t1:c0:p64:s6720:n0", "velocity": 49},
+ {"kind": "set_velocity", "id": "t1:c0:p62:s7200:n0", "velocity": 45},
+ {"kind": "set_velocity", "id": "t1:c0:p64:s8640:n0", "velocity": 52},
+ {"kind": "set_velocity", "id": "t1:c0:p61:s9600:n0", "velocity": 46},
+ {"kind": "set_velocity", "id": "t1:c0:p62:s10080:n0", "velocity": 40}
+]}
