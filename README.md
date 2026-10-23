@@ -3,13 +3,6 @@
 **Change a MIDI file together with your AI agent (Claude Code, Codex), see
 exactly what changed, and hear the result.**
 
-<a href="https://github.com/JX-Shen/OliviaMIDI/issues/51">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/JX-Shen/OliviaMIDI/main/docs/images/session-bwv802-dark.png">
-    <img src="https://raw.githubusercontent.com/JX-Shen/OliviaMIDI/main/docs/images/session-bwv802-light.png" width="720" alt="One session on a recorded performance of Bach's Duet BWV 802: nine notes changed. Six left-hand notes held about three times longer, for example E2 from 47 to 147 ticks, and four notes struck harder or softer. Two versions were combined by mid combine, verified with no conflict, listened to and kept: 'The two phrases feel much more balanced.'">
-  </picture>
-</a>
-
 Tell your agent *"the melody sounds flat"* or *"the bass drops out under the
 tune"*. It reads the `.mid` file note by note, makes a precise change, shows you
 a note-by-note diff, and plays the result back to you. You listen and decide. If
@@ -18,20 +11,30 @@ tells you exactly what came from where.
 
 You don't need to know any theory. *"It's too crowded here"* is a fine place to
 start: turning a reaction like that into a change you can check is the agent's
-job.
+job. Here is one real session, told [below](#what-it-looks-like):
+
+<a href="https://github.com/JX-Shen/OliviaMIDI/issues/51">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/JX-Shen/OliviaMIDI/main/docs/images/session-bwv802-dark.png">
+    <img src="https://raw.githubusercontent.com/JX-Shen/OliviaMIDI/main/docs/images/session-bwv802-light.png" width="720" alt="One session on a recorded performance of Bach's Duet BWV 802: nine notes changed. Six left-hand notes held about three times longer, for example E2 from 47 to 147 ticks, and four notes struck harder or softer. Two versions were combined by mid combine, verified with no conflict, listened to and kept: 'The two phrases feel much more balanced.'">
+  </picture>
+</a>
+
+**What you need:** an AI agent that can run commands in a terminal, such as
+Claude Code or Codex, on macOS or Linux; [Rust](https://rustup.rs), to install
+`mid` with `cargo install battuta`; and, to hear results,
+[FluidSynth and a soundfont](#setting-up-playback). Jump to:
+[Install](#install) · [Using it with your agent](#using-it-with-your-agent).
 
 This is not an AI music generator, and nothing here composes for you. It works
 on the ordinary MIDI files already on your disk, and it is the layer underneath
 a conversation about a piece: the part that lets an agent check what is
-actually in the file, try one change, and say exactly what it did.
-
-`mid` is a command-line tool built to be driven by an agent. It installs from
-the Rust crate `battuta` and is MIT-licensed. Jump to: [Install](#install) ·
-[Using it with your agent](#using-it-with-your-agent).
+actually in the file, try one change, and say exactly what it did. `mid` is
+MIT-licensed; `battuta` is the Rust crate it comes from.
 
 ## What it looks like
 
-The picture above is one real session, from 22 October 2026. The file is a
+The picture above is a session from 22 October 2026. The file is a
 pianist's recorded performance of Bach's
 [Duet in E minor, BWV 802](https://imslp.org/wiki/Duets_BWV_802-805_(Bach,_Johann_Sebastian)).
 In the opening, the left hand's first entry was played so short that it
@@ -59,8 +62,10 @@ changed  bar 4 beat 3+173  track 1  channel 0  A4   velocity 52 -> 44
 changed  bar 4 beat 4+125  track 1  channel 0  A5   velocity 80 -> 96
 ```
 
-Nine notes, ten changes, nothing else. I listened to the original, both
-versions and the combination, and kept the combination: *听的出来，而且我确实感觉D的质感好了一些，两个语句感觉平衡了很多* ("I can hear it. The combined one has a better texture, and the two phrases
+`bar 2 beat 3+187` means bar 2, beat 3, then 187 ticks later; a beat is 384
+ticks in this file. Nine notes, ten changes, nothing else. I, Jianxin Shen, who
+wrote `mid`, listened to the original, both versions and the combination, and
+kept the combination: *听的出来，而且我确实感觉D的质感好了一些，两个语句感觉平衡了很多* ("I can hear it. The combined one has a better texture, and the two phrases
 feel much more balanced.")
 
 - **Hear a similar experiment:**
@@ -82,7 +87,8 @@ feel much more balanced.")
 
 ### Try it yourself
 
-This example runs entirely from a clone.
+This example runs entirely from a clone of this repository
+(`git clone https://github.com/JX-Shen/OliviaMIDI`).
 
 [`olivia.mid`](https://github.com/JX-Shen/OliviaMIDI/blob/main/fixtures/olivia.mid)
 is eight bars of a slow waltz in D major. Suppose two things about it bother you:
@@ -110,7 +116,8 @@ mid apply olivia.mid bass.edits.json   -o bass.mid
 You like both. Merging them by hand would mean trusting that nothing got lost,
 so `combine` does it instead. It first checks that each version really is what
 its Edit Set makes of the original, then puts both sets of changes into one
-file:
+file. (A *Take* is what `mid` calls one MIDI file; the *common Take* is the
+original both versions were made from.)
 
 ```
 $ mid combine olivia.mid --side melody.mid melody.edits.json --side bass.mid bass.edits.json -o both.mid
@@ -142,8 +149,8 @@ There are nineteen rows in all: eleven melody notes and eight bass notes, and
 nothing else. Then you listen:
 
 ```sh
-mid play both.mid              # through the soundfont you chose
-mid render both.mid -o both.wav
+mid play both.mid              # needs playback set up first: see below
+mid render both.mid -o both.wav # the same, written to a WAV file
 ```
 
 Run the commands from a clone and you get the same `both.mid`.
