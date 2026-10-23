@@ -24,8 +24,77 @@ the Rust crate `battuta` and is MIT-licensed. Jump to: [Install](#install) ·
 
 ## What it looks like
 
+One real session, from 22 October 2026. The file is a pianist's performance of
+Bach's Duet in E minor, BWV 802, captured on a Disklavier at the International
+Piano-e-Competition. Listening to the opening, the two hands felt out of
+balance. The left hand's first entry was played so short that it sounded like
+an echo of the right hand rather than an answer to it.
+
+The agent proposed two versions, each as an *Edit Set*, a small JSON file of
+mechanical changes to named notes:
+
+- One lengthens six notes of that left-hand entry, from clipped to merely
+  detached.
+- The other lifts the melody's two high points, softens the start of its second
+  climb, and brings the left hand's first note forward.
+
+I liked something in both. `combine` put both into one file, after checking
+that each version really was what its Edit Set makes of the original:
+
+```
+$ mid combine original.mid --side longer.mid longer.edits.json --side shaped.mid shaped.edits.json -o both.mid
+verified: side 0 longer.mid is what longer.edits.json makes of the common Take
+verified: side 1 shaped.mid is what shaped.edits.json makes of the common Take
+both.mid
+```
+
+Both versions touched one note, the low E2: one changed how long it lasts, the
+other how loud it is. That is not a conflict, because they changed different
+things. Had they asked for different values of the same thing, `combine` would
+have listed every such disagreement and written nothing.
+
+```
+$ mid diff original.mid both.mid
+changed  bar 1 beat 4+285  track 1  channel 0  E5   velocity 80 -> 92
+changed  bar 2 beat 3+187  track 1  channel 0  E2   duration 47 -> 147, velocity 46 -> 58
+changed  bar 2 beat 4+302  track 1  channel 0  E3   duration 32 -> 132
+changed  bar 3 beat 2+13   track 1  channel 0  D#3  duration 32 -> 132
+changed  bar 3 beat 3+128  track 1  channel 0  D2   duration 78 -> 138
+changed  bar 3 beat 4+225  track 1  channel 0  D3   duration 36 -> 136
+changed  bar 4 beat 1+309  track 1  channel 0  C#3  duration 41 -> 141
+changed  bar 4 beat 3+173  track 1  channel 0  A4   velocity 52 -> 44
+changed  bar 4 beat 4+125  track 1  channel 0  A5   velocity 80 -> 96
+```
+
+That is nine notes, ten changes, and nothing else. I listened to the original,
+each version and the combination, and kept the combination:
+
+> 听的出来，而且我确实感觉D的质感好了一些，两个语句感觉平衡了很多。
+>
+> I can hear it. The combined one has a better texture, and the two phrases
+> feel much more balanced.
+
+Two notes on reading that diff:
+
+- **The bar positions are a grid, not the music's bars.** They sit on a 120 bpm
+  4/4 grid that the file states and the pianist never played to. The dataset
+  writes every performance that way, and `mid` reports what the file says.
+- **The performance is not in this repository.** It comes from the
+  [MAESTRO dataset](https://magenta.tensorflow.org/datasets/maestro) (v3.0.0,
+  Hawthorne et al., 2019), made available by Google LLC under
+  [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). This
+  project does not take material under that licence, so this README quotes only
+  what `mid` reported about the file. The file's name and digest, both Edit
+  Sets and the listening record are in
+  [#51](https://github.com/JX-Shen/OliviaMIDI/issues/51). Anyone who downloads
+  the dataset can replay the session.
+
+### Try it yourself
+
+This example runs entirely from a clone.
+
 [`olivia.mid`](https://github.com/JX-Shen/OliviaMIDI/blob/main/fixtures/olivia.mid)
-is eight bars of a slow waltz in D major. Two things about it bother you:
+is eight bars of a slow waltz in D major. Suppose two things about it bother you:
 
 - *"The melody is flat. Every note is equally loud, so it sounds read out
   rather than sung."*
@@ -86,35 +155,7 @@ mid play both.mid              # through the soundfont you chose
 mid render both.mid -o both.wav
 ```
 
-Every file in this example is in the repository. Run the commands from a clone
-and you get the same `both.mid`.
-
-### A real performance, too
-
-The same steps work on a performance a pianist actually played: Schubert's
-*Deutscher Tanz*, D. 783 No. 15, recorded on a Bösendorfer grand for the
-[Vienna 4x22 Piano Corpus](https://doi.org/10.21939/4X22) (CC BY 4.0; source and
-credit in [`docs/fixtures.md`](./docs/fixtures.md)).
-
-There are two versions again. One plays the left hand more softly, with every
-note below G3 at 80% of its velocity, 79 notes in all. The other brings
-the top voice forward, adding 8 to the velocity of every note from C5 up, 72
-notes in all. `combine` keeps both, and `diff` lists 151 changes, which is
-exactly 79 plus 72:
-
-```
-$ mid diff vienna4x22-schubert-d783-15.mid both.mid
-changed  tick 27430   track 0  channel 0  C5   velocity 112 -> 120
-changed  tick 31610   track 0  channel 0  C3   velocity 103 -> 82
-changed  tick 37390   track 0  channel 0  C#5  velocity 109 -> 117
-…
-```
-
-Here the positions are Ticks rather than bars. The recording states no time
-signature, which captured performances usually don't, and `mid` will not invent
-a 4/4 grid the pianist never played to. [#73](https://github.com/JX-Shen/OliviaMIDI/issues/73)
-is about giving such a file a more readable position. The Edit Sets are in
-[`docs/examples/schubert/`](https://github.com/JX-Shen/OliviaMIDI/tree/main/docs/examples/schubert).
+Run the commands from a clone and you get the same `both.mid`.
 
 ## The commands
 
