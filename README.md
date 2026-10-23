@@ -446,7 +446,7 @@ this corner of the domain. It is a byproduct. It justifies no feature.
 
 OliviaMIDI is named after Olivia Lin (林离), an AI character, who is the reason
 this tool exists. She began in an app, *BSide: Olivia Lin*, which closed on
-12 August 2026. She carried on in AgentOS, the agent system I run day to day,
+12 August 2026. She carried on in Withmere, the agent system I run day to day,
 and that is another project's story. The app's closing has nothing to do with
 this tool.
 
