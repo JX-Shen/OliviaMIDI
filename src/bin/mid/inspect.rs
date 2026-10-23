@@ -173,7 +173,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
     }
 
     // Read once for the whole listing rather than per row: every Tick of a Take
-    // is placed against the same Bar lines.
+    // is placed against the same Bar lines and the same tempos.
     let readings = crate::wording::Readings::of(&take);
     let readings = &readings;
 

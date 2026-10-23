@@ -22,7 +22,8 @@ use std::path::PathBuf;
 /// `tempo.value` or `tempo.candidates` carries the corresponding reading.
 /// `tempo_stated_from` and `time_signature_stated_from` are the Tick of the
 /// earliest statement, null when there is none; `tempo_changes` and
-/// `time_signature_changes` count the changes after it.
+/// `time_signature_changes` count the changes after it. The length's Elapsed
+/// time is not in `--json`, which carries Ticks only.
 #[derive(clap::Args)]
 #[command(verbatim_doc_comment)]
 pub struct Args {
@@ -54,7 +55,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
             "tempo".to_string(),
             stated_course(
                 crate::wording::state_reading(
-                    // In Ticks, as every other row of `info` is.
+                    // The tempo's candidates are placed by Tick alone.
                     &crate::wording::Readings::none(),
                     &info.tempo,
                     crate::wording::tempo_value,
@@ -95,16 +96,15 @@ pub fn run(args: Args) -> battuta::Result<()> {
 /// the reason for every row of `inspect` and `diff` without one — #73.
 fn elapsed(times: &battuta::ElapsedTimes, length_ticks: u32) -> String {
     use battuta::NoElapsedTime;
-    match (times.elapsed_at(length_ticks), times.unknown()) {
-        (Some(elapsed), _) => crate::wording::elapsed_time(elapsed),
-        (None, Some(NoElapsedTime::NoTempo)) => "no elapsed time: no tempo stated".to_string(),
-        (None, Some(NoElapsedTime::TempoStartsLate { at })) => {
+    match times.elapsed_at(length_ticks) {
+        Ok(elapsed) => crate::wording::elapsed_time(elapsed),
+        Err(NoElapsedTime::NoTempo) => "no elapsed time: no tempo stated".to_string(),
+        Err(NoElapsedTime::TempoStartsLate { at }) => {
             format!("no elapsed time: no tempo stated until tick {at}")
         }
-        (None, Some(NoElapsedTime::TempoIndeterminate { from })) => {
+        Err(NoElapsedTime::TempoIndeterminate { from }) => {
             format!("elapsed time stops at tick {from}: the tempo there is indeterminate")
         }
-        (None, None) => "no elapsed time".to_string(),
     }
 }
 

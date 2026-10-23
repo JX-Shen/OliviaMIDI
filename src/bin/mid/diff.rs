@@ -145,9 +145,10 @@ use std::path::PathBuf;
 ///
 ///     time signatures differ; every position is in the before Take's Bar lines
 ///
-/// Elapsed times are the before Take's in the same way, and where the two
-/// Takes' tempos would put some Tick at a different Elapsed time, the diff says
-/// that once too, before its rows:
+/// Where the before Take has no Bar lines, the Elapsed times beside its Ticks
+/// are the before Take's in the same way, and where the two Takes' tempos would
+/// put some Tick at a different Elapsed time and a row carries one, the diff
+/// says that once too, before its rows:
 ///
 ///     tempos differ; every elapsed time is the before Take's
 ///
@@ -215,14 +216,16 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // row it frames: #64.
     let readings = crate::wording::Readings::of(&before);
     let readings = &readings;
-    let mut frame: Vec<String> = Vec::new();
-    if diff.bar_lines_differ {
-        frame.push(crate::wording::frame(readings.bars));
-    }
-    // Said only where this diff prints an Elapsed time at all — #73.
-    if diff.elapsed_times_differ && readings.prints_elapsed() {
-        frame.push(crate::wording::elapsed_frame().to_string());
-    }
+    // Asked once the rows are worded, because the Elapsed time line is said
+    // only where some row carries one — #73.
+    let frame = || {
+        let bars = diff
+            .bar_lines_differ
+            .then(|| crate::wording::frame(readings.bars));
+        let elapsed = (diff.elapsed_times_differ && readings.gave_elapsed())
+            .then(crate::wording::elapsed_frame);
+        bars.into_iter().chain(elapsed)
+    };
 
     // The kinds this diff did not compare and the two Takes differ in, which
     // follow whatever else is printed: #62.
@@ -233,7 +236,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
         let sites = unranked_rows(readings, &diff.unranked_sites);
         let states = unranked_state_rows(readings, &diff);
         if !sites.is_empty() || !states.is_empty() {
-            for line in &frame {
+            for line in frame() {
                 println!("{line}");
             }
         }
@@ -333,7 +336,7 @@ pub fn run(args: Args) -> battuta::Result<()> {
     // not differences.
     rows.extend(unranked_rows(readings, &diff.unranked_sites));
     rows.extend(unranked_state_rows(readings, &diff));
-    for line in &frame {
+    for line in frame() {
         println!("{line}");
     }
     crate::wording::table(&rows);

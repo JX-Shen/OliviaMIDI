@@ -44,36 +44,36 @@ struct Segment {
 }
 
 impl ElapsedTimes {
-    /// How long after Tick 0 this Tick is heard, or `None` where the Take does
-    /// not say. Truncated to the nanosecond, never rounded up.
-    pub fn elapsed_at(&self, tick: u32) -> Option<Duration> {
+    /// How long after Tick 0 this Tick is heard, or why the Take does not say.
+    /// Truncated to the nanosecond, never rounded up.
+    pub fn elapsed_at(&self, tick: u32) -> std::result::Result<Duration, NoElapsedTime> {
         match self.unknown {
-            Some(NoElapsedTime::NoTempo | NoElapsedTime::TempoStartsLate { .. }) => return None,
-            Some(NoElapsedTime::TempoIndeterminate { from }) if tick >= from => return None,
+            Some(reason @ (NoElapsedTime::NoTempo | NoElapsedTime::TempoStartsLate { .. })) => {
+                return Err(reason)
+            }
+            Some(reason @ NoElapsedTime::TempoIndeterminate { from }) if tick >= from => {
+                return Err(reason)
+            }
             _ => {}
         }
+        // The first segment starts at Tick 0 whenever none of the above holds.
         let index = self
             .segments
             .partition_point(|segment| segment.tick <= tick);
-        let segment = self.segments.get(index.checked_sub(1)?)?;
+        let segment = self.segments[index - 1];
         let scaled = segment.scaled_micros
             + u128::from(tick - segment.tick) * u128::from(segment.micros_per_quarter);
-        // Whole seconds and the nanoseconds past them, so that no reading a
-        // Take can state is too long for a `Duration`.
+        // At most 2^32 Ticks of 2^24 us each: the seconds fit a u64 and the
+        // nanoseconds past them a u32.
         let per_second = 1_000_000 * u128::from(self.ppq);
-        let seconds = u64::try_from(scaled / per_second).ok()?;
+        let seconds = (scaled / per_second) as u64;
         let nanos = (scaled % per_second * 1000 / u128::from(self.ppq)) as u32;
-        Some(Duration::new(seconds, nanos))
-    }
-
-    /// Whether any Tick has a reading.
-    pub fn reads_any(&self) -> bool {
-        !self.segments.is_empty()
+        Ok(Duration::new(seconds, nanos))
     }
 
     /// Whether every Tick reads the same in both, including where neither has
     /// a reading. Why a reading is missing does not count, only where.
-    pub fn reads_alike(&self, other: &ElapsedTimes) -> bool {
+    pub(crate) fn reads_alike(&self, other: &ElapsedTimes) -> bool {
         let unread_from = |times: &ElapsedTimes| match times.unknown {
             Some(NoElapsedTime::NoTempo | NoElapsedTime::TempoStartsLate { .. }) => Some(0),
             Some(NoElapsedTime::TempoIndeterminate { from }) => Some(from),
@@ -82,11 +82,6 @@ impl ElapsedTimes {
         self.ppq == other.ppq
             && self.segments == other.segments
             && unread_from(self) == unread_from(other)
-    }
-
-    /// Why some or all Ticks have no reading, or `None` when every Tick has one.
-    pub fn unknown(&self) -> Option<NoElapsedTime> {
-        self.unknown
     }
 }
 

@@ -232,6 +232,7 @@ fn diff(before: &Path, after: &Path) -> String {
         .arg(after)
         .output()
         .expect("mid runs");
+    assert!(output.status.success(), "{output:?}");
     String::from_utf8(output.stdout).expect("stdout is UTF-8")
 }
 
@@ -331,4 +332,27 @@ fn diff_json_says_whether_elapsed_times_differ() {
     };
     assert_eq!(json(&slower)["elapsed_times_differ"], true);
     assert_eq!(json(&restated)["elapsed_times_differ"], false);
+}
+
+/// Every row is at or after Tick 960, where the before Take's tempos stop
+/// giving a reading, so no row carries an Elapsed time and there is none to
+/// say whose it is, however the after Take's tempos differ.
+#[test]
+fn a_diff_whose_rows_carry_no_elapsed_time_says_nothing_about_tempos() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let mut before_voice = note(1920, 60);
+    before_voice.push(tempo(960, 250_000));
+    let before = take(
+        &dir.path().join("before.mid"),
+        vec![vec![tempo(0, 500_000), tempo(960, 1_000_000)], before_voice],
+    );
+    let after = take(
+        &dir.path().join("after.mid"),
+        vec![vec![tempo(0, 500_000), tempo(960, 400_000)], note(1920, 62)],
+    );
+
+    let out = diff(&before, &after);
+    assert!(out.contains("tick 1920 "), "{out}");
+    assert!(!out.contains("tick 1920 ("), "{out}");
+    assert!(!out.contains("tempos differ"), "{out}");
 }

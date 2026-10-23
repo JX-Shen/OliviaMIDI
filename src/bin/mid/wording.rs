@@ -27,15 +27,18 @@ use battuta::{
 pub struct Readings {
     pub bars: Option<BarLines>,
     pub elapsed: Option<ElapsedTimes>,
+    /// Whether `at` has given any Tick an Elapsed time yet.
+    gave_elapsed: std::cell::Cell<bool>,
 }
 
 impl Readings {
     pub fn of(take: &battuta::Take) -> Readings {
         Readings {
             bars: take.bar_lines(),
-            // The only failure is a Take with no PPQ to count in, which every
-            // command reading one has already refused.
+            // Fails only where `Take::ppq` does, which every command has
+            // already met.
             elapsed: take.elapsed_times().ok(),
+            gave_elapsed: std::cell::Cell::new(false),
         }
     }
 
@@ -44,13 +47,13 @@ impl Readings {
         Readings {
             bars: None,
             elapsed: None,
+            gave_elapsed: std::cell::Cell::new(false),
         }
     }
 
-    /// Whether `at` gives any Tick an Elapsed time: only where there are no
-    /// Bar lines to place it by instead.
-    pub fn prints_elapsed(&self) -> bool {
-        self.bars.is_none() && self.elapsed.as_ref().is_some_and(ElapsedTimes::reads_any)
+    /// Whether any row worded so far carries an Elapsed time.
+    pub fn gave_elapsed(&self) -> bool {
+        self.gave_elapsed.get()
     }
 }
 
@@ -76,9 +79,12 @@ pub fn at(readings: &Readings, tick: u32) -> String {
         None => match readings
             .elapsed
             .as_ref()
-            .and_then(|times| times.elapsed_at(tick))
+            .and_then(|times| times.elapsed_at(tick).ok())
         {
-            Some(elapsed) => format!("tick {tick} ({})", elapsed_time(elapsed)),
+            Some(elapsed) => {
+                readings.gave_elapsed.set(true);
+                format!("tick {tick} ({})", elapsed_time(elapsed))
+            }
             None => format!("tick {tick}"),
         },
     }
@@ -1168,8 +1174,8 @@ pub fn frame(before_lines: Option<BarLines>) -> String {
 
 /// That the two Takes of a diff read some Tick at different Elapsed times, and
 /// that every Elapsed time it prints is the before Take's — #73.
-pub fn elapsed_frame() -> &'static str {
-    "tempos differ; every elapsed time is the before Take's"
+pub fn elapsed_frame() -> String {
+    "tempos differ; every elapsed time is the before Take's".to_string()
 }
 
 /// The kinds a diff did not compare and the two Takes differ in, each with its
